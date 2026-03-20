@@ -1,0 +1,7 @@
+from vk.bot import run_bot
+from services.updater import start_auto_update
+
+if name == "__main__":
+    print("🚀 VK BOT STARTED")
+    start_auto_update()
+    run_bot()
