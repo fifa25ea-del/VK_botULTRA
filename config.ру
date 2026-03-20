@@ -1,0 +1,11 @@
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+TOKEN = os.getenv("VK_TOKEN")
+ADMIN_ID = int(os.getenv("ADMIN_ID", 0))
+
+DONORS_CSV = "https://baz-on.ru/export/c592/5c6ca/stuttgart-site-carsrc.csv"
+PARTS_CSV = "https://baz-on.ru/export/c592/e61a0/stuttgart-drom.csv"
+WHEELS_CSV = "https://baz-on.ru/export/c592/77023/drom-wheels.csv"
