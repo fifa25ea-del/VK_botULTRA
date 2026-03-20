@@ -1,0 +1,12 @@
+from vk_api import VkApi
+from vk_api.longpoll import VkLongPoll, VkEventType
+from config import TOKEN
+from vk.handlers import handle
+
+vk_session = VkApi(token=TOKEN)
+longpoll = VkLongPoll(vk_session)
+
+def run_bot():
+    for event in longpoll.listen():
+        if event.type == VkEventType.MESSAGE_NEW and event.to_me:
+            handle(event)
