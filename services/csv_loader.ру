@@ -1,0 +1,15 @@
+import requests
+import csv
+import io
+from config import PARTS_CSV, WHEELS_CSV, DONORS_CSV
+from storage.cache import cache
+
+def load_csv(url):
+    r = requests.get(url)
+    r.encoding = "cp1251"
+    return list(csv.DictReader(io.StringIO(r.text), delimiter=";"))
+
+def load_all():
+    cache["parts"] = load_csv(PARTS_CSV)
+    cache["wheels"] = load_csv(WHEELS_CSV)
+    cache["donors"] = load_csv(DONORS_CSV)
