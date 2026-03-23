@@ -1,3 +1,4 @@
+from storage.session import get_session, add_favorite
 from vk_api import VkApi
 from vk_api.longpoll import VkLongPoll, VkEventType
 from config import TOKEN
