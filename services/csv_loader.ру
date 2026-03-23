@@ -7,7 +7,19 @@ from storage.cache import cache
 def load_csv(url):
     r = requests.get(url)
     r.encoding = "cp1251"
-    return list(csv.DictReader(io.StringIO(r.text), delimiter=";"))
+
+    reader = csv.DictReader(io.StringIO(r.text), delimiter=";")
+
+    data = []
+
+    for row in reader:
+        data.append({
+            "name": row.get("Артикул", ""),   # 👈 проверь название!
+            "price": row.get("Цена", "0"),
+            "photo": row.get("Фото", "")
+        })
+
+    return data
 
 def load_all():
     cache["parts"] = load_csv(PARTS_CSV)
