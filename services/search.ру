@@ -1,0 +1,14 @@
+def normalize_query(q):
+    q = q.lower()
+    q = q.replace("а", "a")  # русская → английская
+    return q
+
+def find_part(query, data):
+    query = normalize_query(query)
+    results = []
+
+    for item in data:
+        if query in item["name"].lower():
+            results.append(item)
+
+    return results[:50]
