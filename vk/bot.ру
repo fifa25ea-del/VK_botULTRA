@@ -1,4 +1,3 @@
-from storage.session import get_session, add_favorite
 from vk_api import VkApi
 from vk_api.longpoll import VkLongPoll, VkEventType
 from config import TOKEN
@@ -19,3 +18,39 @@ if text == "📞 Менеджер":
         random_id=0
     )
     return
+from storage.session import get_session
+from services.search import find_part
+from vk.navigation import next_item, prev_item
+from vk.cards import send_card
+
+def handle_message(vk, user_id, text, parts_db):
+    session = get_session(user_id)
+
+    if text == "⬅️":
+        prev_item(vk, user_id)
+        return
+
+    if text == "➡️":
+        next_item(vk, user_id)
+        return
+
+    if text == "❤️":
+        add_favorite(user_id)
+        vk.messages.send(user_id=user_id, message="Добавлено в избранное", random_id=0)
+        return
+
+    if text == "📞 Менеджер":
+        vk.messages.send(user_id=user_id, message="https://vk.me/your_group", random_id=0)
+        return
+
+    # поиск
+    results = find_part(text, parts_db)
+
+    if not results:
+        vk.messages.send(user_id=user_id, message="❌ Ничего не найдено", random_id=0)
+        return
+
+    session["results"] = results
+    session["index"] = 0
+
+    send_card(vk, user_id, results[0], 0, len(results))
