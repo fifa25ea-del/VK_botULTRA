@@ -4,11 +4,19 @@ def normalize_query(q):
     return q
 
 def find_part(query, data):
-    query = normalize_query(query)
+    query = query.lower().replace("а", "a")
+
     results = []
 
     for item in data:
-        if query in item["name"].lower():
+        text = (
+            item["article"] +
+            item["name"] +
+            item["brand"] +
+            item["model"]
+        ).lower()
+
+        if query in text:
             results.append(item)
 
     return results[:50]
