@@ -9,3 +9,9 @@ def get_session(user_id):
             "favorites": []
         }
     return sessions[user_id]
+
+def add_favorite(user_id):
+    session = get_session(user_id)
+    item = session["results"][session["index"]]
+
+    session["favorites"].append(item)
