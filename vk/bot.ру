@@ -10,3 +10,11 @@ def run_bot():
     for event in longpoll.listen():
         if event.type == VkEventType.MESSAGE_NEW and event.to_me:
             handle(event)
+def handle_message(vk, user_id, text, parts_db):
+if text == "📞 Менеджер":
+    vk.messages.send(
+        user_id=user_id,
+        message="📞 Напишите менеджеру: https://vk.me/your_group",
+        random_id=0
+    )
+    return
