@@ -14,7 +14,12 @@ def load_csv(url):
 
     for row in reader:
         data.append({
-            "name": row.get("Артикул", ""),   # 👈 проверь название!
+            "article": row.get("Артикул", ""),
+            "name": row.get("Наименование", ""),
+            "brand": row.get("Марка", ""),
+            "model": row.get("Модель", ""),
+            "year": row.get("Год", ""),
+            "number": row.get("Номер", ""),
             "price": row.get("Цена", "0"),
             "photo": row.get("Фото", "")
         })
