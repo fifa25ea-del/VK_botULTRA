@@ -32,10 +32,14 @@ longpoll = VkBotLongPoll(vk_session, 236843733)
 vk = vk_session.get_api()
 
 for event in longpoll.listen():
+    print(event)  # чтобы видеть все события
     if event.type == VkBotEventType.MESSAGE_NEW:
-        print("Новое сообщение:", event.obj.text)
+        peer_id = event.obj.peer_id  # обязательно peer_id
+        text = event.obj.text
+        print(f"Новое сообщение: {text}")
+
         vk.messages.send(
-            peer_id=event.obj.from_id,
+            peer_id=peer_id,  # <- используем peer_id
             message="Бот получил ваше сообщение ✅",
             random_id=0
         )
