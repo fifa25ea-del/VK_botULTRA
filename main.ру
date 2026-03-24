@@ -5,3 +5,7 @@ if __name__ == "__main__":
     print("🚀 VK BOT STARTED")
     start_auto_update()
     run_bot()
+    while True:
+        print("работает...")
+        import time
+        time.sleep(5)
