@@ -1,1 +1,1 @@
-worker: python main.ру
+worker: python main.py
