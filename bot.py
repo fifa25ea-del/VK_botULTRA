@@ -13,9 +13,8 @@ from vk_api.bot_longpoll import VkBotLongPoll, VkBotEventType
 
 # ===== НАСТРОЙКИ =====
 load_dotenv = lambda: None  # если используешь .env, подключи dotenv
-TOKEN = os.getenv("vk1.a.Fmog-6rNUAOTYVwC9-SJBo9dC5a87pMUET1xK_9Raxhk_l5V4Zqx1jCtWJXV7tZLappcJR6fIizfOv9X0OhMLnJbqjzej47aY5evfAj53IvfIgUo2w_vhBpjLGbgiBvaPZ3GrwFTdtR9D0TSGstCQM-L7aFf8_j6oqTxiRV7saahsFCInnvs7u53dtgLJB4lNI_apA5PsIpDqA3IWViAlA") or "ВАШ_ТОКЕН_ЗДЕСЬ"
-GROUP_ID = 236843733  # ID вашей группы
-ADMIN_ID = int(os.getenv("ADMIN_ID", 888230055))
+TOKEN = "vk1.a.Fmog-6rNUAOTYVwC9-SJBo9dC5a87pMUET1xK_9Raxhk_l5V4Zqx1jCtWJXV7tZLappcJR6fIizfOv9X0OhMLnJbqjzej47aY5evfAj53IvfIgUo2w_vhBpjLGbgiBvaPZ3GrwFTdtR9D0TSGstCQM-L7aFf8_j6oqTxiRV7saahsFCInnvs7u53dtgLJB4lNI_apA5PsIpDqA3IWViAlA"
+ADMIN_ID = 888230055
 
 # ===== ФАЙЛЫ ДАННЫХ =====
 FAV_FILE = "favorites.json"
