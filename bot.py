@@ -254,6 +254,15 @@ for event in longpoll.listen():
             handle(event)
 def run_bot():
     print("Бот запущен")
+    for event in longpoll.listen():
+        if event.type == VkBotEventType.MESSAGE_NEW:
+            # логируем любое сообщение
+            text = event.obj.message.get('text')
+            print("Новое сообщение:", text)
 
-if name == "__main__":
-    run_bot()
+            # сначала проверяем команды администратора
+            if admin(text, event.obj.message['peer_id']):
+                continue
+
+            # вызываем обработчик, который реагирует на команды и текст
+            handle(event)
