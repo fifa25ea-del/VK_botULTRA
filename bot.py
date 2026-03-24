@@ -10,12 +10,9 @@ WHEELS_CSV = "https://baz-on.ru/export/c592/77023/drom-wheels.csv"
 FAV_FILE = "favorites.json"
 STATS_FILE = "stats.json"
 
-
-# ===== ЗАГРУЗКА ПЕРЕМЕННЫХ =====
-load_dotenv()
-TOKEN = os.getenv("vk1.a.Fmog-6rNUAOTYVwC9-SJBo9dC5a87pMUET1xK_9Raxhk_l5V4Zqx1jCtWJXV7tZLappcJR6fIizfOv9X0OhMLnJbqjzej47aY5evfAj53IvfIgUo2w_vhBpjLGbgiBvaPZ3GrwFTdtR9D0TSGstCQM-L7aFf8_j6oqTxiRV7saahsFCInnvs7u53dtgLJB4lNI_apA5PsIpDqA3IWViAlA")
-GROUP_ID = 236843733  # числовой ID вашей группы
-ADMIN_ID = int(os.getenv("888230055", 0))
+load_dotenv()  # загружаем .env
+TOKEN = os.getenv("vk1.a.Fmog-6rNUAOTYVwC9-SJBo9dC5a87pMUET1xK_9Raxhk_l5V4Zqx1jCtWJXV7tZLappcJR6fIizfOv9X0OhMLnJbqjzej47aY5evfAj53IvfIgUo2w_vhBpjLGbgiBvaPZ3GrwFTdtR9D0TSGstCQM-L7aFf8_j6oqTxiRV7saahsFCInnvs7u53dtgLJB4lNI_apA5PsIpDqA3IWViAlA")  # ИМЯ ПЕРЕМЕННОЙ В .env
+ADMIN_ID = int(os.getenv("888230055", 0))  # ИМЯ ПЕРЕМЕННОЙ В .env
 
 if not TOKEN:
     raise ValueError("TOKEN пустой! Проверьте .env")
