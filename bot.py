@@ -32,7 +32,7 @@ from vk_api.bot_longpoll import VkBotLongPoll, VkBotEventType
 import vk_api
 
 vk_session = vk_api.VkApi(token=TOKEN)
-longpoll = VkBotLongPoll(vk_session, 236843733)  # GROUP_ID - числовой ID вашей группы
+longpoll = VkBotLongPoll(vk_session,236843733)  # GROUP_ID - числовой ID вашей группы
 vk = vk_session.get_api()
 
 for event in longpoll.listen():
