@@ -138,7 +138,7 @@ def handle(event):
         return
     elif text_lower == "🚘 доноры":
         user_state[peer_id] = "donors"
-user_index[peer_id] = 0
+        user_index[peer_id] = 0
         show_donor(peer_id)
         return
     elif text_lower == "❤️ избранное":
