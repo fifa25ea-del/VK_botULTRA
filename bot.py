@@ -139,7 +139,7 @@ def handle(event):
         user_state[peer_id] = "donors"
         user_index[peer_id] = 0
         show_donor(peer_id)
-[24.03.2026 15:09] Константин Измайлов: return
+        return
     if tl == "❤️ избранное":
         fav = favorites.get(str(peer_id), [])
         send(peer_id, f"❤️ У вас {len(fav)} товаров в избранном")
