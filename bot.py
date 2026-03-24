@@ -15,6 +15,9 @@ GROUP_ID = 236843733  # ID вашей группы
 
 if not TOKEN:
     raise ValueError("TOKEN пустой! Проверьте .env")
+    
+print("TOKEN из env:", os.getenv("VK_GROUP_TOKEN"))
+print("ADMIN_ID из env:", os.getenv("ADMIN_ID"))
 
 # ===== VK INIT =====
 vk_session = vk_api.VkApi(token=TOKEN)
