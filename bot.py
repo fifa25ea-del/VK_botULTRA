@@ -13,12 +13,8 @@ import time
 import json
 
 # ===== НАСТРОЙКИ =====
-TOKEN = "vk1.a.7kzOtmvlMz9jpD97zNTJ4Kji52zsxyIWJfEBoFCT8jr0Bk2LYc6ZqvvjykzzDL29VWyL_5hFbedEZGYkDipiYoLBN-3-xPjsngxmjRZwRj9XrBRqbI4OlMlyKx_I6wf0hv_FcGEcDs281c9miseljnElqujXTzNFQkTAxuDB9bBWkc4yvfMgpsmVcWYxfgrLhLov74Xn2i3CQcuPlqXyjQ"
+TOKEN = "vk1.a.x9T8g9mSGkAbjr25wgv4J-Xkn_1KL8Yvw-OOocoeIaHsdOrzhU1zgtT5-UYYuOFX5m6xecF9UO8OkrFB4BuKgpqR7JkelZVqpV7w0jMu5kuU8OW8_gOz0uVi38MdsPe0ZcbxESB_7h6Kls-bu60aqU_1tHHrLl7hwuAtkMnK4jXcX6JH3dKP7RiAAn6feDfoRmAu5UfEBNkTJRB9JCokNw"
 ADMIN_ID = 888230055
-
-
-
-
 
 DONORS_CSV = "https://baz-on.ru/export/c592/5c6ca/stuttgart-site-carsrc.csv"
 PARTS_CSV = "https://baz-on.ru/export/c592/e61a0/stuttgart-drom.csv"
