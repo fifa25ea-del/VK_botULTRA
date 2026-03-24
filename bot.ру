@@ -218,3 +218,8 @@ for event in longpoll.listen():
     if event.type == VkEventType.MESSAGE_NEW and event.to_me:
         if not admin(event.text, event.user_id):
             handle(event)
+def run_bot():
+    print("Бот запущен")
+
+if name == "__main__":
+    run_bot()
