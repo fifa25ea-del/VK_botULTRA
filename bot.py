@@ -168,57 +168,70 @@ def show_donor(user_id):
     send(user_id, text)
 
 # ===== ЛОГИКА =====
+# ===== ОБРАБОТКА СООБЩЕНИЙ =====
 def handle(event):
-    user_id = event.user_id
-    text = event.text.lower()
-
-    if text == "🚗 запчасти":
-        user_state[user_id] = "parts"
-        send(user_id, "Введи номер")
+    msg = event.obj.message
+    peer_id = msg['peer_id']
+    text = msg.get('text', '').strip()
+    
+    if not text:
+        send(peer_id, "Я получил сообщение, но оно не текстовое 😅")
         return
 
-    if text == "🛞 диски":
-        user_state[user_id] = "wheels"
-        send(user_id, "Введи бренд")
+    text_lower = text.lower()
+
+    # ==== Команды бота ====
+    if text_lower == "/start":
+        send(peer_id, "Привет! 👋\nЯ ваш VK-бот 🚀\nВыберите команду:\n🚗 запчасти\n🛞 диски\n🚘 доноры\n❤️ избранное")
         return
-
-    if text == "🚘 доноры":
-        user_state[user_id] = "donors"
-        user_index[user_id] = 0
-        show_donor(user_id)
+    elif text_lower == "🚗 запчасти":
+        user_state[peer_id] = "parts"
+        send(peer_id, "Введи номер детали или код:")
         return
-
-    if text == "❤️ избранное":
-        fav = favorites.get(str(user_id), [])
-        send(user_id, f"❤️ {len(fav)} товаров")
+    elif text_lower == "🛞 диски":
+        user_state[peer_id] = "wheels"
+        send(peer_id, "Введи бренд диска:")
         return
+    elif text_lower == "🚘 доноры":
+        user_state[peer_id] = "donors"
+        user_index[peer_id] = 0
+        show_donor(peer_id)
+        return
+    elif text_lower == "❤️ избранное":
+        fav = favorites.get(str(peer_id), [])
+        send(peer_id, f"❤️ У вас {len(fav)} товаров в избранном")
+        return
+    elif text_lower == "➡️":
+        user_index[peer_id] = user_index.get(peer_id, 0) + 1
+    elif text_lower == "⬅️":
+        user_index[peer_id] = user_index.get(peer_id, 0) - 1
 
-    if text == "➡️":
-        user_index[user_id] += 1
-    elif text == "⬅️":
-        user_index[user_id] -= 1
-
-    mode = user_state.get(user_id)
+    # ==== Режим поиска по состоянию пользователя ====
+    mode = user_state.get(peer_id)
 
     if mode == "parts":
-        if user_id not in user_results:
-            track(user_id,"search")
-            user_results[user_id] = find_part(text)
-            user_index[user_id] = 0
+        if peer_id not in user_results:
+            track(peer_id, "search")
+            user_results[peer_id] = find_part(text)
+            user_index[peer_id] = 0
 
-        if not user_results[user_id]:
-            send(user_id,"❌ Ничего не найдено")
+        if not user_results[peer_id]:
+            send(peer_id, "❌ Ничего не найдено")
             return
 
-        show_part(user_id)
+        show_part(peer_id)
 
     elif mode == "wheels":
         res = find_wheels(text)
         if res:
-            send(user_id, f"🛞 {res[0].get('Производитель диска')}")
+            send(peer_id, f"🛞 {res[0].get('Производитель диска')}")
 
     elif mode == "donors":
-        show_donor(user_id)
+        show_donor(peer_id)
+
+    else:
+        # Если пользователь не выбрал режим
+        send(peer_id, "Я не понимаю команду 😅. Попробуйте /start для списка команд.")
 
 # ===== АДМИН =====
 def admin(msg, user_id):
