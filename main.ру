@@ -1,4 +1,4 @@
-from vk.bot import run_bot
+from bot import run_bot
 from services.updater import start_auto_update
 
 if __name__ == "__main__":
