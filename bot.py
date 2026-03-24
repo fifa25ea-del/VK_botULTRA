@@ -256,12 +256,13 @@ def run_bot():
     print("Бот запущен")
     for event in longpoll.listen():
         if event.type == VkBotEventType.MESSAGE_NEW:
-            # логируем любое сообщение
             text = event.obj.message.get('text')
-            print("Новое сообщение:", text)
+            peer_id = event.obj.message['peer_id']
+
+            print(f"Новое сообщение: {text}")
 
             # сначала проверяем команды администратора
-            if admin(text, event.obj.message['peer_id']):
+            if admin(text, peer_id):
                 continue
 
             # вызываем обработчик, который реагирует на команды и текст
