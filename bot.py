@@ -28,9 +28,21 @@ FAV_FILE = "favorites.json"
 STATS_FILE = "stats.json"
 
 # ===== VK INIT =====
+from vk_api.bot_longpoll import VkBotLongPoll, VkBotEventType
+import vk_api
+
 vk_session = vk_api.VkApi(token=TOKEN)
+longpoll = VkBotLongPoll(vk_session, GROUP_ID)  # GROUP_ID - числовой ID вашей группы
 vk = vk_session.get_api()
-longpoll = VkLongPoll(vk_session)
+
+for event in longpoll.listen():
+    if event.type == VkBotEventType.MESSAGE_NEW:
+        print("Новое сообщение:", event.obj.text)
+        vk.messages.send(
+            peer_id=event.obj.from_id,
+            message="Бот получил ваше сообщение ✅",
+            random_id=0
+        )
 
 # ===== КЭШ =====
 class DataCache:
