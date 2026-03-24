@@ -12,16 +12,6 @@ import time
 import json
 from vk_api.bot_longpoll import VkBotLongPoll, VkBotEventType
 
-longpoll = VkBotLongPoll(vk_session, GROUP_ID)
-
-for event in longpoll.listen():
-    print(event)  # <-- печать всего события для отладки
-    if event.type == VkBotEventType.MESSAGE_NEW:
-        peer_id = event.obj.peer_id
-        text = event.obj.text
-        print(f"Новое сообщение: {text}")
-        vk.messages.send(peer_id=peer_id, message="Привет!", random_id=0)
-
 # ===== НАСТРОЙКИ =====
 TOKEN = "vk1.a.Fmog-6rNUAOTYVwC9-SJBo9dC5a87pMUET1xK_9Raxhk_l5V4Zqx1jCtWJXV7tZLappcJR6fIizfOv9X0OhMLnJbqjzej47aY5evfAj53IvfIgUo2w_vhBpjLGbgiBvaPZ3GrwFTdtR9D0TSGstCQM-L7aFf8_j6oqTxiRV7saahsFCInnvs7u53dtgLJB4lNI_apA5PsIpDqA3IWViAlA"
 ADMIN_ID = 888230055
