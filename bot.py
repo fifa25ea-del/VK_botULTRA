@@ -168,29 +168,59 @@ def show_donor(user_id):
     send(user_id, text)
 
 # ===== ЛОГИКА =====
+def get_main_keyboard():
+    keyboard = {
+        "one_time": False,
+        "buttons": [
+            [
+                {"action": {"type": "text", "label": "🚗 Запчасти"}, "color": "primary"},
+                {"action": {"type": "text", "label": "🛞 Диски"}, "color": "primary"}
+            ],
+            [
+                {"action": {"type": "text", "label": "🚘 Доноры"}, "color": "positive"},
+                {"action": {"type": "text", "label": "❤️ Избранное"}, "color": "negative"}
+            ]
+        ]
+    }
+    return json.dumps(keyboard, ensure_ascii=False)
 # ===== ОБРАБОТКА СООБЩЕНИЙ =====
 def handle(event):
     msg = event.obj.message
     peer_id = msg['peer_id']
     text = msg.get('text', '').strip()
-    
+
     if not text:
         send(peer_id, "Я получил сообщение, но оно не текстовое 😅")
         return
 
     text_lower = text.lower()
 
-    # ==== Команды бота ====
+    # ==== Команда /start ====
     if text_lower == "/start":
-        send(peer_id, "Привет! 👋\nЯ ваш VK-бот 🚀\nВыберите команду:\n🚗 запчасти\n🛞 диски\n🚘 доноры\n❤️ избранное")
+        vk.messages.send(
+            peer_id=peer_id,
+            message="Привет! 👋\nЯ ваш VK-бот 🚀\nВыберите команду:",
+            random_id=0,
+            keyboard=get_main_keyboard()
+        )
         return
-    elif text_lower == "🚗 запчасти":
+
+    # ==== Основные кнопки ====
+    if text_lower == "🚗 запчасти":
         user_state[peer_id] = "parts"
-        send(peer_id, "Введи номер детали или код:")
+        vk.messages.send(
+            peer_id=peer_id,
+            message="Введи номер детали или код:",
+            random_id=0
+        )
         return
     elif text_lower == "🛞 диски":
         user_state[peer_id] = "wheels"
-        send(peer_id, "Введи бренд диска:")
+        vk.messages.send(
+            peer_id=peer_id,
+            message="Введи бренд диска:",
+            random_id=0
+        )
         return
     elif text_lower == "🚘 доноры":
         user_state[peer_id] = "donors"
@@ -199,8 +229,14 @@ def handle(event):
         return
     elif text_lower == "❤️ избранное":
         fav = favorites.get(str(peer_id), [])
-        send(peer_id, f"❤️ У вас {len(fav)} товаров в избранном")
+        vk.messages.send(
+            peer_id=peer_id,
+            message=f"❤️ У вас {len(fav)} товаров в избранном",
+            random_id=0
+        )
         return
+
+    # ==== Навигация по результатам ====
     elif text_lower == "➡️":
         user_index[peer_id] = user_index.get(peer_id, 0) + 1
     elif text_lower == "⬅️":
@@ -216,7 +252,7 @@ def handle(event):
             user_index[peer_id] = 0
 
         if not user_results[peer_id]:
-            send(peer_id, "❌ Ничего не найдено")
+            vk.messages.send(peer_id=peer_id, message="❌ Ничего не найдено", random_id=0)
             return
 
         show_part(peer_id)
@@ -224,15 +260,13 @@ def handle(event):
     elif mode == "wheels":
         res = find_wheels(text)
         if res:
-            send(peer_id, f"🛞 {res[0].get('Производитель диска')}")
+            vk.messages.send(peer_id=peer_id, message=f"🛞 {res[0].get('Производитель диска')}", random_id=0)
 
     elif mode == "donors":
         show_donor(peer_id)
 
     else:
-        # Если пользователь не выбрал режим
-        send(peer_id, "Я не понимаю команду 😅. Попробуйте /start для списка команд.")
-
+        vk.messages.send(peer_id=peer_id, message="Я не понимаю команду 😅. Попробуйте /start для списка команд.", random_id=0)
 # ===== АДМИН =====
 def admin(msg, user_id):
     if user_id != ADMIN_ID:
