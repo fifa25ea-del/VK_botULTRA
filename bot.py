@@ -1,3 +1,4 @@
+# =========================
 # VK BOT ULTRA (ТОП ВЕРСИЯ)
 # =========================
 
@@ -11,6 +12,7 @@ import json
 from vk_api.bot_longpoll import VkBotLongPoll, VkBotEventType
 import logging
 import re
+import datetime
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -26,6 +28,11 @@ WHEELS_CSV = "https://baz-on.ru/export/c592/77023/drom-wheels.csv"
 FAV_FILE = "favorites.json"
 STATS_FILE = "stats.json"
 LOG_FILE = "logs.txt"
+
+# ===== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ =====
+user_state = {}
+user_results = {}
+user_index = {}
 
 # ===== ИНИЦИАЛИЗАЦИЯ VK =====
 vk_session = vk_api.VkApi(token=TOKEN)
@@ -77,117 +84,146 @@ class DataCache:
         self.photo_key = None
 
     def load_csv(self, url):
-        headers = {"User-Agent": "Mozilla/5.0"}
-        r = requests.get(url, headers=headers, timeout=30)
-        r.encoding = "cp1251"
-        csv_file = io.StringIO(r.text)
-        reader = csv.DictReader(csv_file, delimiter=";")
-        return list(reader), reader.fieldnames
+        try:
+            headers = {"User-Agent": "Mozilla/5.0"}
+            response = requests.get(url, headers=headers, timeout=30)
+            response.encoding = "cp1251"
+            csv_file = io.StringIO(response.text)
+            reader = csv.DictReader(csv_file, delimiter=";")
+            return list(reader), reader.fieldnames
+        except Exception as e:
+            logging.error(f"Ошибка загрузки CSV: {e}")
+            return [], []
 
     def update(self):
-        print("🔄 Обновление базы...")
-        self.donors, _ = self.load_csv(DONORS_CSV)
-        self.donors.reverse()
-        
-        self.parts, headers = self.load_csv(PARTS_CSV)
-        self.wheels, headers2 = self.load_csv(WHEELS_CSV)
-        
-        for h in headers:
-            h_low = h.lower()
-            if "артикул" in h_low or "номер" in h_low:
-                self.number_key = h
-            if "наимен" in h_low or "название" in h_low:
-                self.name_key = h
-            if "фото" in h_low or "image" in h_low:
-                self.photo_key = h
+        try:
+            print("🔄 Обновление базы данных...")
+            self.donors, _ = self.load_csv(DONORS_CSV)
+            self.donors.reverse()
+            
+            self.parts, headers = self.load_csv(PARTS_CSV)
+            self.wheels, headers2 = self.load_csv(WHEELS_CSV)
+            
+            # Определяем ключи для поиска
+            for header in headers:
+                header_lower = header.lower()
+                if "артикул" in header_lower or "номер" in header_lower:
+                    self.number_key = header
+                if "наимен" in header_lower or "название" in header_lower:
+                    self.name_key = header
+                if "фото" in header_lower or "image" in header_lower:
+                    self.photo_key = header
+        except Exception as e:
+            logging.error(f"Ошибка обновления кэша: {e}")
 
+# Создаем экземпляр кэша
 cache = DataCache()
 cache.update()
 
 # Автообновление в отдельном потоке
 def auto_update():
     while True:
-        cache.update()
-        time.sleep(300)
+        try:
+            cache.update()
+            time.sleep(300)  # Обновление каждые 5 минут
+        except Exception as e:
+            logging.error(f"Ошибка автообновления: {e}")
 
 threading.Thread(target=auto_update, daemon=True).start()
 
-# ===== ПОИСК =====
+# ===== ПОИСК ТОВАРОВ =====
 def find_part(query):
-    query = normalize(fix_a(query))
-    results = []
-    for part in cache.parts:
-        raw_number = part.get(cache.number_key, "")
-        number = normalize(fix_a(raw_number))
-        if not number:
-            continue
-        if query in number:
-            results.append(part)
-        if len(results) >= 20:
-            break
-    return results
+    try:
+        query = normalize(fix_a(query))
+        results = []
+        for part in cache.parts:
+            raw_number = part.get(cache.number_key, "")
+            number = normalize(fix_a(raw_number))
+            if not number:
+                continue
+            if query in number:
+                results.append(part)
+            if len(results) >= 20:
+                break
+        return results
+    except Exception as e:
+        logging.error(f"Ошибка поиска детали: {e}")
+        return []
 
 def find_wheels(query):
-    query = query.lower().replace(" ", "").replace("-", "")
-    results = []
-    for part in cache.wheels:
-        radius = str(part.get("Диаметр диска", "")).lower().replace(" ", "")
-        brand = str(part.get("Производитель диска", "")).lower()
-        model = str(part.get("Модель диска", "")).lower()
-        if query in radius or query in f"r{radius}":
-            results.append(part)
-        elif query in brand or query in model:
-            results.append(part)
-        if len(results) >= 20:
-            break
-    return results
+    try:
+        query = query.lower().replace(" ", "").replace("-", "")
+        results = []
+        for part in cache.wheels:
+            radius = str(part.get("Диаметр диска", "")).lower().replace(" ", "")
+            brand = str(part.get("Производитель диска", "")).lower()
+            model = str(part.get("Модель диска", "")).lower()
+            if query in radius or query in f"r{radius}":
+                results.append(part)
+            elif query in brand or query in model:
+                results.append(part)
+            if len(results) >= 20:
+                break
+        return results
+    except Exception as e:
+        logging.error(f"Ошибка поиска дисков: {e}")
+        return []
 
 # ===== КАРТОЧКИ ТОВАРОВ =====
 def send_part_card(peer_id, index):
-    track(peer_id, "views")
-    results = user_results.get(peer_id, [])
-    if not results or index >= len(results):
-        return
-    
-    part = results[index]
-    text = f"""🔧 {part.get(cache.name_key, '')}
+    try:
+        track(peer_id, "views")
+        results = user_results.get(peer_id, [])
+        if not results or index >= len(results):
+            return
+        
+        part = results[index]
+        text = f"""🔧 {part.get(cache.name_key, '')}
 Артикул: {part.get('Артикул', '')}
 Цена: {part.get('Цена', '')} ₽
 В наличии: {part.get('Наличие', '')}
 ({index+1}/{len(results)})"""
-    
-    send(peer_id, text)
+        
+        send(peer_id, text)
+    except Exception as e:
+        logging.error(f"Ошибка отправки карточки детали: {e}")
 
 def send_wheel_card(peer_id, index):
-    track(peer_id, "views")
-    results = user_results.get(peer_id, [])
-    if not results or index >= len(results):
-        return
-    
-    part = results[index]
-    text = f"""🛞 {part.get('Производитель диска', '')} {part.get('Модель диска', '')}
+    try:
+        track(peer_id, "views")
+        results = user_results.get(peer_id, [])
+        if not results or index >= len(results):
+            return
+        
+        part = results[index]
+        text = f"""🛞 {part.get('Производитель диска', '')} {part.get('Модель диска', '')}
 R{part.get('Диаметр диска', '')}
 Ширина: {part.get('Ширина диска', '')}
 Вылет: {part.get('Вылет диска', '')}
 Цена: {part.get('Цена', '')} ₽
 ({index+1}/{len(results)})"""
-    
-    send(peer_id, text)
+        
+        send(peer_id, text)
+    except Exception as e:
+        logging.error(f"Ошибка отправки карточки диска: {e}")
 
 def send_donor_card(peer_id, index):
-    track(peer_id, "views")
-    results = user_results.get(peer_id, [])
-    if not results or index >= len(results):
-        return
-    
-    donor = results[index]
-    text = f"""🚘 {donor.get('Марка', '')} {donor.get('Модель', '')}
+    try:
+        track(peer_id, "views")
+        results = user_results.get(peer_id, [])
+        if not results or index >= len(results):
+            return
+        
+        donor = results[index]
+        text = f"""🚘 {donor.get('Марка', '')} {donor.get('Модель', '')}
 Год: {donor.get('Год', '')}
 Пробег: {donor.get('Пробег', '')}
 Цена: {donor.get('Цена', '')} ₽
 ({index+1}/{len(results)})"""
-    
-    send(peer_id, text)
+        
+        send(peer_id, text)
+    except Exception as e:
+        logging.error(f"Ошибка отправки карточки донора: {e}")
 
 # ===== ОТПРАВКА СООБЩЕНИЙ =====
 def send(peer_id, text, keyboard=None):
@@ -207,16 +243,16 @@ def get_main_keyboard():
         "one_time": False,
         "buttons": [
             [
-                {"action": {"type": "open_app", "label": "🚗 Запчасти", "payload": json.dumps({"action": "parts"})}, "color": "primary"}
+                {"action": {"type": "callback", "label": "🚗 Запчасти", "payload": json.dumps({"cmd": "parts"})}, "color": "primary"}
             ],
             [
-                {"action": {"type": "open_app", "label": "🛞 Диски", "payload": json.dumps({"action": "wheels"})}, "color": "primary"}
+                {"action": {"type": "callback", "label": "🛞 Шины и диски", "payload": json.dumps({"cmd": "wheels"})}, "color": "primary"}
             ],
             [
-                {"action": {"type": "open_app", "label": "🚘 Доноры", "payload": json.dumps({"action": "donors"})}, "color": "positive"}
+                {"action": {"type": "callback", "label": "🚘 В разборе", "payload": json.dumps({"cmd": "donors"})}, "color": "positive"}
             ],
             [
-                {"action": {"type": "open_app", "label": "❤️ Избранное", "payload": json.dumps({"action": "favorites"})}, "color": "negative"}
+                {"action": {"type": "callback", "label": "❤️ Избранное", "payload": json.dumps({"cmd": "favorites"})}, "color": "negative"}
             ]
         ],
         "inline": True
@@ -224,34 +260,62 @@ def get_main_keyboard():
 
 # ===== ОБРАБОТКА СООБЩЕНИЙ =====
 def handle(event):
-    if event.type == VkBotEventType.MESSAGE_NEW:
-        handle_message(event)
-    elif event.type == VkBotEventType.MESSAGE_EVENT:
-        handle_callback(event)
+    try:
+        if event.type == VkBotEventType.MESSAGE_NEW:
+            handle_message(event)
+        elif event.type == VkBotEventType.MESSAGE_EVENT:
+            handle_callback(event)
+    except Exception as e:
+        logging.error(f"Ошибка обработки события: {e}")
 
 def handle_message(event):
-    msg = event.obj.message
-    peer_id = msg['peer_id']
-    text = msg.get('text', '').strip().lower()
+    try:
+        msg = event.obj.message
+        peer_id = msg['peer_id']
+        text = msg.get('text', '').strip().lower()
 
-    # Обработка текстовых сообщений
-    if text in ["/start", "начать"]:
-        send(peer_id, "Привет! 👋 Выберите команду:", keyboard=get_main_keyboard())
-        return
+        # Проверка на пустое сообщение
+        if not text:
+            send(peer_id, "Я получил сообщение, но оно не текстовое 😅")
+            return
 
-    # Обработка команд
-    if text == "🚗 запчасти":
-        user_state[peer_id] = "parts"
-        send(peer_id, "Введи номер детали или код:")
-        return
+        # Обработка команды /start
+        if text in ["/start", "начать"]:
+            send(peer_id, "Привет! 👋 Выберите команду:", keyboard=get_main_keyboard())
+            return
+
+        # Обработка состояний
+        if peer_id in user_state:
+            if user_state[peer_id] == "parts":
+                track(peer_id, "search")
+                user_results[peer_id] = find_part(text)
+                user_index[peer_id] = 0
+                if user_results[peer_id]:
+                    send_part_card(peer_id, 0)
+                else:
+                    send(peer_id, "❌ Ничего не найдено")
+                return
+
+            if user_state[peer_id] == "wheels":
+                track(peer_id, "search")
+                user_results[peer_id] = find_wheels(text)
+                user_index[peer_id] = 0
+                if user_results[peer_id]:
+                    send_wheel_card(peer_id, 0)
+                else:
+                    send(peer_id, "❌ Ничего не найдено")
+                return
+
+    except Exception as e:
+        logging.error(f"Ошибка обработки сообщения: {e}")
 
 def handle_callback(event):
-    data = event.obj.payload
-    peer_id = event.obj.peer_id
-    
     try:
+        data = event.obj.payload
+        peer_id = event.obj.peer_id
+        
         payload = json.loads(data)
-        action = payload.get('action')
+        action = payload.get('cmd')
         
         if action == 'parts':
             user_state[peer_id] = "parts"
@@ -265,7 +329,9 @@ def handle_callback(event):
             
         if action == 'donors':
             user_state[peer_id] = "donors"
-            send(peer_id, "Выбор доноров")
+            user_results[peer_id] = cache.donors[:20]
+            user_index[peer_id] = 0
+            send_donor_card(peer_id, 0)
             return
             
         if action == 'favorites':
@@ -275,23 +341,25 @@ def handle_callback(event):
     except Exception as e:
         logging.error(f"Ошибка обработки callback: {e}")
 
-# ===== ГЛАВНЫЙ ЦИКЛ =====
-# Продолжение функции run_bot
-def run_bot():
-    print("🔥 VK BOT ULTRA ЗАПУЩЕН")
+# ===== НАВИГАЦИЯ =====
+def navigate(peer_id, direction):
     try:
-        for event in longpoll.listen():
-            if event.type == VkBotEventType.MESSAGE_NEW:
-                handle(event)
+        if user_state.get(peer_id) in ["parts", "wheels", "donors"]:
+            if direction == "next":
+                user_index[peer_id] = min(user_index[peer_id] + 1, len(user_results[peer_id]) - 1)
+            elif direction == "prev":
+                user_index[peer_id] = max(user_index[peer_id] - 1, 0)
+
+            if user_state[peer_id] == "parts":
+                send_part_card(peer_id, user_index[peer_id])
+            elif user_state[peer_id] == "wheels":
+                send_wheel_card(peer_id, user_index[peer_id])
+            elif user_state[peer_id] == "donors":
+                send_donor_card(peer_id, user_index[peer_id])
     except Exception as e:
-        logging.error(f"Критическая ошибка: {e}")
+        logging.error(f"Ошибка навигации: {e}")
 
-# ===== ИНИЦИАЛИЗАЦИЯ СОСТОЯНИЙ =====
-user_state = {}
-user_results = {}
-user_index = {}
-
-# ===== СТАРТ БОТА =====
+# ===== ГЛАВНЫЙ ЦИКЛ =====
 def run_bot():
     print("🔥 VK BOT ULTRA ЗАПУЩЕН")
     try:
@@ -300,8 +368,19 @@ def run_bot():
     except Exception as e:
         logging.error(f"Критическая ошибка: {e}")
 
+# ===== СТАРТ БОТА =====
 if __name__ == "__main__":
-    run_bot()
+    try:
+        # Загружаем базу данных
+        cache.update()
+        
+        # Запускаем бота
+        run_bot()
+        
+    except Exception as e:
+        logging.error(f"Ошибка при запуске бота: {e}")
+        exit(1)
+
 # ===== ДОПОЛНИТЕЛЬНЫЕ ФУНКЦИИ =====
 
 def normalize(text):
@@ -310,7 +389,7 @@ def normalize(text):
 def log_search(user_id, query, mode):
     try:
         with open(LOG_FILE, "a", encoding="utf-8") as f:
-            time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             f.write(f"{time} | {user_id} | {mode} | {query}\n")
     except Exception as e:
         print("Ошибка логирования:", e)
