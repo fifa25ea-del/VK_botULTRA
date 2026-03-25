@@ -344,10 +344,8 @@ def run_bot():
 # ===== СТАРТ БОТА =====
 if __name__ == "__main__":
     try:
-        # Создаем экземпляр DataCache
-        cache = DataCache()
-        
-        # Загружаем базу данных
+        # Инициализация кэша
+        cache = DataCache()  # Теперь это должно работать
         cache.update()
         
         # Запускаем автообновление в отдельном потоке
@@ -360,11 +358,7 @@ if __name__ == "__main__":
         logging.error(f"Ошибка при запуске бота: {e}")
         exit(1)
 
-# Остальные функции остаются без изменений
-
-
 # ===== ДОПОЛНИТЕЛЬНЫЕ ФУНКЦИИ =====
-
 def normalize(text):
     return str(text).lower().replace(" ", "").replace("-", "")
 
@@ -401,3 +395,4 @@ def admin_commands(text, user_id):
         return True
     
     return False
+
