@@ -149,6 +149,60 @@ def auto_update():
         time.sleep(300)
 
 threading.Thread(target=auto_update, daemon=True).start()
+
+# Добавляем функцию поиска деталей
+def find_part(query):
+    query = query.lower()
+    results = []
+    for part in cache.parts:
+        if query in part['Название'].lower() or query in part['Артикул']:
+            results.append(part)
+    return results
+
+# Добавляем функцию поиска дисков
+def find_wheels(query):
+    query = query.lower()
+    results = []
+    for wheel in cache.wheels:
+        if query in wheel['Производитель диска'].lower():
+            results.append(wheel)
+    return results
+
+# Функция отображения найденной детали
+def show_part(peer_id):
+    index = user_index.get(peer_id, 0)
+    results = user_results.get(peer_id, [])
+    
+    if index < len(results):
+        part = results[index]
+        message = f"Деталь №{index + 1}\n"
+        message += f"Название: {part.get('Название', 'Не указано')}\n"
+        message += f"Артикул: {part.get('Артикул', 'Не указан')}\n"
+        message += f"Цена: {part.get('Цена', 'Не указана')}\n"
+        message += f"Ссылка: {part.get('Ссылка', 'Нет ссылки')}"
+        send(peer_id, message)
+    else:
+        send(peer_id, "Нет данных для отображения")
+
+# Функция отображения найденного донора
+def show_donor(peer_id):
+    index = user_index.get(peer_id, 0)
+    results = user_results.get(peer_id, [])
+    
+    if index < len(results):
+        donor = results[index]
+        message = f"Донор №{index + 1}\n"
+        message += f"Марка: {donor.get('Марка', 'Не указана')}\n"
+        message += f"Модель: {donor.get('Модель', 'Не указана')}\n"
+        message += f"Год: {donor.get('Год', 'Не указан')}\n"
+        message += f"Цена: {donor.get('Цена', 'Не указана')}"
+        send(peer_id, message)
+    else:
+        send(peer_id, "Нет данных для отображения")
+
+# Не забудьте добавить эти функции в ваш основной файл
+
+
 # ===== СОСТОЯНИЯ =====
 user_state = {}  # Хранит текущее состояние пользователя
 user_results = {}  # Хранит результаты поиска для пользователя
