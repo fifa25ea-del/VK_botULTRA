@@ -483,7 +483,7 @@ def send_wheel_card(peer_id, index):
         if not results or index >= len(results):
             return
         
-        part = results[
+        part = results[index]
 def send_wheel_card(peer_id, index):
     try:
         track(peer_id, "views")
