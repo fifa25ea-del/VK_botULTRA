@@ -139,6 +139,8 @@ threading.Thread(target=auto_update, daemon=True).start()
 # ===== ОБРАБОТКА CALLBACK =====
 def handle_callback(event):
     try:
+        logging.info(f"Получен callback от пользователя {event.obj.peer_id}")  # Добавляем логирование
+        
         payload = event.obj.payload
         peer_id = event.obj.peer_id
         
@@ -147,31 +149,57 @@ def handle_callback(event):
             
         cmd = payload.get('cmd')
         
-        # Убедитесь, что команды обрабатываются корректно
+        # Обработка команд с логированием
         if cmd == 'parts':
-            # Обработка команды
-            pass
+            logging.info(f"Пользователь {peer_id} выбрал команду parts")
+            user_state[peer_id] = "parts"
+            send(peer_id, "Введите номер детали или код:")
+            
         elif cmd == 'wheels':
-            # Обработка команды
-            pass
-        # и т.д.
+            logging.info(f"Пользователь {peer_id} выбрал команду wheels")
+            user_state[peer_id] = "wheels"
+            send(peer_id, "Введите бренд диска:")
+            
+        elif cmd == 'donors':
+            logging.info(f"Пользователь {peer_id} выбрал команду donors")
+            user_state[peer_id] = "donors"
+            user_results[peer_id] = cache.donors[:20]
+            user_index[peer_id] = 0
+            send_donor_card(peer_id, 0)
+            
+        elif cmd == 'favorites':
+            logging.info(f"Пользователь {peer_id} выбрал команду favorites")
+            send(peer_id, "Ваши избранные товары")
+            
+        else:
+            logging.warning(f"Неизвестная команда: {cmd}")
+            send(peer_id, "Неизвестная команда")
             
     except Exception as e:
         logging.error(f"Ошибка обработки callback: {e}")
+        send(peer_id, "Произошла ошибка при обработке запроса")
+
 
 # Добавим дополнительную проверку в handle()
 def handle(event):
     try:
+        logging.info(f"Новое событие: {event.type}")
+        
         if event.type == VkBotEventType.MESSAGE_NEW:
             handle_message(event)
         elif event.type == VkBotEventType.MESSAGE_EVENT:
-            handle_callback(event)  # Убедитесь, что функция вызывается
+            handle_callback(event)
+        else:
+            logging.warning(f"Неизвестный тип события: {event.type}")
+            
     except Exception as e:
         logging.error(f"Ошибка обработки события: {e}")
+
 
 # Улучшим функцию отправки сообщений
 def send(peer_id, text, keyboard=None):
     try:
+        logging.info(f"Отправка сообщения пользователю {peer_id}")
         vk.messages.send(
             peer_id=peer_id,
             message=text,
@@ -304,8 +332,18 @@ def get_main_keyboard():
     return json.dumps({
         "one_time": False,
         "buttons": [
-            [{"action": {"type": "callback", "label": "Запчасти", "payload": {"cmd": "parts"}}, "color": "primary"}],
-            # остальные кнопки
+            [
+                {"action": {"type": "callback", "label": "Запчасти", "payload": {"cmd": "parts"}}, "color": "primary"}
+            ],
+            [
+                {"action": {"type": "callback", "label": "Диски", "payload": {"cmd": "wheels"}}, "color": "primary"}
+            ],
+            [
+                {"action": {"type": "callback", "label": "Доноры", "payload": {"cmd": "donors"}}, "color": "positive"}
+            ],
+            [
+                {"action": {"type": "callback", "label": "Избранное", "payload": {"cmd": "favorites"}}, "color": "negative"}
+            ]
         ],
         "inline": True
     })
