@@ -13,9 +13,6 @@ import json
 from vk_api.bot_longpoll import VkBotLongPoll, VkBotEventType
 import logging
 
-# Настройка логирования
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
 # ===== НАСТРОЙКИ =====
 TOKEN = "vk1.a.Fmog-6rNUAOTYVwC9-SJBo9dC5a87pMUET1xK_9Raxhk_l5V4Zqx1jCtWJXV7tZLappcJR6fIizfOv9X0OhMLnJbqjzej47aY5evfAj53IvfIgUo2w_vhBpjLGbgiBvaPZ3GrwFTdtR9D0TSGstCQM-L7aFf8_j6oqTxiRV7saahsFCInnvs7u53dtgLJB4lNI_apA5PsIpDqA3IWViAlA"
 ADMIN_ID = 888230055
@@ -47,6 +44,7 @@ def init_files():
 # Инициализируем файлы после их определения
 init_files()
 
+# Инициализация VK API с обработкой ошибок
 def init_vk_api():
     max_retries = 5
     retry_delay = 2  # задержка между попытками в секундах
@@ -54,18 +52,20 @@ def init_vk_api():
     for attempt in range(max_retries):
         try:
             vk_session = vk_api.VkApi(token=TOKEN)
-            longpoll = VkBotLongPoll(vk_session, 236843733)
+            longpoll = VkBotLongPoll(vk_session, GROUP_ID)
             vk = vk_session.get_api()
             print("Подключение к VK API успешно")
             return vk_session, longpoll, vk
             
-        except vk_api.exceptions.ApiHttpError as e:
+        except Exception as e:
             if attempt < max_retries - 1:
                 print(f"Ошибка подключения к VK API: {e}. Попытка {attempt + 1}/{max_retries}. Повтор через {retry_delay} секунд...")
                 time.sleep(retry_delay)
             else:
                 raise
 
+# Инициализируем VK API
+vk_session, longpoll, vk = init_vk_api()
 
 # ===== ХРАНИЛИЩЕ =====
 def load_json(file):
