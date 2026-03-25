@@ -219,7 +219,7 @@ def get_main_keyboard():
                 {"action": {"type": "open_app", "label": "❤️ Избранное", "payload": json.dumps({"action": "favorites"})}, "color": "negative"}
             ]
         ],
-        "inline": true
+        "inline": True
     })
 
 # ===== ОБРАБОТКА СООБЩЕНИЙ =====
