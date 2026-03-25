@@ -47,6 +47,26 @@ def init_files():
 # Инициализируем файлы после их определения
 init_files()
 
+def init_vk_api():
+    max_retries = 5
+    retry_delay = 2  # задержка между попытками в секундах
+    
+    for attempt in range(max_retries):
+        try:
+            vk_session = vk_api.VkApi(token=TOKEN)
+            longpoll = VkBotLongPoll(vk_session, 236843733)
+            vk = vk_session.get_api()
+            print("Подключение к VK API успешно")
+            return vk_session, longpoll, vk
+            
+        except vk_api.exceptions.ApiHttpError as e:
+            if attempt < max_retries - 1:
+                print(f"Ошибка подключения к VK API: {e}. Попытка {attempt + 1}/{max_retries}. Повтор через {retry_delay} секунд...")
+                time.sleep(retry_delay)
+            else:
+                raise
+
+
 # ===== ХРАНИЛИЩЕ =====
 def load_json(file):
     try:
@@ -248,8 +268,10 @@ def send(peer_id, text, keyboard=None):
             random_id=0,
             keyboard=keyboard if keyboard else get_main_keyboard()
         )
-    except Exception as e:
+    except vk_api.exceptions.ApiError as e:
         logging.error(f"Ошибка отправки сообщения: {e}")
+        time.sleep(2)  # пауза перед повторной попыткой
+        send(peer_id, text, keyboard)  # повторная попытка отправки
 
 # ===== КНОПКИ =====
 def get_main_keyboard():
@@ -334,12 +356,20 @@ def handle(event):
 # ===== ГЛАВНЫЙ ЦИКЛ =====
 def run_bot():
     print("🔥 VK BOT ULTRA ЗАПУЩЕН")
-    try:
-        for event in longpoll.listen():
-            if event.type == VkBotEventType.MESSAGE_NEW:
-                handle(event)
-    except Exception as e:
-        logging.error(f"Критическая ошибка: {e}")
+    while True:
+        try:
+            for event in longpoll.listen():
+                if event.type == VkBotEventType.MESSAGE_NEW:
+                    handle(event)
+                    
+        except vk_api.exceptions.ApiError as e:
+            print(f"API ошибка: {e}. Переподключение...")
+            time.sleep(5)  # пауза перед повторным подключением
+            vk_session, longpoll, vk = init_vk_api()
+            
+        except Exception as e:
+            logging.error(f"Критическая ошибка: {e}")
+            time.sleep(5)  # пауза перед повторной попыткой
 
 if __name__ == "__main__":
     run_bot()
