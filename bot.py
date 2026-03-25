@@ -248,66 +248,66 @@ def handle(event):
             send(peer_id, "❌ Донор не найден")
         return
     # Обработка навигации для доноров
-elif text_lower in ["➡️", "следующий"]:
-    if user_state.get(peer_id) == "donors":
+    elif text_lower in ["➡️", "следующий"]:
+        if user_state.get(peer_id) == "donors":
+            try:
+                # Получаем текущий индекс
+                current_index = user_index.get(peer_id, 0)
+                # Получаем результаты поиска
+                results = user_results.get(peer_id, [])
+                
+                # Проверяем, есть ли следующие элементы
+                if current_index + 1 < len(results):
+                    # Увеличиваем индекс
+                    user_index[peer_id] = current_index + 1
+                    # Показываем следующую запись
+                    show_donor_info(peer_id, results[user_index[peer_id]])
+                else:
+                    send(peer_id, "🚫 Это последний результат")
+                    
+            except Exception as e:
+                logging.error(f"Ошибка при переходе к следующему донору: {e}")
+                send(peer_id, "Произошла ошибка при переходе к следующему результату")
+    elif text_lower in ["⬅️", "предыдущий"]:
+        if user_state.get(peer_id) == "donors":
+            try:
+                # Получаем текущий индекс
+                current_index = user_index.get(peer_id, 0)
+                # Получаем результаты поиска
+                results = user_results.get(peer_id, [])
+                
+                # Проверяем, есть ли предыдущие элементы
+                if current_index > 0:
+                    # Уменьшаем индекс
+                    user_index[peer_id] = current_index - 1
+                    # Показываем предыдущую запись
+                    show_donor_info(peer_id, results[user_index[peer_id]])
+                else:
+                    send(peer_id, "🚫 Это первый результат")
+                    
+            except Exception as e:
+                logging.error(f"Ошибка при переходе к предыдущему донору: {e}")
+                send(peer_id, "Произошла ошибка при переходе к предыдущему результату")
+    
+    # Обработка поиска доноров
+    elif user_state.get(peer_id) == "donors":
         try:
-            # Получаем текущий индекс
-            current_index = user_index.get(peer_id, 0)
-            # Получаем результаты поиска
-            results = user_results.get(peer_id, [])
+            track(peer_id, "search_donors")
+            # Выполняем поиск
+            user_results[peer_id] = cache.search_donors(text)
+            user_index[peer_id] = 0
             
-            # Проверяем, есть ли следующие элементы
-            if current_index + 1 < len(results):
-                # Увеличиваем индекс
-                user_index[peer_id] = current_index + 1
-                # Показываем следующую запись
-                show_donor_info(peer_id, results[user_index[peer_id]])
+            if user_results[peer_id]:
+                # Показываем первый результат
+                show_donor_info(peer_id, user_results[peer_id][0])
             else:
-                send(peer_id, "🚫 Это последний результат")
+                send(peer_id, "❌ Донор не найден")
                 
         except Exception as e:
-            logging.error(f"Ошибка при переходе к следующему донору: {e}")
-            send(peer_id, "Произошла ошибка при переходе к следующему результату")
-elif text_lower in ["⬅️", "предыдущий"]:
-    if user_state.get(peer_id) == "donors":
-        try:
-            # Получаем текущий индекс
-            current_index = user_index.get(peer_id, 0)
-            # Получаем результаты поиска
-            results = user_results.get(peer_id, [])
-            
-            # Проверяем, есть ли предыдущие элементы
-            if current_index > 0:
-                # Уменьшаем индекс
-                user_index[peer_id] = current_index - 1
-                # Показываем предыдущую запись
-                show_donor_info(peer_id, results[user_index[peer_id]])
-            else:
-                send(peer_id, "🚫 Это первый результат")
-                
-        except Exception as e:
-            logging.error(f"Ошибка при переходе к предыдущему донору: {e}")
-            send(peer_id, "Произошла ошибка при переходе к предыдущему результату")
-
-# Обработка поиска доноров
-elif user_state.get(peer_id) == "donors":
-    try:
-        track(peer_id, "search_donors")
-        # Выполняем поиск
-        user_results[peer_id] = cache.search_donors(text)
-        user_index[peer_id] = 0
-        
-        if user_results[peer_id]:
-            # Показываем первый результат
-            show_donor_info(peer_id, user_results[peer_id][0])
-        else:
-            send(peer_id, "❌ Донор не найден")
-            
-    except Exception as e:
-        logging.error(f"Ошибка при поиске донора: {e}")
-        send(peer_id, "Произошла ошибка при поиске донора")
-
-# ===== ДОБАВЛЯЕМ ФУНКЦИИ ПОКАЗА ИНФОРМАЦИИ =====
+            logging.error(f"Ошибка при поиске донора: {e}")
+            send(peer_id, "Произошла ошибка при поиске донора")
+    
+    # ===== ДОБАВЛЯЕМ ФУНКЦИИ ПОКАЗА ИНФОРМАЦИИ =====
 
 def show_part(peer_id):
     try:
