@@ -479,8 +479,41 @@ def handle(event):
         send(peer_id, "Неизвестная команда. Используйте кнопки меню или команду /start")
 
 # Запуск бота
+# ===== ГЛАВНЫЙ ЦИКЛ =====
+def run_bot():
+    print("🔥 VK BOT ULTRA ЗАПУЩЕН")
+    try:
+        for event in longpoll.listen():
+            if event.type == VkBotEventType.MESSAGE_NEW:
+                handle(event)
+    except Exception as e:
+        logging.error(f"Критическая ошибка: {e}")
+        time.sleep(5)  # пауза перед перезапуском
+        run_bot()  # перезапуск бота
+
+# Добавляем обработку ошибок при запуске
 if __name__ == "__main__":
     try:
+        # Инициализируем все компоненты
+        init_files()
+        load_json(FAV_FILE)
+        load_json(STATS_FILE)
+        
+        # Запускаем основной цикл
         run_bot()
     except Exception as e:
         logging.error(f"Критическая ошибка при запуске бота: {e}")
+        time.sleep(10)  # пауза перед повторной попыткой
+        run_bot()  # повторный запуск
+
+# Добавляем автоматический перезапуск при падении
+def auto_restart():
+    while True:
+        try:
+            run_bot()
+        except Exception as e:
+            logging.error(f"Бот упал. Перезапуск... {e}")
+            time.sleep(10)
+
+# Запускаем поток с автоперезапуском
+threading.Thread(target=auto_restart, daemon=True).start()
