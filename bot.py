@@ -66,14 +66,43 @@ def save_json(file, data):
 favorites = load_json(FAV_FILE)
 stats = load_json(STATS_FILE)
 
-# ===== VK ИНИЦИАЛИЗАЦИЯ =====
-try:
-    vk_session = vk_api.VkApi(token=TOKEN)
-    longpoll = VkBotLongPoll(vk_session, 236843733)  
-    vk = vk_session.get_api()
-except Exception as e:
-    logging.error(f"Ошибка инициализации VK API: {e}")
-    exit(1)
+# ===== ИНИЦИАЛИЗАЦИЯ VK =====
+vk_session = vk_api.VkApi(token=TOKEN)
+longpoll = VkBotLongPoll(vk_session, 236843733)  
+vk = vk_session.get_api()
+
+# ===== ГЛАВНЫЙ ЦИКЛ =====
+def run_bot():
+    print("🔥 VK BOT ULTRA ЗАПУЩЕН")
+    try:
+        for event in longpoll.listen():
+            if event.type == VkBotEventType.MESSAGE_NEW:
+                handle(event)
+    except Exception as e:
+        logging.error(f"Критическая ошибка: {e}")
+
+# ===== ОБРАБОТКА СООБЩЕНИЙ =====
+def handle(event):
+    msg = event.obj.message
+    peer_id = msg['peer_id']
+    text = msg.get('text', '').strip()
+
+    if not text:
+        send(peer_id, "Я получил сообщение, но оно не текстовое 😅")
+        return
+
+    text_lower = text.lower()
+
+    # Обработка команды /start
+    if text_lower in ["/start", "начать"]:
+        send(peer_id, "Привет! 👋 Выберите команду:", keyboard=get_main_keyboard())
+        return
+
+    # Обработка основных команд
+    if text_lower == "🚗 запчасти":
+        user_state[peer_id] = "parts"
+        send(peer_id, "Введи номер детали или код:")
+        return
 
 # ===== КЭШ =====
 class DataCache:
@@ -132,16 +161,32 @@ def keyboard():
     })
 
 # ===== ОТПРАВКА СООБЩЕНИЙ =====
-def send(peer_id, text):
+def send(peer_id, text, keyboard=None):
     try:
         vk.messages.send(
             peer_id=peer_id,
             message=text,
             random_id=0,
-            keyboard=keyboard()
+            keyboard=keyboard if keyboard else get_main_keyboard()
         )
     except Exception as e:
-        logging.error(f"Ошибка при отправке сообщения: {e}")
+        logging.error(f"Ошибка отправки сообщения: {e}")
+
+# ===== КНОПКИ =====
+def get_main_keyboard():
+    return json.dumps({
+        "one_time": False,
+        "buttons": [
+            [
+                {"action": {"type": "text", "label": "🚗 Запчасти"}, "color": "primary"},
+                {"action": {"type": "text", "label": "🛞 Диски"}, "color": "primary"}
+            ],
+            [
+                {"action": {"type": "text", "label": "🚘 Доноры"}, "color": "positive"},
+                {"action": {"type": "text", "label": "❤️ Избранное"}, "color": "negative"}
+            ]
+        ]
+    })
 
 # ===== ОБРАБОТКА СООБЩЕНИЙ =====
 def handle(event):
