@@ -104,9 +104,9 @@ def keyboard():
     })
 
 # ===== SEND =====
-def send(user_id, text):
+def send(peer_id, text):
     vk.messages.send(
-        user_id=user_id,
+        peer_id=peer_id,
         message=text,
         random_id=0,
         keyboard=keyboard()
@@ -175,6 +175,8 @@ def handle(event):
 
     # ==== Команда /start ====
     if text_lower in ["/start", "start", "начать"]:
+    send(peer_id, "Привет! 👋 Выберите команду:")
+    return
         vk.messages.send(
             peer_id=peer_id,
             message="Привет! 👋\nЯ ваш VK-бот 🚀\nВыберите команду:",
