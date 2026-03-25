@@ -123,39 +123,47 @@ class DataCache:
         self.donors = []
 
     def load_csv(self, url):
-        r = requests.get(url)
-        r.encoding = "cp1251"
-        return list(csv.DictReader(io.StringIO(r.text), delimiter=";"))
+        try:
+            r = requests.get(url)
+            r.encoding = "cp1251"
+            return list(csv.DictReader(io.StringIO(r.text), delimiter=";"))
+        except Exception as e:
+            logging.error(f"Ошибка загрузки CSV: {e}")
+            return []
 
     def update(self):
-        print("🔄 Обновление базы...")
-        self.parts = self.load_csv(PARTS_CSV)
-        self.wheels = self.load_csv(WHEELS_CSV)
-        self.donors = self.load_csv(DONORS_CSV)
+        try:
+            print("🔄 Обновление базы...")
+            self.parts = self.load_csv(PARTS_CSV)
+            self.wheels = self.load_csv(WHEELS_CSV)
+            self.donors = self.load_csv(DONORS_CSV)
+        except Exception as e:
+            logging.error(f"Ошибка обновления базы: {e}")
 
-    # Добавляем метод поиска
-    def search(self, query, category):
-        if category == "parts":
-            return [item for item in self.parts if query.lower() in item['Название'].lower()]
-        elif category == "wheels":
-            return [item for item in self.wheels if query.lower() in item['Производитель диска'].lower()]
-        elif category == "donors":
-            return [item for item in self.donors if query.lower() in item['Марка'].lower()]
-        return []
-# Автообновление в отдельном потоке
+# Создаем экземпляр кэша
+cache = DataCache()
+
+# Функция автообновления
 def auto_update():
     while True:
-        cache.update()
-        time.sleep(300)
+        try:
+            cache.update()
+        except Exception as e:
+            logging.error(f"Ошибка в автообновлении: {e}")
+        time.sleep(300)  # Обновляем каждые 5 минут
 
+# Запускаем поток автообновления
 threading.Thread(target=auto_update, daemon=True).start()
+
+# Инициализируем начальное обновление
+cache.update()
 
 # Добавляем функцию поиска деталей
 def find_part(self, query):
         query = query.lower()
         results = []
         for part in self.parts:
-            if query in part['Название'].lower() or query in part['Артикул']:
+            if query in part.get('Название', '').lower() or query in part.get('Номер', '').lower():
                 results.append(part)
         return results
     
@@ -164,7 +172,7 @@ def find_wheels(query):
     query = query.lower()
     results = []
     for wheel in cache.wheels:
-        if query in wheel['Производитель диска'].lower():
+        if query in wheel['R18'].lower():
             results.append(wheel)
     return results
 
