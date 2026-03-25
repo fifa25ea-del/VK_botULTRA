@@ -13,8 +13,8 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # ===== НАСТРОЙКИ =====
-TOKEN = "vk1.a.Fmog-6rNUAOTYVwC9-SJBo9dC5a87pMUET1xK_9Raxhk_l5V4Zqx1jCtWJXV7tZLappcJR6fIizfOv9X0OhMLnJbqjzej47aY5evfAj53IvfIgUo2w_vhBpjLGbgiBvaPZ3GrwFTdtR9D0TSGstCQM-L7aFf8_j6oqTxiRV7saahsFCInnvs7u53dtgLJB4lNI_apA5PsIpDqA3IWViAlA"  # Замените на актуальный токен
-GROUP_ID = 236843733  # ID вашей группы
+TOKEN = "vk1.a.Fmog-6rNUAOTYVwC9-SJBo9dC5a87pMUET1xK_9Raxhk_l5V4Zqx1jCtWJXV7tZLappcJR6fIizfOv9X0OhMLnJbqjzej47aY5evfAj53IvfIgUo2w_vhBpjLGbgiBvaPZ3GrwFTdtR9D0TSGstCQM-L7aFf8_j6oqTxiRV7saahsFCInnvs7u53dtgLJB4lNI_apA5PsIpDqA3IWViAlA".strip()  # убедись что без лишних пробелов
+GROUP_ID = 236843733
 ADMIN_ID = 888230055
 
 DONORS_CSV = "https://baz-on.ru/export/c592/5c6ca/stuttgart-site-carsrc.csv"
@@ -37,22 +37,20 @@ def init_files():
         logging.error(f"Ошибка при инициализации файлов: {e}")
         exit(1)
 
-# Инициализируем файлы
 init_files()
 
 # ===== ИНИЦИАЛИЗАЦИЯ VK API =====
 def init_vk_api():
-    try:
-        vk_session = vk_api.VkApi(token=TOKEN)
-        longpoll = VkBotLongPoll(vk_session, GROUP_ID)
-        vk = vk_session.get_api()
-        print("Подключение к VK API успешно")
-        return vk_session, longpoll, vk
-    except Exception as e:
-        logging.error(f"Ошибка инициализации VK API: {e}")
-        raise
+    vk_session = vk_api.VkApi(token=TOKEN)
+    longpoll = VkBotLongPoll(vk_session, GROUP_ID)
+    vk = vk_session.get_api()
+    print("Подключение к VK API успешно")
+    return vk_session, longpoll, vk
 
-# Инициализируем VK API
+vk_session = None
+longpoll = None
+vk = None
+
 try:
     vk_session, longpoll, vk = init_vk_api()
 except Exception as e:
@@ -87,7 +85,7 @@ class DataCache:
 
     def load_csv(self, url):
         try:
-            r = requests.get(url)
+            r = requests.get(url, timeout=15)
             r.encoding = "cp1251"
             return list(csv.DictReader(io.StringIO(r.text), delimiter=";"))
         except Exception as e:
@@ -136,11 +134,25 @@ try:
 except Exception as e:
     logging.error(f"Ошибка при первом обновлении данных: {e}")
 
+# ===== ДОБАВЛЕНО (чтобы не падало) =====
+user_index = {}
+user_results = {}
+
+def send(peer_id, text):
+    try:
+        vk.messages.send(
+            user_id=peer_id,
+            message=text,
+            random_id=0
+        )
+    except Exception as e:
+        logging.error(f"Ошибка отправки: {e}")
+
 # Функция для отображения найденной детали
 def show_part(peer_id):
     index = user_index.get(peer_id, 0)
     results = user_results.get(peer_id, [])
-    
+
     if index < len(results):
         part = results[index]
         message = f"Карточка детали:\n"
@@ -152,18 +164,19 @@ def show_part(peer_id):
     else:
         send(peer_id, "Нет данных для отображения")
 
-# Автообновление в отдельном потоке
+# Автообновление
 def auto_update():
     while True:
         try:
             cache.update()
         except Exception as e:
             logging.error(f"Ошибка автообновления: {e}")
-        time.sleep(300)  # Обновляем каждые 5 минут
+        time.sleep(300)
 
-# Запускаем поток автообновления
-threading.Thread(target=auto_update, daemon=True).start()
+threading.Thread(target=auto_update, daemon=True).start(
 
+
+            
 # ===== ГЛАВНЫЙ ЦИКЛ =====
 def run_bot():
     print("🔥 VK BOT ULTRA ЗАПУЩЕН")
