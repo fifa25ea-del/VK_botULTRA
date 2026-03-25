@@ -24,25 +24,6 @@ WHEELS_CSV = "https://baz-on.ru/export/c592/77023/drom-wheels.csv"
 FAV_FILE = "favorites.json"
 STATS_FILE = "stats.json"
 
-# ===== ИНИЦИАЛИЗАЦИЯ ФАЙЛОВ =====
-def init_files():
-    try:
-        # Создаем файлы, если их нет
-        for file in [FAV_FILE, STATS_FILE]:
-            if not os.path.exists(file):
-                with open(file, 'w', encoding='utf-8') as f:
-                    f.write('{}')  # Создаем пустой JSON файл
-            
-            # Проверяем права доступа
-            if not os.access(file, os.W_OK):
-                raise PermissionError(f"Нет прав записи в файл {file}")
-                
-    except Exception as e:
-        print(f"Ошибка при инициализации файлов: {e}")
-        exit(1)
-
-# Инициализируем файлы после их определения
-init_files()
 
 # Инициализация VK API с обработкой ошибок
 def init_vk_api():
