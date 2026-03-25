@@ -196,7 +196,7 @@ def send(peer_id, text):
             peer_id=peer_id,
             message=text,
             random_id=0,
-            keyboard=get_main_keyboard()
+            keyboard=get_main_keyboard()  # Убедитесь, что клавиатура передается
         )
     except Exception as e:
         logging.error(f"Ошибка отправки сообщения: {e}")
@@ -207,14 +207,19 @@ def get_main_keyboard():
         "one_time": False,
         "buttons": [
             [
-                {"action": {"type": "text", "label": "🚗 Найти запчасть"}, "color": "primary"},
+                {"action": {"type": "text", "label": "🚗 Найти запчасть"}, "color": "primary"}
+            ],
+            [
                 {"action": {"type": "text", "label": "🛞 Шины и диски"}, "color": "primary"}
             ],
             [
-                {"action": {"type": "text", "label": "🚘 В разборе"}, "color": "positive"},
+                {"action": {"type": "text", "label": "🚘 В разборе"}, "color": "positive"}
+            ],
+            [
                 {"action": {"type": "text", "label": "❤️ Избранное"}, "color": "negative"}
             ]
-        ]
+        ],
+        "inline": true  # Добавляем параметр inline
     })
 
 # ===== ОБРАБОТКА СООБЩЕНИЙ =====
