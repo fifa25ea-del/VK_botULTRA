@@ -106,7 +106,64 @@ def handle_message(event):
     except Exception as e:
         logging.error(f"Ошибка обработки сообщения: {e}")
 
-# ===== ОБРАБОТКА CALLBACK =====
+# ===== КЭШ =====
+class DataCache:
+    def __init__(self):
+        self.parts = []
+        self.wheels = []
+        self.donors = []
+        self.number_key = None
+        self.name_key = None
+        self.photo_key = None
+
+    def load_csv(self, url):
+        try:
+            headers = {"User-Agent": "Mozilla/5.0"}
+            response = requests.get(url, headers=headers, timeout=30)
+            response.encoding = "cp1251"
+            csv_file = io.StringIO(response.text)
+            reader = csv.DictReader(csv_file, delimiter=";")
+            return list(reader), reader.fieldnames
+        except Exception as e:
+            logging.error(f"Ошибка загрузки CSV: {e}")
+            return [], []
+
+    def update(self):
+        try:
+            print("🔄 Обновление базы данных...")
+            self.donors, _ = self.load_csv(DONORS_CSV)
+            self.donors.reverse()
+            
+            self.parts, headers = self.load_csv(PARTS_CSV)
+            self.wheels, headers2 = self.load_csv(WHEELS_CSV)
+            
+            # Определяем ключи для поиска
+            for header in headers:
+                header_lower = header.lower()
+                if "артикул" in header_lower or "номер" in header_lower:
+                    self.number_key = header
+                if "наимен" in header_lower or "название" in header_lower:
+                    self.name_key = header
+                if "фото" in header_lower or "image" in header_lower:
+                    self.photo_key = header
+        except Exception as e:
+            logging.error(f"Ошибка обновления кэша: {e}")
+
+# Создаем экземпляр кэша
+cache = DataCache()
+cache.update()
+
+# Автообновление в отдельном потоке
+def auto_update():
+    while True:
+        try:
+            cache.update()
+            time.sleep(300)  # Обновление каждые 5 минут
+        except Exception as e:
+            logging.error(f"Ошибка автообновления: {e}")
+
+threading.Thread(target=auto_update, daemon=True).start()
+
 # ===== ОБРАБОТКА CALLBACK =====
 def handle_callback(event):
     try:
@@ -344,12 +401,7 @@ def run_bot():
 # ===== СТАРТ БОТА =====
 if __name__ == "__main__":
     try:
-        # Инициализация кэша
-        cache = DataCache()  # Теперь это должно работать
-        cache.update()
-        
-        # Запускаем автообновление в отдельном потоке
-        threading.Thread(target=auto_update, daemon=True).start()
+        # Инициализация кэша уже выполнена выше
         
         # Запускаем бота
         run_bot()
