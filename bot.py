@@ -190,13 +190,13 @@ def send_donor_card(peer_id, index):
     send(peer_id, text)
 
 # ===== ОТПРАВКА СООБЩЕНИЙ =====
-def send(peer_id, text):
+def send(peer_id, text, keyboard=None):
     try:
         vk.messages.send(
             peer_id=peer_id,
             message=text,
             random_id=0,
-            keyboard=get_main_keyboard()  # Убедитесь, что клавиатура передается
+            keyboard=keyboard if keyboard else get_main_keyboard()
         )
     except Exception as e:
         logging.error(f"Ошибка отправки сообщения: {e}")
@@ -207,104 +207,73 @@ def get_main_keyboard():
         "one_time": False,
         "buttons": [
             [
-                {"action": {"type": "text", "label": "🚗 Найти запчасть"}, "color": "primary"}
+                {"action": {"type": "open_app", "label": "🚗 Запчасти", "payload": json.dumps({"action": "parts"})}, "color": "primary"}
             ],
             [
-                {"action": {"type": "text", "label": "🛞 Шины и диски"}, "color": "primary"}
+                {"action": {"type": "open_app", "label": "🛞 Диски", "payload": json.dumps({"action": "wheels"})}, "color": "primary"}
             ],
             [
-                {"action": {"type": "text", "label": "🚘 В разборе"}, "color": "positive"}
+                {"action": {"type": "open_app", "label": "🚘 Доноры", "payload": json.dumps({"action": "donors"})}, "color": "positive"}
             ],
             [
-                {"action": {"type": "text", "label": "❤️ Избранное"}, "color": "negative"}
+                {"action": {"type": "open_app", "label": "❤️ Избранное", "payload": json.dumps({"action": "favorites"})}, "color": "negative"}
             ]
         ],
-        "inline": true  # Добавляем параметр inline
+        "inline": true
     })
 
 # ===== ОБРАБОТКА СООБЩЕНИЙ =====
 def handle(event):
+    if event.type == VkBotEventType.MESSAGE_NEW:
+        handle_message(event)
+    elif event.type == VkBotEventType.MESSAGE_EVENT:
+        handle_callback(event)
+
+def handle_message(event):
     msg = event.obj.message
     peer_id = msg['peer_id']
     text = msg.get('text', '').strip().lower()
-    
-    if not text:
-        send(peer_id, "Я получил сообщение, но оно не текстовое 😅")
+
+    # Обработка текстовых сообщений
+    if text in ["/start", "начать"]:
+        send(peer_id, "Привет! 👋 Выберите команду:", keyboard=get_main_keyboard())
         return
 
     # Обработка команд
-    if text == "/start":
-        send(peer_id, "Привет! Выберите действие:", keyboard=get_main_keyboard())
-        return
-
-    # Обработка разделов
-    if text == "🚗 найти запчасть":
+    if text == "🚗 запчасти":
         user_state[peer_id] = "parts"
-        send(peer_id, "Введите номер детали")
+        send(peer_id, "Введи номер детали или код:")
         return
 
-    if text == "🛞 шины и диски":
-        user_state[peer_id] = "wheels"
-        send(peer_id, "Введите параметры (например R18)")
-        return
-
-    if text == "🚘 в разборе":
-        user_state[peer_id] = "donors"
-        user_results[peer_id] = cache.donors[:20]
-        user_index[peer_id] = 0
-        send_donor_card(peer_id, 0)
-        return
-
-    if text == "❤️ избранное":
-        fav = favorites.get(str(peer_id), [])
-        send(peer_id, f"❤️ У вас {len(fav)} товаров в избранном")
-        return
-
-    # Обработка поиска
-    if user_state.get(peer_id) == "parts":
-        track(peer_id, "search")
-        user_results[peer_id] = find_part(text)
-        user_index[peer_id] = 0
+def handle_callback(event):
+    data = event.obj.payload
+    peer_id = event.obj.peer_id
+    
+    try:
+        payload = json.loads(data)
+        action = payload.get('action')
         
-        if user_results[peer_id]:
-            send_part_card(peer_id, 0)
-        else:
-            send(peer_id, "❌ Ничего не найдено")
-        return
-
-    if user_state.get(peer_id) == "wheels":
-        track(peer_id, "search")
-        user_results[peer_id] = find_wheels(text)
-        user_index[peer_id] = 0
-        
-        if user_results[peer_id]:
-            send_wheel_card(peer_id, 0)
-        else:
-            send(peer_id, "❌ Ничего не найдено")
-        return
-
-    # Навигация
-    if text == "➡️":
-        if user_state.get(peer_id) in ["parts", "wheels", "donors"]:
-            user_index[peer_id] = min(user_index[peer_id] + 1, len(user_results[peer_id]) - 1)
-            if user_state[peer_id] == "parts":
-                send_part_card(peer_id, user_index[peer_id])
-            elif user_state[peer_id] == "wheels":
-                send_wheel_card(peer_id, user_index[peer_id])
-            elif user_state[peer_id] == "donors":
-                send_donor_card(peer_id, user_index[peer_id])
-        return
-
-    if text == "⬅️":
-        if user_state.get(peer_id) in ["parts", "wheels", "donors"]:
-            user_index[peer_id] = max(user_index[peer_id] - 1, 0)
-            if user_state[peer_id] == "parts":
-                send_part_card(peer_id, user_index[peer_id])
-            elif user_state[peer_id] == "wheels":
-                send_wheel_card(peer_id, user_index[peer_id])
-            elif user_state[peer_id] == "donors":
-                send_donor_card(peer_id, user_index[peer_id])
-        return
+        if action == 'parts':
+            user_state[peer_id] = "parts"
+            send(peer_id, "Введи номер детали или код:")
+            return
+            
+        if action == 'wheels':
+            user_state[peer_id] = "wheels"
+            send(peer_id, "Введи бренд диска:")
+            return
+            
+        if action == 'donors':
+            user_state[peer_id] = "donors"
+            send(peer_id, "Выбор доноров")
+            return
+            
+        if action == 'favorites':
+            send(peer_id, "Ваши избранные товары")
+            return
+            
+    except Exception as e:
+        logging.error(f"Ошибка обработки callback: {e}")
 
 # ===== ГЛАВНЫЙ ЦИКЛ =====
 # Продолжение функции run_bot
@@ -323,18 +292,16 @@ user_results = {}
 user_index = {}
 
 # ===== СТАРТ БОТА =====
-if __name__ == "__main__":
+def run_bot():
+    print("🔥 VK BOT ULTRA ЗАПУЩЕН")
     try:
-        # Загружаем базу данных
-        cache.update()
-        
-        # Запускаем бота
-        run_bot()
-        
+        for event in longpoll.listen():
+            handle(event)
     except Exception as e:
-        logging.error(f"Ошибка при запуске бота: {e}")
-        exit(1)
+        logging.error(f"Критическая ошибка: {e}")
 
+if __name__ == "__main__":
+    run_bot()
 # ===== ДОПОЛНИТЕЛЬНЫЕ ФУНКЦИИ =====
 
 def normalize(text):
