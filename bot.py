@@ -29,7 +29,6 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 TOKEN = "vk1.a.Fmog-6rNUAOTYVwC9-SJBo9dC5a87pMUET1xK_9Raxhk_l5V4Zqx1jCtWJXV7tZLappcJR6fIizfOv9X0OhMLnJbqjzej47aY5evfAj53IvfIgUo2w_vhBpjLGbgiBvaPZ3GrwFTdtR9D0TSGstCQM-L7aFf8_j6oqTxiRV7saahsFCInnvs7u53dtgLJB4lNI_apA5PsIpDqA3IWViAlA"
 ADMIN_ID = 888230055
 
-
 DONORS_CSV = "https://baz-on.ru/export/c592/5c6ca/stuttgart-site-carsrc.csv"
 PARTS_CSV = "https://baz-on.ru/export/c592/e61a0/stuttgart-drom.csv"
 WHEELS_CSV = "https://baz-on.ru/export/c592/77023/drom-wheels.csv"
@@ -37,27 +36,29 @@ WHEELS_CSV = "https://baz-on.ru/export/c592/77023/drom-wheels.csv"
 FAV_FILE = "favorites.json"
 STATS_FILE = "stats.json"
 
-# Проверяем существование файлов и создаем их если нет
-for file in [FAV_FILE, STATS_FILE]:
-    if not os.path.exists(file):
-        try:
-            with open(file, 'w', encoding='utf-8') as f:
-                f.write('{}')  # Создаем пустой JSON файл
-        except Exception as e:
-            print(f"Ошибка создания файла {file}: {e}")
-            exit(1)
+# Проверка и создание файлов
+def init_files():
+    try:
+        # Проверяем существование файлов
+        for file in [FAV_FILE, STATS_FILE]:
+            if not os.path.exists(file):
+                # Создаем пустой JSON файл
+                with open(file, 'w', encoding='utf-8') as f:
+                    f.write('{}')
+            
+            # Проверяем права доступа
+            if not os.access(file, os.W_OK):
+                raise PermissionError(f"Нет прав записи в файл {file}")
+                
+    except Exception as e:
+        print(f"Ошибка при инициализации файлов: {e}")
+        exit(1)
 
-# Проверяем права доступа
-try:
-    if not os.access(FAV_FILE, os.W_OK):
-        raise PermissionError(f"Нет прав записи в файл {FAV_FILE}")
-    
-    if not os.access(STATS_FILE, os.W_OK):
-        raise PermissionError(f"Нет прав записи в файл {STATS_FILE}")
-        
-except PermissionError as e:
-    print(e)
-    exit(1)
+# Добавляем импорт os
+import os
+
+# Вызываем инициализацию файлов
+init_files()
 
 # ===== ХРАНИЛИЩЕ =====
 def load_json(file):
@@ -77,6 +78,7 @@ def save_json(file, data):
 
 favorites = load_json(FAV_FILE)
 stats = load_json(STATS_FILE)
+
 
 # Создаем начальные файлы, если их нет
 if not os.path.exists(FAV_FILE):
