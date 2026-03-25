@@ -139,17 +139,19 @@ threading.Thread(target=auto_update, daemon=True).start()
 # ===== ОБРАБОТКА CALLBACK =====
 def handle_callback(event):
     try:
-        logging.info(f"Получен callback от пользователя {event.obj.peer_id}")  # Добавляем логирование
+        logging.info(f"Получен callback от пользователя {event.obj.peer_id}")
         
+        # Получаем payload и peer_id
         payload = event.obj.payload
         peer_id = event.obj.peer_id
         
+        # Проверяем тип payload
         if isinstance(payload, str):
             payload = json.loads(payload)
             
         cmd = payload.get('cmd')
         
-        # Обработка команд с логированием
+        # Обработка команд
         if cmd == 'parts':
             logging.info(f"Пользователь {peer_id} выбрал команду parts")
             user_state[peer_id] = "parts"
@@ -179,15 +181,14 @@ def handle_callback(event):
         logging.error(f"Ошибка обработки callback: {e}")
         send(peer_id, "Произошла ошибка при обработке запроса")
 
-
-# Добавим дополнительную проверку в handle()
+# Улучшенная обработка событий
 def handle(event):
     try:
         logging.info(f"Новое событие: {event.type}")
         
         if event.type == VkBotEventType.MESSAGE_NEW:
             handle_message(event)
-        elif event.type == VkBotEventType.MESSAGE_EVENT:  # Проверяем именно этот тип
+        elif event.type == VkBotEventType.MESSAGE_EVENT:
             handle_callback(event)
         else:
             logging.warning(f"Неизвестный тип события: {event.type}")
@@ -195,7 +196,37 @@ def handle(event):
     except Exception as e:
         logging.error(f"Ошибка обработки события: {e}")
 
-# Улучшим функцию отправки сообщений
+# Улучшенная функция клавиатуры
+def get_main_keyboard():
+    return json.dumps({
+        "one_time": False,
+        "buttons": [
+            [
+                {"action": {"type": "callback", "label": "Запчасти", "payload": {"cmd": "parts"}}, "color": "primary"}
+            ],
+            [
+                {"action": {"type": "callback", "label": "Диски", "payload": {"cmd": "wheels"}}, "color": "primary"}
+            ],
+            [
+                {"action": {"type": "callback", "label": "Доноры", "payload": {"cmd": "donors"}}, "color": "positive"}
+            ],
+            [
+                {"action": {"type": "callback", "label": "Избранное", "payload": {"cmd": "favorites"}}, "color": "negative"}
+            ]
+        ],
+        "inline": True
+    })
+
+# Проверка прав доступа к callback
+def check_callback_access(peer_id):
+    try:
+        # Здесь можно добавить проверку прав пользователя
+        return True
+    except Exception as e:
+        logging.error(f"Ошибка проверки прав доступа: {e}")
+        return False
+
+# Модифицируем функцию отправки сообщений
 def send(peer_id, text, keyboard=None):
     try:
         logging.info(f"Отправка сообщения пользователю {peer_id}")
@@ -208,8 +239,6 @@ def send(peer_id, text, keyboard=None):
     except Exception as e:
         logging.error(f"Ошибка отправки сообщения: {e}")
         send(peer_id, "Произошла ошибка при отправке сообщения")
-
-# Добавим проверку прав доступа
 def check_access(peer_id):
     # Здесь можно добавить логику проверки прав пользователя
     return True
@@ -325,27 +354,6 @@ def send(peer_id, text, keyboard=None):
         )
     except Exception as e:
         logging.error(f"Ошибка отправки сообщения: {e}")
-
-# ===== КНОПКИ И НАВИГАЦИЯ =====
-def get_main_keyboard():
-    return json.dumps({
-        "one_time": False,
-        "buttons": [
-            [
-                {"action": {"type": "callback", "label": "Запчасти", "payload": {"cmd": "parts"}}, "color": "primary"}
-            ],
-            [
-                {"action": {"type": "callback", "label": "Диски", "payload": {"cmd": "wheels"}}, "color": "primary"}
-            ],
-            [
-                {"action": {"type": "callback", "label": "Доноры", "payload": {"cmd": "donors"}}, "color": "positive"}
-            ],
-            [
-                {"action": {"type": "callback", "label": "Избранное", "payload": {"cmd": "favorites"}}, "color": "negative"}
-            ]
-        ],
-        "inline": True
-    })
 
 # Функция навигации между карточками
 def navigate(peer_id, direction):
