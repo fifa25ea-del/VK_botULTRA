@@ -93,15 +93,26 @@ def handle(event):
 
     text_lower = text.lower()
 
-    # Обработка команды /start
-    if text_lower in ["/start", "начать"]:
-        send(peer_id, "Привет! 👋 Выберите команду:", keyboard=get_main_keyboard())
+    # Обработка команд поиска
+    if user_state.get(peer_id) == "search":
+        results = cache.search(text, user_state.get('category'))
+        if results:
+            send(peer_id, f"Найдено {len(results)} результатов:")
+            # Здесь можно добавить вывод результатов
+        else:
+            send(peer_id, "Ничего не найдено 😕")
+        user_state[peer_id] = None  # Сброс состояния
         return
 
-    # Обработка основных команд
-    if text_lower == "🚗 запчасти":
-        user_state[peer_id] = "parts"
-        send(peer_id, "Введи номер детали или код:")
+    # Обработка команд
+    if text_lower == "/start":
+        send(peer_id, "Привет! 👋 Выберите команду:")
+        return
+
+    # Добавляем команду для запуска поиска
+    elif text_lower == "поиск":
+        send(peer_id, "Введите поисковый запрос:")
+        user_state[peer_id] = "search"
         return
 
 # ===== КЭШ =====
@@ -122,9 +133,15 @@ class DataCache:
         self.wheels = self.load_csv(WHEELS_CSV)
         self.donors = self.load_csv(DONORS_CSV)
 
-cache = DataCache()
-cache.update()
-
+    # Добавляем метод поиска
+    def search(self, query, category):
+        if category == "parts":
+            return [item for item in self.parts if query.lower() in item['Название'].lower()]
+        elif category == "wheels":
+            return [item for item in self.wheels if query.lower() in item['Производитель диска'].lower()]
+        elif category == "donors":
+            return [item for item in self.donors if query.lower() in item['Марка'].lower()]
+        return []
 # Автообновление в отдельном потоке
 def auto_update():
     while True:
