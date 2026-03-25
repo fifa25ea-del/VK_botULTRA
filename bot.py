@@ -268,7 +268,6 @@ elif text_lower in ["➡️", "следующий"]:
         except Exception as e:
             logging.error(f"Ошибка при переходе к следующему донору: {e}")
             send(peer_id, "Произошла ошибка при переходе к следующему результату")
-
 elif text_lower in ["⬅️", "предыдущий"]:
     if user_state.get(peer_id) == "donors":
         try:
