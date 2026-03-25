@@ -1,3 +1,7 @@
+# =========================
+# VK BOT ULTRA (ТОП ВЕРСИЯ)
+# =========================
+
 import os
 import vk_api
 import requests
@@ -13,8 +17,7 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # ===== НАСТРОЙКИ =====
-TOKEN = "vk1.a.Fmog-6rNUAOTYVwC9-SJBo9dC5a87pMUET1xK_9Raxhk_l5V4Zqx1jCtWJXV7tZLappcJR6fIizfOv9X0OhMLnJbqjzej47aY5evfAj53IvfIgUo2w_vhBpjLGbgiBvaPZ3GrwFTdtR9D0TSGstCQM-L7aFf8_j6oqTxiRV7saahsFCInnvs7u53dtgLJB4lNI_apA5PsIpDqA3IWViAlA".strip()  # убедись что без лишних пробелов
-GROUP_ID = 236843733
+TOKEN = "vk1.a.Fmog-6rNUAOTYVwC9-SJBo9dC5a87pMUET1xK_9Raxhk_l5V4Zqx1jCtWJXV7tZLappcJR6fIizfOv9X0OhMLnJbqjzej47aY5evfAj53IvfIgUo2w_vhBpjLGbgiBvaPZ3GrwFTdtR9D0TSGstCQM-L7aFf8_j6oqTxiRV7saahsFCInnvs7u53dtgLJB4lNI_apA5PsIpDqA3IWViAlA"
 ADMIN_ID = 888230055
 
 DONORS_CSV = "https://baz-on.ru/export/c592/5c6ca/stuttgart-site-carsrc.csv"
@@ -27,27 +30,22 @@ STATS_FILE = "stats.json"
 # ===== ИНИЦИАЛИЗАЦИЯ ФАЙЛОВ =====
 def init_files():
     try:
+        # Создаем файлы, если их нет
         for file in [FAV_FILE, STATS_FILE]:
             if not os.path.exists(file):
                 with open(file, 'w', encoding='utf-8') as f:
-                    f.write('{}')
+                    f.write('{}')  # Создаем пустой JSON файл
+            
+            # Проверяем права доступа
             if not os.access(file, os.W_OK):
                 raise PermissionError(f"Нет прав записи в файл {file}")
+                
     except Exception as e:
-        logging.error(f"Ошибка при инициализации файлов: {e}")
+        print(f"Ошибка при инициализации файлов: {e}")
         exit(1)
 
+# Инициализируем файлы после их определения
 init_files()
-
-vk_session = vk_api.VkApi(token=TOKEN)
-vk = vk_session.get_api()
-
-try:
-    longpoll = VkBotLongPoll(vk_session, GROUP_ID)
-    print("✅ VK LongPoll подключен")
-except Exception as e:
-    logging.critical(f"Ошибка LongPoll: {e}")
-    exit(1)  # обязательно останавливаем бота
 
 # ===== ХРАНИЛИЩЕ =====
 def load_json(file):
@@ -68,6 +66,10 @@ def save_json(file, data):
 favorites = load_json(FAV_FILE)
 stats = load_json(STATS_FILE)
 
+# ===== ИНИЦИАЛИЗАЦИЯ VK =====
+vk_session = vk_api.VkApi(token=TOKEN)
+longpoll = VkBotLongPoll(vk_session, 236843733)  
+vk = vk_session.get_api()
 # ===== КЭШ =====
 class DataCache:
     def __init__(self):
