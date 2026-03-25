@@ -28,6 +28,11 @@ WHEELS_CSV = "https://baz-on.ru/export/c592/77023/drom-wheels.csv"
 FAV_FILE = "favorites.json"
 STATS_FILE = "stats.json"
 
+# ===== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ СОСТОЯНИЯ =====
+user_state = {}  # Хранит текущее состояние пользователя
+user_results = {}  # Хранит результаты поиска для пользователя
+user_index = {}  # Хранит текущий индекс в результатах поиска
+
 # ===== ИНИЦИАЛИЗАЦИЯ ФАЙЛОВ =====
 def init_files():
     try:
