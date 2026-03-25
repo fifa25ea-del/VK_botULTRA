@@ -1,7 +1,3 @@
-# =========================
-# VK BOT ULTRA (ТОП ВЕРСИЯ)
-# =========================
-
 import os
 import vk_api
 import requests
@@ -13,8 +9,11 @@ import json
 from vk_api.bot_longpoll import VkBotLongPoll, VkBotEventType
 import logging
 
+# Настройка логирования
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
 # ===== НАСТРОЙКИ =====
-TOKEN = "vk1.a.Fmog-6rNUAOTYVwC9-SJBo9dC5a87pMUET1xK_9Raxhk_l5V4Zqx1jCtWJXV7tZLappcJR6fIizfOv9X0OhMLnJbqjzej47aY5evfAj53IvfIgUo2w_vhBpjLGbgiBvaPZ3GrwFTdtR9D0TSGstCQM-L7aFf8_j6oqTxiRV7saahsFCInnvs7u53dtgLJB4lNI_apA5PsIpDqA3IWViAlA"
+TOKEN = "vk1.a.Fmog-6rNUAOTYVwC9-SJBo9dC5a87pMUET1xK_9Raxhk_l5V4Zqx1jCtWJXV7tZLappcJR6fIizfOv9X0OhMLnJbqjzej47aY5evfAj53IvfIgUo2w_vhBpjLGbgiBvaPZ3GrwFTdtR9D0TSGstCQM-L7aFf8_j6oqTxiRV7saahsFCInnvs7u53dtgLJB4lNI_apA5PsIpDqA3IWViAlA"  # Замените на актуальный токен
 GROUP_ID = 236843733  # ID вашей группы
 ADMIN_ID = 888230055
 
@@ -25,10 +24,10 @@ WHEELS_CSV = "https://baz-on.ru/export/c592/77023/drom-wheels.csv"
 FAV_FILE = "favorites.json"
 STATS_FILE = "stats.json"
 
-# Функция инициализации файлов
+# ===== ИНИЦИАЛИЗАЦИЯ ФАЙЛОВ =====
 def init_files():
     try:
-        # Создаем директорию для файлов, если её нет
+        # Создаем директорию для файлов
         if not os.path.exists('data'):
             os.makedirs('data')
             
@@ -54,7 +53,7 @@ def init_files():
 # Инициализируем файлы
 init_files()
 
-# Функция инициализации VK API
+# ===== ИНИЦИАЛИЗАЦИЯ VK API =====
 def init_vk_api():
     max_retries = 5
     retry_delay = 2  # задержка между попытками в секундах
@@ -75,7 +74,11 @@ def init_vk_api():
                 raise
 
 # Инициализируем VK API
-vk_session, longpoll, vk = init_vk_api()
+try:
+    vk_session, longpoll, vk = init_vk_api()
+except Exception as e:
+    logging.error(f"Не удалось инициализировать VK API: {e}")
+    exit(1)
 
 # ===== ХРАНИЛИЩЕ =====
 def load_json(file):
@@ -94,7 +97,7 @@ def save_json(file, data):
         logging.error(f"Ошибка сохранения {file}: {e}")
 
 favorites = load_json(FAV_FILE)
-stats = load_json(STATS_FILE)
+stats = load
 
 # ===== ГЛАВНЫЙ ЦИКЛ =====
 def run_bot():
