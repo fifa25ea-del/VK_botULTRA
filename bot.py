@@ -94,16 +94,16 @@ def handle(event):
     text_lower = text.lower()
 
     # Обработка команд поиска
-    if user_state.get(peer_id) == "search":
-        results = cache.search(text, user_state.get('category'))
-        if results:
-            send(peer_id, f"Найдено {len(results)} результатов:")
-            # Здесь можно добавить вывод результатов
+    if user_state.get(peer_id) == "parts":
+        track(peer_id, "search")
+        user_results[peer_id] = cache.find_part(text)  # Используем новый метод
+        user_index[peer_id] = 0
+        
+        if user_results[peer_id]:
+            show_part(peer_id)
         else:
-            send(peer_id, "Ничего не найдено 😕")
-        user_state[peer_id] = None  # Сброс состояния
-        return
-
+            send(peer_id, "❌ Деталь не найдена")
+            
     # Обработка команд
     if text_lower == "/start":
         send(peer_id, "Привет! 👋 Выберите команду:")
@@ -151,14 +151,14 @@ def auto_update():
 threading.Thread(target=auto_update, daemon=True).start()
 
 # Добавляем функцию поиска деталей
-def find_part(query):
-    query = query.lower()
-    results = []
-    for part in cache.parts:
-        if query in part['Название'].lower() or query in part['Артикул']:
-            results.append(part)
-    return results
-
+def find_part(self, query):
+        query = query.lower()
+        results = []
+        for part in self.parts:
+            if query in part['Название'].lower() or query in part['Артикул']:
+                results.append(part)
+        return results
+    
 # Добавляем функцию поиска дисков
 def find_wheels(query):
     query = query.lower()
@@ -175,7 +175,7 @@ def show_part(peer_id):
     
     if index < len(results):
         part = results[index]
-        message = f"Деталь №{index + 1}\n"
+        message = f"Карточка детали:\n"
         message += f"Название: {part.get('Название', 'Не указано')}\n"
         message += f"Артикул: {part.get('Артикул', 'Не указан')}\n"
         message += f"Цена: {part.get('Цена', 'Не указана')}\n"
