@@ -199,38 +199,103 @@ def handle(event):
         send(peer_id, "Я получил сообщение, но оно не текстовое 😅")
         return
 
+    # Приводим текст к нижнему регистру и убираем эмодзи/лишние пробелы
     text_lower = text.lower()
-    # Убираем эмодзи, пробелы и лишние символы
-    text_clean = text_lower.replace("🚗", "").strip()
+    text_clean = text_lower.replace("🚗", "").replace("🛞", "").replace("🚗", "").strip()
 
-    # Обработка команд поиска запчастей
-    if user_state.get(peer_id) == "parts":
+    # ------------------------------
+    # 1. Обработка состояний пользователя (поиск запчастей, дисков, доноров)
+    # ------------------------------
+    state = user_state.get(peer_id)
+
+    if state == "parts":
         track(peer_id, "search")
-        user_results[peer_id] = cache.find_part(text_clean)  # Используем новый метод
+        user_results[peer_id] = cache.find_part(text_clean)
         user_index[peer_id] = 0
-        
+
         if user_results[peer_id]:
             show_part(peer_id)
         else:
             send(peer_id, "❌ Деталь не найдена")
-        return  # важно выйти после обработки
-
-    # Обработка команд
-    if text_clean == "/start" or text_clean == "start":
-        send(peer_id, "Привет! 👋 Выберите команду:")
         return
 
-    # Кнопка "Запчасти"
+    if state == "wheels":
+        track(peer_id, "search_wheels")
+        user_results[peer_id] = cache.find_wheels(text_clean)
+        user_index[peer_id] = 0
+
+        if user_results[peer_id]:
+            show_part(peer_id)
+        else:
+            send(peer_id, "❌ Диск не найден")
+        return
+
+    if state == "donors":
+        track(peer_id, "search_donors")
+        user_results[peer_id] = cache.find_donor(text_clean)
+        user_index[peer_id] = 0
+
+        if user_results[peer_id]:
+            show_part(peer_id)
+        else:
+            send(peer_id, "❌ Донор не найден")
+        return
+
+    # ------------------------------
+    # 2. Основные команды /start и кнопки
+    # ------------------------------
+    if text_clean in ["/start", "start", "начать"]:
+        send(peer_id, "Привет! 👋 Выберите команду:", keyboard=get_main_keyboard())
+        return
+
+    # Кнопки выбора
     if "запчаст" in text_clean:
         user_state[peer_id] = "parts"
         send(peer_id, "Введите номер детали или код:")
         return
 
-    # Добавляем команду для поиска
+    if "диск" in text_clean:
+        user_state[peer_id] = "wheels"
+        send(peer_id, "Введите модель диска или производителя:")
+        return
+
+    if "донор" in text_clean:
+        user_state[peer_id] = "donors"
+        send(peer_id, "Введите марку и модель автомобиля:")
+        return
+
+    # Команда поиска
     if text_clean == "поиск":
         send(peer_id, "Введите поисковый запрос:")
         user_state[peer_id] = "search"
         return
+
+    # ------------------------------
+    # 3. Листание результатов (вперед/назад)
+    # ------------------------------
+    if text_clean in ["вперед", "следующий", "next"]:
+        idx = user_index.get(peer_id, 0) + 1
+        results = user_results.get(peer_id, [])
+        if idx < len(results):
+            user_index[peer_id] = idx
+            show_part(peer_id)
+        else:
+            send(peer_id, "🚫 Это последний результат")
+        return
+
+    if text_clean in ["назад", "back", "prev"]:
+        idx = user_index.get(peer_id, 0) - 1
+        if idx >= 0:
+            user_index[peer_id] = idx
+            show_part(peer_id)
+        else:
+            send(peer_id, "🚫 Это первый результат")
+        return
+
+    # ------------------------------
+    # 4. Если команда неизвестна
+    # ------------------------------
+    send(peer_id, "Не понял команду. Напишите /start или выберите кнопку на клавиатуре")
 
 # ===== КЭШ =====
 class DataCache:
