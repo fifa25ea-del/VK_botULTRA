@@ -68,6 +68,43 @@ except Exception as e:
     logging.error(f"Не удалось инициализировать VK API: {e}")
     exit(1)
 
+# ===== ОТПРАВКА СООБЩЕНИЙ =====
+def send(peer_id, text, keyboard=None):
+    try:
+        vk.messages.send(
+            peer_id=peer_id,
+            message=text,
+            random_id=0,
+            keyboard=keyboard if keyboard else get_main_keyboard()
+        )
+    except Exception as e:
+        logging.error(f"Ошибка отправки сообщения: {e}")
+
+# ===== ОБРАБОТКА СООБЩЕНИЙ =====
+def handle(event):
+    msg = event.obj.message
+    peer_id = msg['peer_id']
+    text = msg.get('text', '').strip()
+
+    if not text:
+        send(peer_id, "Я получил сообщение, но оно не текстовое 😅")
+        return
+
+    text_lower = text.lower()
+
+    # Обработка команды /start
+    if text_lower in ["/start", "начать"]:
+        send(peer_id, "Привет! 👋 Выберите команду:", keyboard=get_main_keyboard())
+        return
+
+    # Обработка основных команд
+    if text_lower == "🚗 запчасти":
+        user_state[peer_id] = "parts"
+        send(peer_id, "Введи номер детали или код:")
+        return
+
+
+
 # ===== ХРАНИЛИЩЕ =====
 def load_json(file):
     try:
