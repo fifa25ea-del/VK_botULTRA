@@ -13,15 +13,6 @@ import json
 from vk_api.bot_longpoll import VkBotLongPoll, VkBotEventType
 import logging
 
-# Проверка прав доступа
-if not os.access(FAV_FILE, os.W_OK):
-    logging.error(f"Нет прав на запись в файл {FAV_FILE}")
-    exit(1)
-
-if not os.access(STATS_FILE, os.W_OK):
-    logging.error(f"Нет прав на запись в файл {STATS_FILE}")
-    exit(1) 
-
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -53,7 +44,7 @@ def init_files():
         print(f"Ошибка при инициализации файлов: {e}")
         exit(1)
 
-# Инициализируем файлы
+# Инициализируем файлы после их определения
 init_files()
 
 # ===== ХРАНИЛИЩЕ =====
@@ -76,8 +67,8 @@ favorites = load_json(FAV_FILE)
 stats = load_json(STATS_FILE)
 
 # ===== VK ИНИЦИАЛИЗАЦИЯ =====
-vk_session = vk_api.VkApi(token=TOKEN)
 try:
+    vk_session = vk_api.VkApi(token=TOKEN)
     longpoll = VkBotLongPoll(vk_session, 236843733)  
     vk = vk_session.get_api()
 except Exception as e:
@@ -113,18 +104,18 @@ def auto_update():
 
 threading.Thread(target=auto_update, daemon=True).start()
 # ===== СОСТОЯНИЯ =====
-user_state = {}
-user_results = {}
-user_index = {}
+user_state = {}  # Хранит текущее состояние пользователя
+user_results = {}  # Хранит результаты поиска для пользователя
+user_index = {}  # Хранит текущий индекс в результатах поиска
 
 # ===== СТАТИСТИКА =====
 def track(user_id, action):
     user_id = str(user_id)
     if user_id not in stats:
         stats[user_id] = {"search": 0, "views": 0}
+    
     stats[user_id][action] += 1
     save_json(STATS_FILE, stats)
-
 
 # ===== КНОПКИ =====
 def keyboard():
@@ -132,7 +123,7 @@ def keyboard():
         "one_time": False,
         "buttons": [
             [{"action": {"type": "text", "label": "🚗 Запчасти"}},
-              {"action": {"type": "text", "label": "🛞 Диски"}}],
+             {"action": {"type": "text", "label": "🛞 Диски"}}],
             [{"action": {"type": "text", "label": "🚘 Доноры"}},
              {"action": {"type": "text", "label": "❤️ Избранное"}}],
             [{"action": {"type": "text", "label": "⬅️"}},
@@ -140,7 +131,7 @@ def keyboard():
         ]
     })
 
-# ===== SEND =====
+# ===== ОТПРАВКА СООБЩЕНИЙ =====
 def send(peer_id, text):
     try:
         vk.messages.send(
@@ -152,162 +143,47 @@ def send(peer_id, text):
     except Exception as e:
         logging.error(f"Ошибка отправки сообщения: {e}")
 
-# ===== ПОИСК =====
+# ===== ПОИСК ДЕТАЛЕЙ =====
 def find_part(q):
-    q = q.lower().replace(" ","")
-    return [p for p in cache.parts if q in str(p.get("Артикул","")).lower()][:20]
+    q = q.lower().replace(" ", "")
+    return [p for p in cache.parts if q in str(p.get("Артикул", "")).lower()][:20]
 
 def find_wheels(q):
     q = q.lower()
-    return [w for w in cache.wheels if q in str(w.get("Производитель диска","")).lower()][:20]
+    return [w for w in cache.wheels if q in str(w.get("Производитель диска", "")).lower()][:20]
 
-# ===== КАРТОЧКИ =====
+# ===== ПОКАЗ РЕЗУЛЬТАТОВ =====
 def show_part(user_id):
-    track(user_id,"views")
+    track(user_id, "views")
     i = user_index[user_id]
     part = user_results[user_id][i]
 
-    text = f"""🔧 {part.get('Наименование','')}
-Артикул: {part.get('Артикул','')}
-💰 {part.get('Цена','')} ₽
+    text = f"""🔧 {part.get('Наименование', '')}
+Артикул: {part.get('Артикул', '')}
+💰 {part.get('Цена', '')} ₽
 ({i+1}/{len(user_results[user_id])})"""
-
+    
     send(user_id, text)
 
 def show_donor(user_id):
     i = user_index[user_id]
     if 0 <= i < len(cache.donors):
         d = cache.donors[i]
-        text = f"""🚘 {d.get('Марка','')} {d.get('Модель','')}
-Год: {d.get('Год','')}
-Пробег: {d.get('Пробег','')}
+        text = f"""🚘 {d.get('Марка', '')} {d.get('Модель', '')}
+Год: {d.get('Год', '')}
+Пробег: {d.get('Пробег', '')}
 ({i+1}/{len(cache.donors)})"""
         send(user_id, text)
     else:
         send(user_id, "❌ Нет данных для отображения")
 
-# ===== ЛОГИКА =====
-def get_main_keyboard():
-    keyboard = {
-        "one_time": False,
-        "buttons": [
-            [
-                {"action": {"type": "text", "label": "🚗 Запчасти"}, "color": "primary"},
-                {"action": {"type": "text", "label": "🛞 Диски"}, "color": "primary"}
-            ],
-            [
-                {"action": {"type": "text", "label": "🚘 Доноры"}, "color": "positive"},
-                {"action": {"type": "text", "label": "❤️ Избранное"}, "color": "negative"}
-            ]
-        ]
-    }
-    return json.dumps(keyboard, ensure_ascii=False)
-
-# ===== ОБРАБОТКА СООБЩЕНИЙ =====
-def handle(event):
-    msg = event.obj.message
-    peer_id = msg['peer_id']
-    text = msg.get('text', '').strip()
-
-    if not text:
-        send(peer_id, "Я получил сообщение, но оно не текстовое 😅")
-        return
-
-    text_lower = text.lower()
-
-    # ==== Команда /start ====
-    if text_lower in ["/start", "start", "начать"]:
-        send(peer_id, "Привет! 👋 Выберите команду:")
-        return
-
-    # ==== Основные кнопки ====
-    if text_lower == "🚗 запчасти":
-        user_state[peer_id] = "parts"
-        vk.messages.send(
-            peer_id=peer_id,
-            message="Введи номер детали или код:",
-            random_id=0
-        )
-        return
-    elif text_lower == "🛞 диски":
-        user_state[peer_id] = "wheels"
-        vk.messages.send(
-            peer_id=peer_id,
-            message="Введи бренд диска:",
-            random_id=0
-        )
-        return
-
-    # Обработка навигации по результатам поиска
-    elif text_lower == "➡️":
-        if user_state.get(peer_id) in ["parts", "donors"]:
-            user_index[peer_id] = min(user_index.get(peer_id, 0) + 1, len(user_results.get(peer_id, [])) - 1)
-            if user_state[peer_id] == "parts":
-                show_part(peer_id)
-            elif user_state[peer_id] == "donors":
-                show_donor(peer_id)
-
-    elif text_lower == "⬅️":
-        if user_state.get(peer_id) in ["parts", "donors"]:
-            user_index[peer_id] = max(user_index.get(peer_id, 0) - 1, 0)
-            if user_state[peer_id] == "parts":
-                show_part(peer_id)
-            elif user_state[peer_id] == "donors":
-                show_donor(peer_id)
-
-    # Обработка поиска по состоянию
-    mode = user_state.get(peer_id)
-    
-    if mode == "parts":
-        track(peer_id, "search")
-        user_results[peer_id] = find_part(text)
-        user_index[peer_id] = 0
-        
-        if user_results[peer_id]:
-            show_part(peer_id)
-        else:
-            send(peer_id, "❌ Ничего не найдено")
-
-    elif mode == "wheels":
-        results = find_wheels(text)
-        if results:
-            send(peer_id, f"🛞 Найденные диски: {results[0].get('Производитель диска')}")
-        else:
-            send(peer_id, "❌ Диски не найдены")
-
-    elif mode == "donors":
-        show_donor(peer_id)
-
-# ===== АДМИНКА =====
-def admin_commands(text, user_id):
-    if user_id != ADMIN_ID:
-        return False
-    
-    if text == "/stats":
-        total_users = len(stats)
-        send(user_id, f"👥 Всего пользователей: {total_users}")
-        return True
-    
-    return False
-
 # ===== ГЛАВНЫЙ ЦИКЛ =====
 def run_bot():
     print("🔥 VK BOT ULTRA ЗАПУЩЕН")
-    
     try:
         for event in longpoll.listen():
             if event.type == VkBotEventType.MESSAGE_NEW:
-                msg = event.obj.message
-                peer_id = msg['peer_id']
-                text = msg.get('text', '').strip()
-                
-                # Проверка админ-команд
-                if admin_commands(text, peer_id):
-                    continue
-                
-                # Обработка сообщений
                 handle(event)
-                
     except Exception as e:
         logging.error(f"Критическая ошибка: {e}")
 
