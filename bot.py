@@ -187,14 +187,13 @@ def handle(event):
         
         if event.type == VkBotEventType.MESSAGE_NEW:
             handle_message(event)
-        elif event.type == VkBotEventType.MESSAGE_EVENT:
+        elif event.type == VkBotEventType.MESSAGE_EVENT:  # Проверяем именно этот тип
             handle_callback(event)
         else:
             logging.warning(f"Неизвестный тип события: {event.type}")
             
     except Exception as e:
         logging.error(f"Ошибка обработки события: {e}")
-
 
 # Улучшим функцию отправки сообщений
 def send(peer_id, text, keyboard=None):
