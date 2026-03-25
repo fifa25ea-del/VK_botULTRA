@@ -18,8 +18,18 @@ import datetime
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # ===== НАСТРОЙКИ =====
-TOKEN = "vk1.a.Fmog-6rNUAOTYVwC9-SJBo9dC5a87pMUET1xK_9Raxhk_l5V4Zqx1jCtWJXV7tZLappcJR6fIizfOv9X0OhMLnJbqjzej47aY5evfAj53IvfIgUo2w_vhBpjLGbgiBvaPZ3GrwFTdtR9D0TSGstCQM-L7aFf8_j6oqTxiRV7saahsFCInnvs7u53dtgLJB4lNI_apA5PsIpDqA3IWViAlA"  # Замените на актуальный токен
+TOKEN = "ваш_токен"  # Замените на актуальный токен
 ADMIN_ID = 888230055
+
+# URL для загрузки данных
+DONORS_CSV = "https://baz-on.ru/export/c592/5c6ca/stuttgart-site-carsrc.csv"
+PARTS_CSV = "https://baz-on.ru/export/c592/e61a0/stuttgart-drom.csv"
+WHEELS_CSV = "https://baz-on.ru/export/c592/77023/drom-wheels.csv"
+
+# Файлы для хранения данных
+FAV_FILE = "favorites.json"
+STATS_FILE = "stats.json"
+LOG_FILE = "logs.txt"
 
 # ===== ИНИЦИАЛИЗАЦИЯ VK =====
 vk_session = vk_api.VkApi(token=TOKEN)
@@ -31,80 +41,39 @@ user_state = {}
 user_results = {}
 user_index = {}
 
-# ===== КНОПКИ =====
-def get_main_keyboard():
-    return json.dumps({
-        "one_time": False,
-        "buttons": [
-            [
-                {"action": {"type": "callback", "label": "🚗 Запчасти", "payload": {"cmd": "parts"}}, "color": "primary"}
-            ],
-            [
-                {"action": {"type": "callback", "label": "🛞 Диски", "payload": {"cmd": "wheels"}}, "color": "primary"}
-            ],
-            [
-                {"action": {"type": "callback", "label": "🚘 Доноры", "payload": {"cmd": "donors"}}, "color": "positive"}
-            ],
-            [
-                {"action": {"type": "callback", "label": "❤️ Избранное", "payload": {"cmd": "favorites"}}, "color": "negative"}
-            ]
-        ],
-        "inline": True
-    })
+# ===== ФУНКЦИИ ДЛЯ РАБОТЫ С ТЕКСТОМ =====
+def split_words(text):
+    return re.findall(r'\w+', text.lower())
 
-# ===== ОТПРАВКА СООБЩЕНИЙ =====
-def send(peer_id, text, keyboard=None):
+def fix_a(text):
+    return text.lower().replace("а", "a")
+
+# ===== ИНИЦИАЛИЗАЦИЯ ХРАНИЛИЩА =====
+def load_json(file):
     try:
-        vk.messages.send(
-            peer_id=peer_id,
-            message=text,
-            random_id=0,
-            keyboard=keyboard if keyboard else get_main_keyboard()
-        )
-    except Exception as e:
-        logging.error(f"Ошибка отправки сообщения: {e}")
+        with open(file, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return {}
 
-# ===== ОБРАБОТКА СОБЫТИЙ =====
-def handle(event):
-    try:
-        if event.type == VkBotEventType.MESSAGE_NEW:
-            handle_message(event)
-        elif event.type == VkBotEventType.MESSAGE_EVENT:
-            handle_callback(event)
-    except Exception as e:
-        logging.error(f"Ошибка обработки события: {e}")
+def save_json(file, data):
+    with open(file, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
 
-# ===== ОБРАБОТКА СООБЩЕНИЙ =====
-def handle_message(event):
-    try:
-        msg = event.obj.message
-        peer_id = msg['peer_id']
-        text = msg.get('text', '').strip().lower()
+favorites = load_json(FAV_FILE)
+stats = load_json(STATS_FILE)
 
-        if text in ["/start", "начать"]:
-            send(peer_id, "Привет! Выберите команду:", keyboard=get_main_keyboard())
-            return
-
-        if peer_id in user_state:
-            if user_state[peer_id] == "parts":
-                user_results[peer_id] = find_part(text)
-                user_index[peer_id] = 0
-                if user_results[peer_id]:
-                    send_part_card(peer_id, 0)
-                else:
-                    send(peer_id, "❌ Ничего не найдено")
-                return
-
-            if user_state[peer_id] == "wheels":
-                user_results[peer_id] = find_wheels(text)
-                user_index[peer_id] = 0
-                if user_results[peer_id]:
-                    send_wheel_card(peer_id, 0)
-                else:
-                    send(peer_id, "❌ Ничего не найдено")
-                return
-    except Exception as e:
-        logging.error(f"Ошибка обработки сообщения: {e}")
+# ===== СТАТИСТИКА =====
+def track(user_id, action):
+    user_id = str(user_id)
+    if user_id not in stats:
+        stats[user_id] = {
+            "searches": 0,
+            "views": 0,
+            "favorites": 0
+        }
+    stats[user_id][action] += 1
+    save_json(STATS_FILE, stats)
 
 # ===== КЭШ =====
 class DataCache:
@@ -115,6 +84,9 @@ class DataCache:
         self.number_key = None
         self.name_key = None
         self.photo_key = None
+        self.number_key_wheels = None
+        self.name_key_wheels = None
+        self.photo_key_wheels = None
 
     def load_csv(self, url):
         try:
@@ -447,4 +419,170 @@ def admin_commands(text, user_id):
         return True
     
     return False
+
+# ===== ПОИСК ТОВАРОВ =====
+def find_part(query):
+    try:
+        query = normalize(fix_a(query))
+        results = []
+        for part in cache.parts:
+            raw_number = part.get(cache.number_key, "")
+            number = normalize(fix_a(raw_number))
+            if not number:
+                continue
+            if query in number:
+                results.append(part)
+            if len(results) >= 20:
+                break
+        return results
+    except Exception as e:
+        logging.error(f"Ошибка поиска детали: {e}")
+        return []
+
+def find_wheels(query):
+    try:
+        query = query.lower().replace(" ", "").replace("-", "")
+        results = []
+        for part in cache.wheels:
+            radius = str(part.get("Диаметр диска", "")).lower().replace(" ", "")
+            brand = str(part.get("Производитель диска", "")).lower()
+            model = str(part.get("Модель диска", "")).lower()
+            if query in radius or query in f"r{radius}":
+                results.append(part)
+            elif query in brand or query in model:
+                results.append(part)
+            if len(results) >= 20:
+                break
+        return results
+    except Exception as e:
+        logging.error(f"Ошибка поиска дисков: {e}")
+        return []
+
+# ===== КАРТОЧКИ ТОВАРОВ =====
+def send_part_card(peer_id, index):
+    try:
+        track(peer_id, "views")
+        results = user_results.get(peer_id, [])
+        if not results or index >= len(results):
+            return
+        
+        part = results[index]
+        text = f"""🔧 {part.get(cache.name_key, '')}
+Артикул: {part.get('Артикул', '')}
+Цена: {part.get('Цена', '')} ₽
+В наличии: {part.get('Наличие', '')}
+({index+1}/{len(results)})"""
+        
+        send(peer_id, text)
+    except Exception as e:
+        logging.error(f"Ошибка отправки карточки детали: {e}")
+def send_wheel_card(peer_id, index):
+    try:
+        track(peer_id, "views")
+        results = user_results.get(peer_id, [])
+        if not results or index >= len(results):
+            return
+        
+        part = results[
+def send_wheel_card(peer_id, index):
+    try:
+        track(peer_id, "views")
+        results = user_results.get(peer_id, [])
+        if not results or index >= len(results):
+            return
+        
+        part = results[index]
+        text = f"""🛞 {part.get('Производитель диска', '')} {part.get('Модель диска', '')}
+R{part.get('Диаметр диска', '')}
+Ширина: {part.get('Ширина диска', '')}
+Вылет: {part.get('Вылет диска', '')}
+Цена: {part.get('Цена', '')} ₽
+({index+1}/{len(results)})"""
+        
+        # Добавляем информацию о крепеже и других параметрах, если они есть
+        mounting = part.get('Крепеж', '')
+        if mounting:
+            text += f"\nКрепеж: {mounting}"
+            
+        pcd = part.get('PCD', '')
+        if pcd:
+            text += f"\nPCD: {pcd}"
+            
+        send(peer_id, text)
+    except Exception as e:
+        logging.error(f"Ошибка отправки карточки диска: {e}")
+
+# Допишем функцию отправки сообщений с проверкой ошибок
+def send(peer_id, text, keyboard=None):
+    try:
+        vk.messages.send(
+            peer_id=peer_id,
+            message=text,
+            random_id=0,
+            keyboard=keyboard if keyboard else get_main_keyboard()
+        )
+    except Exception as e:
+        logging.error(f"Ошибка отправки сообщения: {e}")
+        send(peer_id, "Произошла ошибка при отправке сообщения")
+
+# Добавим проверку наличия всех необходимых полей в данных
+def check_data_integrity():
+    try:
+        # Проверяем наличие обязательных полей в данных
+        if not cache.parts:
+            logging.error("База данных запчастей пуста")
+        
+        if not cache.wheels:
+            logging.error("База данных дисков пуста")
+        
+        if not cache.donors:
+            logging.error("База данных доноров пуста")
+            
+        # Проверяем наличие ключей для поиска
+        if not cache.number_key:
+            logging.error("Не определен ключ номера детали")
+            
+        if not cache.name_key:
+            logging.error("Не определен ключ названия детали")
+            
+    except Exception as e:
+        logging.error(f"Ошибка проверки целостности данных: {e}")
+
+# ===== СТАРТ БОТА =====
+if __name__ == "__main__":
+    try:
+        # Загружаем базу данных
+        cache.update()
+        
+        # Проверяем целостность данных
+        check_data_integrity()
+        
+        # Запускаем автообновление
+        threading.Thread(target=auto_update, daemon=True).start()
+        
+        # Запускаем основной цикл бота
+        run_bot()
+        
+    except Exception as e:
+        logging.error(f"Критическая ошибка при запуске: {e}")
+        exit(1)
+
+# Дополнительные проверки:
+# 1. Убедимся, что все функции определены до их использования
+# 2. Проверим права доступа к файлам
+# 3. Проверим подключение к интернету для загрузки CSV
+
+# Рекомендации по тестированию:
+# 1. Проверьте права доступа к файлам favorites.json, stats.json, logs.txt
+# 2. Убедитесь, что есть доступ к URL для загрузки CSV
+# 3. Проверьте актуальность версии Python (должна быть 3.6+)
+# 4. Установите необходимые библиотеки:
+# pip install vk_api requests
+
+# Отладка:
+# 1. Проверьте логи на наличие ошибок:
+# tail -f logs.txt
+# 2. Проверьте права доступа:
+# chmod 644 favorites.json stats.json logs.txt
+# 3. Проверьте существование директории для логов
 
