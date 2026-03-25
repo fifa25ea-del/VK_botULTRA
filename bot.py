@@ -208,8 +208,7 @@ def handle(event):
         user_state[peer_id] = "wheels"
         vk.messages.send(
             peer_id=peer_id,
-            message="Введи бренд
-                        disk",
+            message="Введи бренд диска:",
             random_id=0
         )
         return
