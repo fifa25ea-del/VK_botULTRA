@@ -141,41 +141,71 @@ def send(peer_id, text):
             keyboard=keyboard()
         )
     except Exception as e:
-        logging.error(f"Ошибка отправки сообщения: {e}")
+        logging.error(f"Ошибка при отправке сообщения: {e}")
 
-# ===== ПОИСК ДЕТАЛЕЙ =====
-def find_part(q):
-    q = q.lower().replace(" ", "")
-    return [p for p in cache.parts if q in str(p.get("Артикул", "")).lower()][:20]
+# ===== ОБРАБОТКА СООБЩЕНИЙ =====
+def handle(event):
+    msg = event.obj.message
+    peer_id = msg['peer_id']
+    text = msg.get('text', '').strip()
 
-def find_wheels(q):
-    q = q.lower()
-    return [w for w in cache.wheels if q in str(w.get("Производитель диска", "")).lower()][:20]
+    if not text:
+        send(peer_id, "Я получил сообщение, но оно не текстовое 😅")
+        return
 
-# ===== ПОКАЗ РЕЗУЛЬТАТОВ =====
-def show_part(user_id):
-    track(user_id, "views")
-    i = user_index[user_id]
-    part = user_results[user_id][i]
+    text_lower = text.lower()
 
-    text = f"""🔧 {part.get('Наименование', '')}
-Артикул: {part.get('Артикул', '')}
-💰 {part.get('Цена', '')} ₽
-({i+1}/{len(user_results[user_id])})"""
+    # Обработка команд
+    if text_lower == "/start":
+        send(peer_id, "Привет! 👋 Выберите команду:")
+        return
+
+    # Обработка основных кнопок
+    if text_lower == "🚗 запчасти":
+        user_state[peer_id] = "parts"
+        send(peer_id, "Введи номер детали или код:")
+        return
+    elif text_lower == "🛞 диски":
+        user_state[peer_id] = "wheels"
+        send(peer_id, "Введи бренд диска:")
+        return
+
+    # Обработка навигации
+    elif text_lower == "➡️":
+        if user_state.get(peer_id) in ["parts", "donors"]:
+            user_index[peer_id] = min(user_index.get(peer_id, 0) + 1, len(user_results.get(peer_id, [])) - 1)
+            if user_state[peer_id] == "parts":
+                show_part(peer_id)
+            elif user_state[peer_id] == "donors":
+                show_donor(peer_id)
+
+    elif text_lower == "⬅️":
+        if user_state.get(peer_id) in ["parts", "donors"]:
+            user_index[peer_id] = max(user_index.get(peer_id, 0) - 1, 0)
+            if user_state[peer_id] == "parts":
+                show_part(peer_id)
+            elif user_state[peer_id] == "donors":
+                show_donor(peer_id)
+
+    # Обработка поиска
+    mode = user_state.get(peer_id)
     
-    send(user_id, text)
+    if mode == "parts":
+        track(peer_id, "search")
+        user_results[peer_id] = find_part(text)
+        user_index[peer_id] = 0
+        
+        if user_results[peer_id]:
+            show_part(peer_id)
+        else:
+            send(peer_id, "❌ Ничего не найдено")
 
-def show_donor(user_id):
-    i = user_index[user_id]
-    if 0 <= i < len(cache.donors):
-        d = cache.donors[i]
-        text = f"""🚘 {d.get('Марка', '')} {d.get('Модель', '')}
-Год: {d.get('Год', '')}
-Пробег: {d.get('Пробег', '')}
-({i+1}/{len(cache.donors)})"""
-        send(user_id, text)
-    else:
-        send(user_id, "❌ Нет данных для отображения")
+    elif mode == "wheels":
+        results = find_wheels(text)
+        if results:
+            send(peer_id, f"🛞 Найденные диски: {results[0].get('Производитель диска')}")
+        else:
+            send(peer_id, "❌ Диски не найдены")
 
 # ===== ГЛАВНЫЙ ЦИКЛ =====
 def run_bot():
