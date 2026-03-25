@@ -75,40 +75,95 @@ def save_json(file, data):
     except Exception as e:
         logging.error(f"Ошибка сохранения {file}: {e}")
 
-# Загружаем данные из JSON файлов
 favorites = load_json(FAV_FILE)
 stats = load_json(STATS_FILE)
 
-# Инициализируем структуры данных, если они пустые
-if not isinstance(favorites, dict):
-    favorites = {}
-    save_json(FAV_FILE, favorites)
+# ===== КЭШ =====
+class DataCache:
+    def __init__(self):
+        self.parts = []
+        self.wheels = []
+        self.donors = []
 
-if not isinstance(stats, dict):
-    stats = {}
-    save_json(STATS_FILE, stats)
+    def load_csv(self, url):
+        try:
+            r = requests.get(url)
+            r.encoding = "cp1251"
+            return list(csv.DictReader(io.StringIO(r.text), delimiter=";"))
+        except Exception as e:
+            logging.error(f"Ошибка загрузки CSV: {e}")
+            return []
 
-# Дополнительные функции работы с хранилищем
-def add_to_favorites(user_id, item_id):
-    if user_id not in favorites:
-        favorites[user_id] = []
-    if item_id not in favorites[user_id]:
-        favorites[user_id].append(item_id)
-        save_json(FAV_FILE, favorites)
+    def update(self):
+        try:
+            print("🔄 Обновление базы...")
+            self.parts = self.load_csv(PARTS_CSV)
+            self.wheels = self.load_csv(WHEELS_CSV)
+            self.donors = self.load_csv(DONORS_CSV)
+        except Exception as e:
+            logging.error(f"Ошибка обновления базы: {e}")
 
-def remove_from_favorites(user_id, item_id):
-    if user_id in favorites and item_id in favorites[user_id]:
-        favorites[user_id].remove(item_id)
-        save_json(FAV_FILE, favorites)
+    def find_part(self, query):
+        query = query.lower()
+        results = []
+        for part in self.parts:
+            if query in part.get('Название', '').lower() or query in part.get('Артикул', '').lower():
+                results.append(part)
+        return results
 
-def get_user_favorites(user_id):
-    return favorites.get(user_id, [])
+    def find_wheels(self, query):
+        query = query.lower()
+        results = []
+        for wheel in self.wheels:
+            if query in wheel.get('Производитель диска', '').lower():
+                results.append(wheel)
+        return results
 
-def update_stats(user_id, action):
-    if user_id not in stats:
-        stats[user_id] = {"search": 0, "views": 0}
-    stats[user_id][action] += 1
-    save_json(STATS_FILE, stats)
+    def find_donor(self, query):
+        query = query.lower()
+        results = []
+        for donor in self.donors:
+            if query in donor.get('Марка', '').lower() or query in donor.get('Модель', '').lower():
+                results.append(donor)
+        return results
+
+# Создаем экземпляр кэша
+cache = DataCache()
+
+# Первое обновление данных
+try:
+    cache.update()
+except Exception as e:
+    logging.error(f"Ошибка при первом обновлении данных: {e}")
+
+# Функция для отображения найденной детали
+def show_part(peer_id):
+    index = user_index.get(peer_id, 0)
+    results = user_results.get(peer_id, [])
+    
+    if index < len(results):
+        part = results[index]
+        message = f"Карточка детали:\n"
+        message += f"Название: {part.get('Название', 'Не указано')}\n"
+        message += f"Артикул: {part.get('Артикул', 'Не указан')}\n"
+        message += f"Цена: {part.get('Цена', 'Не указана')}\n"
+        message += f"Ссылка: {part.get('Ссылка', 'Нет ссылки')}"
+        send(peer_id, message)
+    else:
+        send(peer_id, "Нет данных для отображения")
+
+# Автообновление в отдельном потоке
+def auto_update():
+    while True:
+        try:
+            cache.update()
+        except Exception as e:
+            logging.error(f"Ошибка автообновления: {e}")
+        time.sleep(300)  # Обновляем каждые 5 минут
+
+# Запускаем поток автообновления
+threading.Thread(target=auto_update, daemon=True).start()
+
 # ===== ГЛАВНЫЙ ЦИКЛ =====
 def run_bot():
     print("🔥 VK BOT ULTRA ЗАПУЩЕН")
