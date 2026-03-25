@@ -96,9 +96,40 @@ def save_json(file, data):
     except Exception as e:
         logging.error(f"Ошибка сохранения {file}: {e}")
 
+# Загружаем данные из JSON файлов
 favorites = load_json(FAV_FILE)
-stats = load
+stats = load_json(STATS_FILE)
 
+# Инициализируем структуры данных, если они пустые
+if not isinstance(favorites, dict):
+    favorites = {}
+    save_json(FAV_FILE, favorites)
+
+if not isinstance(stats, dict):
+    stats = {}
+    save_json(STATS_FILE, stats)
+
+# Дополнительные функции работы с хранилищем
+def add_to_favorites(user_id, item_id):
+    if user_id not in favorites:
+        favorites[user_id] = []
+    if item_id not in favorites[user_id]:
+        favorites[user_id].append(item_id)
+        save_json(FAV_FILE, favorites)
+
+def remove_from_favorites(user_id, item_id):
+    if user_id in favorites and item_id in favorites[user_id]:
+        favorites[user_id].remove(item_id)
+        save_json(FAV_FILE, favorites)
+
+def get_user_favorites(user_id):
+    return favorites.get(user_id, [])
+
+def update_stats(user_id, action):
+    if user_id not in stats:
+        stats[user_id] = {"search": 0, "views": 0}
+    stats[user_id][action] += 1
+    save_json(STATS_FILE, stats)
 # ===== ГЛАВНЫЙ ЦИКЛ =====
 def run_bot():
     print("🔥 VK BOT ULTRA ЗАПУЩЕН")
