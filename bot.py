@@ -13,6 +13,15 @@ import json
 from vk_api.bot_longpoll import VkBotLongPoll, VkBotEventType
 import logging
 
+# Проверка прав доступа
+if not os.access(FAV_FILE, os.W_OK):
+logging.error(f"Нет прав на запись в файл {FAV_FILE}")
+exit(1)
+
+if not os.access(STATS_FILE, os.W_OK):
+logging.error(f"Нет прав на запись в файл {STATS_FILE}")
+exit(1) 
+
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -72,6 +81,12 @@ threading.Thread(target=auto_update, daemon=True).start()
 # ===== ХРАНИЛИЩЕ =====
 def load_json(file):
     try:
+        # Проверяем существование файла
+        if not os.path.exists(file):
+            # Создаем пустой файл, если его нет
+            with open(file, "w", encoding="utf-8") as f:
+                json.dump({}, f, ensure_ascii=False, indent=2)
+        
         with open(file, "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception as e:
@@ -84,6 +99,15 @@ def save_json(file, data):
             json.dump(data, f, ensure_ascii=False, indent=2)
     except Exception as e:
         logging.error(f"Ошибка сохранения {file}: {e}")
+
+# Создаем начальные файлы, если их нет
+if not os.path.exists(FAV_FILE):
+    with open(FAV_FILE, "w", encoding="utf-8") as f:
+        json.dump({}, f, ensure_ascii=False, indent=2)
+
+if not os.path.exists(STATS_FILE):
+    with open(STATS_FILE, "w", encoding="utf-8") as f:
+        json.dump({}, f, ensure_ascii=False, indent=2)
 
 favorites = load_json(FAV_FILE)
 stats = load_json(STATS_FILE)
