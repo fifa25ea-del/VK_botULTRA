@@ -173,7 +173,7 @@ def auto_update():
             logging.error(f"Ошибка автообновления: {e}")
         time.sleep(300)
 
-threading.Thread(target=auto_update, daemon=True).start(
+threading.Thread(target=auto_update, daemon=True).start()
 
 
             
