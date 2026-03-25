@@ -36,15 +36,14 @@ WHEELS_CSV = "https://baz-on.ru/export/c592/77023/drom-wheels.csv"
 FAV_FILE = "favorites.json"
 STATS_FILE = "stats.json"
 
-# Проверка и создание файлов
+# ===== ИНИЦИАЛИЗАЦИЯ ФАЙЛОВ =====
 def init_files():
     try:
-        # Проверяем существование файлов
+        # Создаем файлы, если их нет
         for file in [FAV_FILE, STATS_FILE]:
             if not os.path.exists(file):
-                # Создаем пустой JSON файл
                 with open(file, 'w', encoding='utf-8') as f:
-                    f.write('{}')
+                    f.write('{}')  # Создаем пустой JSON файл
             
             # Проверяем права доступа
             if not os.access(file, os.W_OK):
@@ -54,10 +53,7 @@ def init_files():
         print(f"Ошибка при инициализации файлов: {e}")
         exit(1)
 
-# Добавляем импорт os
-import os
-
-# Вызываем инициализацию файлов
+# Инициализируем файлы
 init_files()
 
 # ===== ХРАНИЛИЩЕ =====
@@ -79,19 +75,43 @@ def save_json(file, data):
 favorites = load_json(FAV_FILE)
 stats = load_json(STATS_FILE)
 
+# ===== VK ИНИЦИАЛИЗАЦИЯ =====
+vk_session = vk_api.VkApi(token=TOKEN)
+try:
+    longpoll = VkBotLongPoll(vk_session, 236843733)  
+    vk = vk_session.get_api()
+except Exception as e:
+    logging.error(f"Ошибка инициализации VK API: {e}")
+    exit(1)
 
-# Создаем начальные файлы, если их нет
-if not os.path.exists(FAV_FILE):
-    with open(FAV_FILE, "w", encoding="utf-8") as f:
-        json.dump({}, f, ensure_ascii=False, indent=2)
+# ===== КЭШ =====
+class DataCache:
+    def __init__(self):
+        self.parts = []
+        self.wheels = []
+        self.donors = []
 
-if not os.path.exists(STATS_FILE):
-    with open(STATS_FILE, "w", encoding="utf-8") as f:
-        json.dump({}, f, ensure_ascii=False, indent=2)
+    def load_csv(self, url):
+        r = requests.get(url)
+        r.encoding = "cp1251"
+        return list(csv.DictReader(io.StringIO(r.text), delimiter=";"))
 
-favorites = load_json(FAV_FILE)
-stats = load_json(STATS_FILE)
+    def update(self):
+        print("🔄 Обновление базы...")
+        self.parts = self.load_csv(PARTS_CSV)
+        self.wheels = self.load_csv(WHEELS_CSV)
+        self.donors = self.load_csv(DONORS_CSV)
 
+cache = DataCache()
+cache.update()
+
+# Автообновление в отдельном потоке
+def auto_update():
+    while True:
+        cache.update()
+        time.sleep(300)
+
+threading.Thread(target=auto_update, daemon=True).start()
 # ===== СОСТОЯНИЯ =====
 user_state = {}
 user_results = {}
