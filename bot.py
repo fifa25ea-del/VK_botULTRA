@@ -37,56 +37,31 @@ WHEELS_CSV = "https://baz-on.ru/export/c592/77023/drom-wheels.csv"
 FAV_FILE = "favorites.json"
 STATS_FILE = "stats.json"
 
-# ===== VK INIT =====
-vk_session = vk_api.VkApi(token=TOKEN)
-longpoll = VkBotLongPoll(vk_session, 236843733)  
-vk = vk_session.get_api()
-
-# ===== КЭШ =====
-class DataCache:
-    def __init__(self):
-        self.parts = []
-        self.wheels = []
-        self.donors = []
-
-    def load_csv(self, url):
+# Проверяем существование файлов и создаем их если нет
+for file in [FAV_FILE, STATS_FILE]:
+    if not os.path.exists(file):
         try:
-            r = requests.get(url, timeout=10)
-            r.encoding = "cp1251"
-            return list(csv.DictReader(io.StringIO(r.text), delimiter=";"))
+            with open(file, 'w', encoding='utf-8') as f:
+                f.write('{}')  # Создаем пустой JSON файл
         except Exception as e:
-            logging.error(f"Ошибка загрузки CSV {url}: {e}")
-            return []
+            print(f"Ошибка создания файла {file}: {e}")
+            exit(1)
 
-    def update(self):
-        logging.info("🔄 Обновление базы...")
-        self.parts = self.load_csv(PARTS_CSV)
-        self.wheels = self.load_csv(WHEELS_CSV)
-        self.donors = self.load_csv(DONORS_CSV)
-
-cache = DataCache()
-cache.update()
-
-# ===== АВТООБНОВЛЕНИЕ =====
-def auto_update():
-    while True:
-        try:
-            cache.update()
-        except Exception as e:
-            logging.error(f"Ошибка автообновления: {e}")
-        time.sleep(300)
-
-threading.Thread(target=auto_update, daemon=True).start()
+# Проверяем права доступа
+try:
+    if not os.access(FAV_FILE, os.W_OK):
+        raise PermissionError(f"Нет прав записи в файл {FAV_FILE}")
+    
+    if not os.access(STATS_FILE, os.W_OK):
+        raise PermissionError(f"Нет прав записи в файл {STATS_FILE}")
+        
+except PermissionError as e:
+    print(e)
+    exit(1)
 
 # ===== ХРАНИЛИЩЕ =====
 def load_json(file):
     try:
-        # Проверяем существование файла
-        if not os.path.exists(file):
-            # Создаем пустой файл, если его нет
-            with open(file, "w", encoding="utf-8") as f:
-                json.dump({}, f, ensure_ascii=False, indent=2)
-        
         with open(file, "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception as e:
@@ -99,6 +74,9 @@ def save_json(file, data):
             json.dump(data, f, ensure_ascii=False, indent=2)
     except Exception as e:
         logging.error(f"Ошибка сохранения {file}: {e}")
+
+favorites = load_json(FAV_FILE)
+stats = load_json(STATS_FILE)
 
 # Создаем начальные файлы, если их нет
 if not os.path.exists(FAV_FILE):
