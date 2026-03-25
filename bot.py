@@ -1,8 +1,7 @@
-# =========================
+ =========================
 # VK BOT ULTRA (ТОП ВЕРСИЯ)
 # =========================
 
-import os
 import vk_api
 import requests
 import csv
@@ -12,12 +11,13 @@ import time
 import json
 from vk_api.bot_longpoll import VkBotLongPoll, VkBotEventType
 import logging
+import re
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # ===== НАСТРОЙКИ =====
-TOKEN = "vk1.a.Fmog-6rNUAOTYVwC9-SJBo9dC5a87pMUET1xK_9Raxhk_l5V4Zqx1jCtWJXV7tZLappcJR6fIizfOv9X0OhMLnJbqjzej47aY5evfAj53IvfIgUo2w_vhBpjLGbgiBvaPZ3GrwFTdtR9D0TSGstCQM-L7aFf8_j6oqTxiRV7saahsFCInnvs7u53dtgLJB4lNI_apA5PsIpDqA3IWViAlA"
+TOKEN = "ваш_токен"
 ADMIN_ID = 888230055
 
 DONORS_CSV = "https://baz-on.ru/export/c592/5c6ca/stuttgart-site-carsrc.csv"
@@ -26,57 +26,21 @@ WHEELS_CSV = "https://baz-on.ru/export/c592/77023/drom-wheels.csv"
 
 FAV_FILE = "favorites.json"
 STATS_FILE = "stats.json"
-
-# ===== ИНИЦИАЛИЗАЦИЯ ФАЙЛОВ =====
-def init_files():
-    try:
-        for file in [FAV_FILE, STATS_FILE]:
-            if not os.path.exists(file):
-                with open(file, 'w', encoding='utf-8') as f:
-                    f.write('{}')
-            if not os.access(file, os.W_OK):
-                raise PermissionError(f"Нет прав записи в файл {file}")
-    except Exception as e:
-        print(f"Ошибка при инициализации файлов: {e}")
-        exit(1)
-
-init_files()
+LOG_FILE = "logs.txt"
 
 # ===== ИНИЦИАЛИЗАЦИЯ VK =====
 vk_session = vk_api.VkApi(token=TOKEN)
 longpoll = VkBotLongPoll(vk_session, 236843733)  
 vk = vk_session.get_api()
 
-# ===== КЭШ =====
-class DataCache:
-    def __init__(self):
-        self.parts = []
-        self.wheels = []
-        self.donors = []
+# ===== ФУНКЦИИ ДЛЯ РАБОТЫ С ТЕКСТОМ =====
+def split_words(text):
+    return re.findall(r'\w+', text.lower())
 
-    def load_csv(self, url):
-        r = requests.get(url)
-        r.encoding = "cp1251"
-        return list(csv.DictReader(io.StringIO(r.text), delimiter=";"))
+def fix_a(text):
+    return text.lower().replace("а", "a")
 
-    def update(self):
-        print("🔄 Обновление базы...")
-        self.parts = self.load_csv(PARTS_CSV)
-        self.wheels = self.load_csv(WHEELS_CSV)
-        self.donors = self.load_csv(DONORS_CSV)
-
-cache = DataCache()
-cache.update()
-
-# Автообновление
-def auto_update():
-    while True:
-        cache.update()
-        time.sleep(300)
-
-threading.Thread(target=auto_update, daemon=True).start()
-
-# ===== ХРАНИЛИЩЕ =====
+# ===== ИНИЦИАЛИЗАЦИЯ ХРАНИЛИЩА =====
 def load_json(file):
     try:
         with open(file, "r", encoding="utf-8") as f:
@@ -91,78 +55,146 @@ def save_json(file, data):
 favorites = load_json(FAV_FILE)
 stats = load_json(STATS_FILE)
 
+# ===== СТАТИСТИКА =====
+def track(user_id, action):
+    user_id = str(user_id)
+    if user_id not in stats:
+        stats[user_id] = {
+            "searches": 0,
+            "views": 0,
+            "favorites": 0
+        }
+    stats[user_id][action] += 1
+    save_json(STATS_FILE, stats)
+
+# ===== КЭШ =====
+class DataCache:
+    def __init__(self):
+        self.parts = []
+        self.wheels = []
+        self.donors = []
+        self.number_key = None
+        self.name_key = None
+        self.photo_key = None
+
+    def load_csv(self, url):
+        headers = {"User-Agent": "Mozilla/5.0"}
+        r = requests.get(url, headers=headers, timeout=30)
+        r.encoding = "cp1251"
+        csv_file = io.StringIO(r.text)
+        reader = csv.DictReader(csv_file, delimiter=";")
+        return list(reader), reader.fieldnames
+
+    def update(self):
+        print("🔄 Обновление базы...")
+        self.donors, _ = self.load_csv(DONORS_CSV)
+        self.donors.reverse()
+        
+        self.parts, headers = self.load_csv(PARTS_CSV)
+        self.wheels, headers2 = self.load_csv(WHEELS_CSV)
+        
+        for h in headers:
+            h_low = h.lower()
+            if "артикул" in h_low or "номер" in h_low:
+                self.number_key = h
+            if "наимен" in h_low or "название" in h_low:
+                self.name_key = h
+            if "фото" in h_low or "image" in h_low:
+                self.photo_key = h
+
+cache = DataCache()
+cache.update()
+
+# Автообновление в отдельном потоке
+def auto_update():
+    while True:
+        cache.update()
+        time.sleep(300)
+
+threading.Thread(target=auto_update, daemon=True).start()
+
 # ===== ПОИСК =====
-def find_part(q):
-    q = q.lower().replace(" ", "")
-    return [p for p in cache.parts if q in str(p.get("Артикул", "")).lower()][:20]
+def find_part(query):
+    query = normalize(fix_a(query))
+    results = []
+    for part in cache.parts:
+        raw_number = part.get(cache.number_key, "")
+        number = normalize(fix_a(raw_number))
+        if not number:
+            continue
+        if query in number:
+            results.append(part)
+        if len(results) >= 20:
+            break
+    return results
 
-def find_wheels(q):
-    q = q.lower()
-    return [w for w in cache.wheels if q in str(w.get("Производитель диска", "")).lower()][:20]
+def find_wheels(query):
+    query = query.lower().replace(" ", "").replace("-", "")
+    results = []
+    for part in cache.wheels:
+        radius = str(part.get("Диаметр диска", "")).lower().replace(" ", "")
+        brand = str(part.get("Производитель диска", "")).lower()
+        model = str(part.get("Модель диска", "")).lower()
+        if query in radius or query in f"r{radius}":
+            results.append(part)
+        elif query in brand or query in model:
+            results.append(part)
+        if len(results) >= 20:
+            break
+    return results
 
-# ===== КАРТОЧКИ =====
-
-# Отображение информации о детали
-def show_part(user_id):
-    track(user_id, "views")
-    i = user_index[user_id]
-    part = user_results[user_id][i]
+# ===== КАРТОЧКИ ТОВАРОВ =====
+def send_part_card(peer_id, index):
+    track(peer_id, "views")
+    results = user_results.get(peer_id, [])
+    if not results or index >= len(results):
+        return
     
-    text = f"""🔧 {part.get('Наименование', '')}
+    part = results[index]
+    text = f"""🔧 {part.get(cache.name_key, '')}
 Артикул: {part.get('Артикул', '')}
 Цена: {part.get('Цена', '')} ₽
 В наличии: {part.get('Наличие', '')}
-({i+1}/{len(user_results[user_id])})"""
+({index+1}/{len(results)})"""
     
-    send(user_id, text)
+    send(peer_id, text)
 
-# Отображение информации о диске
-def show_wheel(user_id):
-    track(user_id, "views")
-    i = user_index[user_id]
-    wheel = user_results[user_id][i]
+def send_wheel_card(peer_id, index):
+    track(peer_id, "views")
+    results = user_results.get(peer_id, [])
+    if not results or index >= len(results):
+        return
     
-    text = f"""🛞 {wheel.get('Производитель диска', '')}
-Размер: {wheel.get('Размер', '')}
-Ширина: {wheel.get('Ширина', '')}
-Вылет: {wheel.get('Вылет', '')}
-({i+1}/{len(user_results[user_id])})"""
+    part = results[index]
+    text = f"""🛞 {part.get('Производитель диска', '')} {part.get('Модель диска', '')}
+R{part.get('Диаметр диска', '')}
+Ширина: {part.get('Ширина диска', '')}
+Вылет: {part.get('Вылет диска', '')}
+Цена: {part.get('Цена', '')} ₽
+({index+1}/{len(results)})"""
     
-    send(user_id, text)
+    send(peer_id, text)
 
-# Отображение информации о доноре
-def show_donor(user_id):
-    track(user_id, "views")
-    i = user_index[user_id]
-    donor = cache.donors[i]
+def send_donor_card(peer_id, index):
+    track(peer_id, "views")
+    results = user_results.get(peer_id, [])
+    if not results or index >= len(results):
+        return
     
+    donor = results[index]
     text = f"""🚘 {donor.get('Марка', '')} {donor.get('Модель', '')}
 Год: {donor.get('Год', '')}
 Пробег: {donor.get('Пробег', '')}
 Цена: {donor.get('Цена', '')} ₽
-({i+1}/20)"""
+({index+1}/{len(results)})"""
     
-    send(user_id, text)
+    send(peer_id, text)
 
-# Отображение избранного
-def show_favorites(user_id):
-    fav_items = favorites.get(str(user_id), [])
-    
-    if not fav_items:
-        send(user_id, "❤️ В избранном пока ничего нет")
-        return
-    
-    text = "❤️ Избранное:\n"
-    for i, item in enumerate(fav_items, 1):
-        text += f"{i}. {item.get('Наименование', '')} - {item.get('Цена', '')} ₽\n"
-    
-    send(user_id, text)
-
-# Улучшенная функция отправки сообщений
-def send(user_id, text):
+# ===== ОТПРАВКА СООБЩЕНИЙ =====
+def send(peer_id, text):
     try:
         vk.messages.send(
-            peer_id=user_id,
+            peer_id=peer_id,
             message=text,
             random_id=0,
             keyboard=get_main_keyboard()
@@ -170,106 +202,108 @@ def send(user_id, text):
     except Exception as e:
         logging.error(f"Ошибка отправки сообщения: {e}")
 
-# Обработка навигации по результатам
-def navigate_results(user_id, direction):
-    if direction == "➡️":
-        user_index[user_id] = min(user_index[user_id] + 1, len(user_results[user_id]) - 1)
-    elif direction == "⬅️":
-        user_index[user_id] = max(user_index[user_id] - 1, 0)
-    
-    mode = user_state[user_id]
-    if mode == "parts":
-        show_part(user_id)
-    elif mode == "wheels":
-        show_wheel(user_id)
-    elif mode == "donors":
-        show_donor(user_id)
+# ===== КНОПКИ =====
+def get_main_keyboard():
+    return json.dumps({
+        "one_time": False,
+        "buttons": [
+            [
+                {"action": {"type": "text", "label": "🚗 Найти запчасть"}, "color": "primary"},
+                {"action": {"type": "text", "label": "🛞 Шины и диски"}, "color": "primary"}
+            ],
+            [
+                {"action": {"type": "text", "label": "🚘 В разборе"}, "color": "positive"},
+                {"action": {"type": "text", "label": "❤️ Избранное"}, "color": "negative"}
+            ]
+        ]
+    })
+
 # ===== ОБРАБОТКА СООБЩЕНИЙ =====
 def handle(event):
     msg = event.obj.message
     peer_id = msg['peer_id']
-    text = msg.get('text', '').strip()
-    text_lower = text.lower()
-
+    text = msg.get('text', '').strip().lower()
+    
     if not text:
         send(peer_id, "Я получил сообщение, но оно не текстовое 😅")
         return
 
-    # Обработка команды /start
-    if text_lower == "/start":
-        send(peer_id, "Привет! 👋 Выберите команду:", keyboard=get_main_keyboard())
+    # Обработка команд
+    if text == "/start":
+        send(peer_id, "Привет! Выберите действие:", keyboard=get_main_keyboard())
         return
 
-    # Обработка основных команд
-    if text_lower == "🚗 запчасти":
+    # Обработка разделов
+    if text == "🚗 найти запчасть":
         user_state[peer_id] = "parts"
-        send(peer_id, "Введи номер детали или код:")
+        send(peer_id, "Введите номер детали")
         return
 
-    if text_lower == "🛞 диски":
+    if text == "🛞 шины и диски":
         user_state[peer_id] = "wheels"
-        send(peer_id, "Введи бренд диска:")
+        send(peer_id, "Введите параметры (например R18)")
         return
 
-    if text_lower == "🚘 доноры":
+    if text == "🚘 в разборе":
         user_state[peer_id] = "donors"
+        user_results[peer_id] = cache.donors[:20]
         user_index[peer_id] = 0
-        show_donor(peer_id)
+        send_donor_card(peer_id, 0)
         return
 
-    if text_lower == "❤️ избранное":
+    if text == "❤️ избранное":
         fav = favorites.get(str(peer_id), [])
         send(peer_id, f"❤️ У вас {len(fav)} товаров в избранном")
         return
 
-    # Обработка навигации
-    if text_lower in ["➡️", "⬅️"]:
-        navigate_results(peer_id, text_lower)
-        return
-
-    # Обработка поиска по состоянию
-    mode = user_state.get(peer_id)
-    
-    if mode == "parts":
+    # Обработка поиска
+    if user_state.get(peer_id) == "parts":
         track(peer_id, "search")
         user_results[peer_id] = find_part(text)
         user_index[peer_id] = 0
         
         if user_results[peer_id]:
-            show_part(peer_id)
+            send_part_card(peer_id, 0)
         else:
             send(peer_id, "❌ Ничего не найдено")
+        return
 
-    elif mode == "wheels":
-        results = find_wheels(text)
-        if results:
-            send(peer_id, f"🛞 Найденные диски: {results[0].get('Производитель диска')}")
+    if user_state.get(peer_id) == "wheels":
+        track(peer_id, "search")
+        user_results[peer_id] = find_wheels(text)
+        user_index[peer_id] = 0
+        
+        if user_results[peer_id]:
+            send_wheel_card(peer_id, 0)
         else:
-            send(peer_id, "❌ Диски не найдены")
+            send(peer_id, "❌ Ничего не найдено")
+        return
 
-    elif mode == "donors":
-        show_donor(peer_id)
+    # Навигация
+    if text == "➡️":
+        if user_state.get(peer_id) in ["parts", "wheels", "donors"]:
+            user_index[peer_id] = min(user_index[peer_id] + 1, len(user_results[peer_id]) - 1)
+            if user_state[peer_id] == "parts":
+                send_part_card(peer_id, user_index[peer_id])
+            elif user_state[peer_id] == "wheels":
+                send_wheel_card(peer_id, user_index[peer_id])
+            elif user_state[peer_id] == "donors":
+                send_donor_card(peer_id, user_index[peer_id])
+        return
 
-# ===== НАВИГАЦИЯ =====
-def navigate_results(user_id, direction):
-    try:
-        if direction == "➡️":
-            user_index[user_id] = min(user_index[user_id] + 1, len(user_results[user_id]) - 1)
-        elif direction == "⬅️":
-            user_index[user_id] = max(user_index[user_id] - 1, 0)
-
-        mode = user_state[user_id]
-        if mode == "parts":
-            show_part(user_id)
-        elif mode == "wheels":
-            show_wheel(user_id)
-        elif mode == "donors":
-            show_donor(user_id)
-    except Exception as e:
-        logging.error(f"Ошибка навигации: {e}")
-        send(user_id, "❌ Ошибка при навигации")
+    if text == "⬅️":
+        if user_state.get(peer_id) in ["parts", "wheels", "donors"]:
+            user_index[peer_id] = max(user_index[peer_id] - 1, 0)
+            if user_state[peer_id] == "parts":
+                send_part_card(peer_id, user_index[peer_id])
+            elif user_state[peer_id] == "wheels":
+                send_wheel_card(peer_id, user_index[peer_id])
+            elif user_state[peer_id] == "donors":
+                send_donor_card(peer_id, user_index[peer_id])
+        return
 
 # ===== ГЛАВНЫЙ ЦИКЛ =====
+# Продолжение функции run_bot
 def run_bot():
     print("🔥 VK BOT ULTRA ЗАПУЩЕН")
     try:
@@ -279,5 +313,59 @@ def run_bot():
     except Exception as e:
         logging.error(f"Критическая ошибка: {e}")
 
+# ===== ИНИЦИАЛИЗАЦИЯ СОСТОЯНИЙ =====
+user_state = {}
+user_results = {}
+user_index = {}
+
+# ===== СТАРТ БОТА =====
 if __name__ == "__main__":
-    run_bot()
+    try:
+        # Загружаем базу данных
+        cache.update()
+        
+        # Запускаем бота
+        run_bot()
+        
+    except Exception as e:
+        logging.error(f"Ошибка при запуске бота: {e}")
+        exit(1)
+
+# ===== ДОПОЛНИТЕЛЬНЫЕ ФУНКЦИИ =====
+
+def normalize(text):
+    return str(text).lower().replace(" ", "").replace("-", "")
+
+def log_search(user_id, query, mode):
+    try:
+        with open(LOG_FILE, "a", encoding="utf-8") as f:
+            time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            f.write(f"{time} | {user_id} | {mode} | {query}\n")
+    except Exception as e:
+        print("Ошибка логирования:", e)
+
+# ===== ИЗБРАННОЕ =====
+def add_to_favorites(user_id, item):
+    user_id = str(user_id)
+    if user_id not in favorites:
+        favorites[user_id] = []
+    favorites[user_id].append(item)
+    save_json(FAV_FILE, favorites)
+
+def remove_from_favorites(user_id, item_id):
+    user_id = str(user_id)
+    if user_id in favorites:
+        favorites[user_id] = [item for item in favorites[user_id] if item.get('Артикул') != item_id]
+        save_json(FAV_FILE, favorites)
+
+# ===== АДМИНИСТРАТОРСКИЕ КОМАНДЫ =====
+def admin_commands(text, user_id):
+    if user_id != ADMIN_ID:
+        return False
+    
+    if text == "/stats":
+        total_users = len(stats)
+        send(user_id, f"👥 Всего пользователей: {total_users}")
+        return True
+    
+    return False
