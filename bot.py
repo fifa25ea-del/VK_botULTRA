@@ -243,16 +243,16 @@ def get_main_keyboard():
         "one_time": False,
         "buttons": [
             [
-                {"action": {"type": "callback", "label": "🚗 Запчасти", "payload": json.dumps({"cmd": "parts"})}, "color": "primary"}
+                {"action": {"type": "callback", "label": "🚗 Запчасти", "payload": {"cmd": "parts"}}, "color": "primary"}
             ],
             [
-                {"action": {"type": "callback", "label": "🛞 Шины и диски", "payload": json.dumps({"cmd": "wheels"})}, "color": "primary"}
+                {"action": {"type": "callback", "label": "🛞 Диски", "payload": {"cmd": "wheels"}}, "color": "primary"}
             ],
             [
-                {"action": {"type": "callback", "label": "🚘 В разборе", "payload": json.dumps({"cmd": "donors"})}, "color": "positive"}
+                {"action": {"type": "callback", "label": "🚘 Доноры", "payload": {"cmd": "donors"}}, "color": "positive"}
             ],
             [
-                {"action": {"type": "callback", "label": "❤️ Избранное", "payload": json.dumps({"cmd": "favorites"})}, "color": "negative"}
+                {"action": {"type": "callback", "label": "❤️ Избранное", "payload": {"cmd": "favorites"}}, "color": "negative"}
             ]
         ],
         "inline": True
