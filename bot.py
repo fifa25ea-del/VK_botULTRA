@@ -27,27 +27,14 @@ STATS_FILE = "stats.json"
 # ===== ИНИЦИАЛИЗАЦИЯ ФАЙЛОВ =====
 def init_files():
     try:
-        # Создаем директорию для файлов
-        if not os.path.exists('data'):
-            os.makedirs('data')
-            
-        # Обновляем пути к файлам
-        global FAV_FILE, STATS_FILE
-        FAV_FILE = os.path.join('data', 'favorites.json')
-        STATS_FILE = os.path.join('data', 'stats.json')
-        
-        # Создаем файлы, если их нет
         for file in [FAV_FILE, STATS_FILE]:
             if not os.path.exists(file):
                 with open(file, 'w', encoding='utf-8') as f:
-                    f.write('{}')  # Создаем пустой JSON файл
-            
-            # Проверяем права доступа
+                    f.write('{}')
             if not os.access(file, os.W_OK):
                 raise PermissionError(f"Нет прав записи в файл {file}")
-                
     except Exception as e:
-        print(f"Ошибка при инициализации файлов: {e}")
+        logging.error(f"Ошибка при инициализации файлов: {e}")
         exit(1)
 
 # Инициализируем файлы
@@ -57,7 +44,7 @@ init_files()
 def init_vk_api():
     try:
         vk_session = vk_api.VkApi(token=TOKEN)
-        longpoll = VkBotLongPoll(vk_session, 236843733)
+        longpoll = VkBotLongPoll(vk_session, GROUP_ID)
         vk = vk_session.get_api()
         print("Подключение к VK API успешно")
         return vk_session, longpoll, vk
