@@ -55,23 +55,15 @@ init_files()
 
 # ===== ИНИЦИАЛИЗАЦИЯ VK API =====
 def init_vk_api():
-    max_retries = 5
-    retry_delay = 2  # задержка между попытками в секундах
-    
-    for attempt in range(max_retries):
-        try:
-            vk_session = vk_api.VkApi(token=TOKEN)
-            longpoll = VkBotLongPoll(vk_session, GROUP_ID)
-            vk = vk_session.get_api()
-            print("Подключение к VK API успешно")
-            return vk_session, longpoll, vk
-            
-        except Exception as e:
-            if attempt < max_retries - 1:
-                print(f"Ошибка подключения к VK API: {e}. Попытка {attempt + 1}/{max_retries}. Повтор через {retry_delay} секунд...")
-                time.sleep(retry_delay)
-            else:
-                raise
+    try:
+        vk_session = vk_api.VkApi(token=TOKEN)
+        longpoll = VkBotLongPoll(vk_session, 236843733)
+        vk = vk_session.get_api()
+        print("Подключение к VK API успешно")
+        return vk_session, longpoll, vk
+    except Exception as e:
+        logging.error(f"Ошибка инициализации VK API: {e}")
+        raise
 
 # Инициализируем VK API
 try:
@@ -139,6 +131,8 @@ def run_bot():
                 handle(event)
     except Exception as e:
         logging.error(f"Критическая ошибка: {e}")
+        time.sleep(5)  # пауза перед перезапуском
+        run_bot()  # перезапуск бота
 
 # ===== ОБРАБОТКА СООБЩЕНИЙ =====
 def handle(event):
