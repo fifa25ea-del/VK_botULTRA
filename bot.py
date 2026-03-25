@@ -31,28 +31,6 @@ vk_session = vk_api.VkApi(token=TOKEN)
 longpoll = VkBotLongPoll(vk_session, 236843733)  
 vk = vk_session.get_api()
 
-for event in longpoll.listen():
-    if event.type == VkBotEventType.MESSAGE_NEW:
-        msg = event.obj.message  # получаем объект сообщения
-        peer_id = msg['peer_id']
-
-        # Проверяем есть ли текст
-        text = msg.get('text', '').strip()
-        if not text:
-            vk.messages.send(
-                peer_id=peer_id,
-                message="Я получил сообщение, но оно не текстовое 😅",
-                random_id=0
-            )
-            continue
-
-        print(f"Новое сообщение: {text}")
-        vk.messages.send(
-            peer_id=peer_id,
-            message=f"Бот получил: {text}",
-            random_id=0
-        )
-
 # ===== КЭШ =====
 class DataCache:
     def __init__(self):
@@ -196,7 +174,7 @@ def handle(event):
     text_lower = text.lower()
 
     # ==== Команда /start ====
-    if text_lower == "/start":
+    if text_lower in ["/start", "start", "начать"]:
         vk.messages.send(
             peer_id=peer_id,
             message="Привет! 👋\nЯ ваш VK-бот 🚀\nВыберите команду:",
@@ -282,10 +260,6 @@ def admin(msg, user_id):
 # ===== START =====
 print("🔥 VK ULTRA STARTED")
 
-for event in longpoll.listen():
-    if event.type == VkEventType.MESSAGE_NEW and event.to_me:
-        if not admin(event.text, event.user_id):
-            handle(event)
 def run_bot():
     print("Бот запущен")
     for event in longpoll.listen():
