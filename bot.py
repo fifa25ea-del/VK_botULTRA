@@ -200,25 +200,34 @@ def handle(event):
         return
 
     text_lower = text.lower()
+    # Убираем эмодзи, пробелы и лишние символы
+    text_clean = text_lower.replace("🚗", "").strip()
 
-    # Обработка команд поиска
+    # Обработка команд поиска запчастей
     if user_state.get(peer_id) == "parts":
         track(peer_id, "search")
-        user_results[peer_id] = cache.find_part(text)  # Используем новый метод
+        user_results[peer_id] = cache.find_part(text_clean)  # Используем новый метод
         user_index[peer_id] = 0
         
         if user_results[peer_id]:
             show_part(peer_id)
         else:
             send(peer_id, "❌ Деталь не найдена")
-            
+        return  # важно выйти после обработки
+
     # Обработка команд
-    if text_lower == "/start":
+    if text_clean == "/start" or text_clean == "start":
         send(peer_id, "Привет! 👋 Выберите команду:")
         return
 
-    # Добавляем команду для запуска поиска
-    elif text_lower == "поиск":
+    # Кнопка "Запчасти"
+    if "запчаст" in text_clean:
+        user_state[peer_id] = "parts"
+        send(peer_id, "Введите номер детали или код:")
+        return
+
+    # Добавляем команду для поиска
+    if text_clean == "поиск":
         send(peer_id, "Введите поисковый запрос:")
         user_state[peer_id] = "search"
         return
