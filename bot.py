@@ -30,79 +30,22 @@ STATS_FILE = "stats.json"
 # ===== ИНИЦИАЛИЗАЦИЯ ФАЙЛОВ =====
 def init_files():
     try:
-        # Создаем файлы, если их нет
         for file in [FAV_FILE, STATS_FILE]:
             if not os.path.exists(file):
                 with open(file, 'w', encoding='utf-8') as f:
-                    f.write('{}')  # Создаем пустой JSON файл
-            
-            # Проверяем права доступа
+                    f.write('{}')
             if not os.access(file, os.W_OK):
                 raise PermissionError(f"Нет прав записи в файл {file}")
-                
     except Exception as e:
         print(f"Ошибка при инициализации файлов: {e}")
         exit(1)
 
-# Инициализируем файлы после их определения
 init_files()
-
-# ===== ХРАНИЛИЩЕ =====
-def load_json(file):
-    try:
-        with open(file, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception as e:
-        logging.error(f"Ошибка загрузки {file}: {e}")
-        return {}
-
-def save_json(file, data):
-    try:
-        with open(file, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        logging.error(f"Ошибка сохранения {file}: {e}")
-
-favorites = load_json(FAV_FILE)
-stats = load_json(STATS_FILE)
 
 # ===== ИНИЦИАЛИЗАЦИЯ VK =====
 vk_session = vk_api.VkApi(token=TOKEN)
 longpoll = VkBotLongPoll(vk_session, 236843733)  
 vk = vk_session.get_api()
-
-# ===== ГЛАВНЫЙ ЦИКЛ =====
-def run_bot():
-    print("🔥 VK BOT ULTRA ЗАПУЩЕН")
-    try:
-        for event in longpoll.listen():
-            if event.type == VkBotEventType.MESSAGE_NEW:
-                handle(event)
-    except Exception as e:
-        logging.error(f"Критическая ошибка: {e}")
-
-# ===== ОБРАБОТКА СООБЩЕНИЙ =====
-def handle(event):
-    msg = event.obj.message
-    peer_id = msg['peer_id']
-    text = msg.get('text', '').strip()
-
-    if not text:
-        send(peer_id, "Я получил сообщение, но оно не текстовое 😅")
-        return
-
-    text_lower = text.lower()
-
-    # Обработка команды /start
-    if text_lower in ["/start", "начать"]:
-        send(peer_id, "Привет! 👋 Выберите команду:", keyboard=get_main_keyboard())
-        return
-
-    # Обработка основных команд
-    if text_lower == "🚗 запчасти":
-        user_state[peer_id] = "parts"
-        send(peer_id, "Введи номер детали или код:")
-        return
 
 # ===== КЭШ =====
 class DataCache:
@@ -125,114 +68,166 @@ class DataCache:
 cache = DataCache()
 cache.update()
 
-# Автообновление в отдельном потоке
+# Автообновление
 def auto_update():
     while True:
         cache.update()
         time.sleep(300)
 
 threading.Thread(target=auto_update, daemon=True).start()
-# ===== СОСТОЯНИЯ =====
-user_state = {}  # Хранит текущее состояние пользователя
-user_results = {}  # Хранит результаты поиска для пользователя
-user_index = {}  # Хранит текущий индекс в результатах поиска
 
-# ===== СТАТИСТИКА =====
-def track(user_id, action):
-    user_id = str(user_id)
-    if user_id not in stats:
-        stats[user_id] = {"search": 0, "views": 0}
+# ===== ХРАНИЛИЩЕ =====
+def load_json(file):
+    try:
+        with open(file, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return {}
+
+def save_json(file, data):
+    with open(file, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+favorites = load_json(FAV_FILE)
+stats = load_json(STATS_FILE)
+
+# ===== ПОИСК =====
+def find_part(q):
+    q = q.lower().replace(" ", "")
+    return [p for p in cache.parts if q in str(p.get("Артикул", "")).lower()][:20]
+
+def find_wheels(q):
+    q = q.lower()
+    return [w for w in cache.wheels if q in str(w.get("Производитель диска", "")).lower()][:20]
+
+# ===== КАРТОЧКИ =====
+
+# Отображение информации о детали
+def show_part(user_id):
+    track(user_id, "views")
+    i = user_index[user_id]
+    part = user_results[user_id][i]
     
-    stats[user_id][action] += 1
-    save_json(STATS_FILE, stats)
+    text = f"""🔧 {part.get('Наименование', '')}
+Артикул: {part.get('Артикул', '')}
+Цена: {part.get('Цена', '')} ₽
+В наличии: {part.get('Наличие', '')}
+({i+1}/{len(user_results[user_id])})"""
+    
+    send(user_id, text)
 
-# ===== КНОПКИ =====
-def keyboard():
-    return json.dumps({
-        "one_time": False,
-        "buttons": [
-            [{"action": {"type": "text", "label": "🚗 Запчасти"}},
-             {"action": {"type": "text", "label": "🛞 Диски"}}],
-            [{"action": {"type": "text", "label": "🚘 Доноры"}},
-             {"action": {"type": "text", "label": "❤️ Избранное"}}],
-            [{"action": {"type": "text", "label": "⬅️"}},
-             {"action": {"type": "text", "label": "➡️"}}]
-        ]
-    })
+# Отображение информации о диске
+def show_wheel(user_id):
+    track(user_id, "views")
+    i = user_index[user_id]
+    wheel = user_results[user_id][i]
+    
+    text = f"""🛞 {wheel.get('Производитель диска', '')}
+Размер: {wheel.get('Размер', '')}
+Ширина: {wheel.get('Ширина', '')}
+Вылет: {wheel.get('Вылет', '')}
+({i+1}/{len(user_results[user_id])})"""
+    
+    send(user_id, text)
 
-# ===== ОТПРАВКА СООБЩЕНИЙ =====
-def send(peer_id, text, keyboard=None):
+# Отображение информации о доноре
+def show_donor(user_id):
+    track(user_id, "views")
+    i = user_index[user_id]
+    donor = cache.donors[i]
+    
+    text = f"""🚘 {donor.get('Марка', '')} {donor.get('Модель', '')}
+Год: {donor.get('Год', '')}
+Пробег: {donor.get('Пробег', '')}
+Цена: {donor.get('Цена', '')} ₽
+({i+1}/20)"""
+    
+    send(user_id, text)
+
+# Отображение избранного
+def show_favorites(user_id):
+    fav_items = favorites.get(str(user_id), [])
+    
+    if not fav_items:
+        send(user_id, "❤️ В избранном пока ничего нет")
+        return
+    
+    text = "❤️ Избранное:\n"
+    for i, item in enumerate(fav_items, 1):
+        text += f"{i}. {item.get('Наименование', '')} - {item.get('Цена', '')} ₽\n"
+    
+    send(user_id, text)
+
+# Улучшенная функция отправки сообщений
+def send(user_id, text):
     try:
         vk.messages.send(
-            peer_id=peer_id,
+            peer_id=user_id,
             message=text,
             random_id=0,
-            keyboard=keyboard if keyboard else get_main_keyboard()
+            keyboard=get_main_keyboard()
         )
     except Exception as e:
         logging.error(f"Ошибка отправки сообщения: {e}")
 
-# ===== КНОПКИ =====
-def get_main_keyboard():
-    return json.dumps({
-        "one_time": False,
-        "buttons": [
-            [
-                {"action": {"type": "text", "label": "🚗 Запчасти"}, "color": "primary"},
-                {"action": {"type": "text", "label": "🛞 Диски"}, "color": "primary"}
-            ],
-            [
-                {"action": {"type": "text", "label": "🚘 Доноры"}, "color": "positive"},
-                {"action": {"type": "text", "label": "❤️ Избранное"}, "color": "negative"}
-            ]
-        ]
-    })
-
+# Обработка навигации по результатам
+def navigate_results(user_id, direction):
+    if direction == "➡️":
+        user_index[user_id] = min(user_index[user_id] + 1, len(user_results[user_id]) - 1)
+    elif direction == "⬅️":
+        user_index[user_id] = max(user_index[user_id] - 1, 0)
+    
+    mode = user_state[user_id]
+    if mode == "parts":
+        show_part(user_id)
+    elif mode == "wheels":
+        show_wheel(user_id)
+    elif mode == "donors":
+        show_donor(user_id)
 # ===== ОБРАБОТКА СООБЩЕНИЙ =====
 def handle(event):
     msg = event.obj.message
     peer_id = msg['peer_id']
     text = msg.get('text', '').strip()
+    text_lower = text.lower()
 
     if not text:
         send(peer_id, "Я получил сообщение, но оно не текстовое 😅")
         return
 
-    text_lower = text.lower()
-
-    # Обработка команд
+    # Обработка команды /start
     if text_lower == "/start":
-        send(peer_id, "Привет! 👋 Выберите команду:")
+        send(peer_id, "Привет! 👋 Выберите команду:", keyboard=get_main_keyboard())
         return
 
-    # Обработка основных кнопок
+    # Обработка основных команд
     if text_lower == "🚗 запчасти":
         user_state[peer_id] = "parts"
         send(peer_id, "Введи номер детали или код:")
         return
-    elif text_lower == "🛞 диски":
+
+    if text_lower == "🛞 диски":
         user_state[peer_id] = "wheels"
         send(peer_id, "Введи бренд диска:")
         return
 
+    if text_lower == "🚘 доноры":
+        user_state[peer_id] = "donors"
+        user_index[peer_id] = 0
+        show_donor(peer_id)
+        return
+
+    if text_lower == "❤️ избранное":
+        fav = favorites.get(str(peer_id), [])
+        send(peer_id, f"❤️ У вас {len(fav)} товаров в избранном")
+        return
+
     # Обработка навигации
-    elif text_lower == "➡️":
-        if user_state.get(peer_id) in ["parts", "donors"]:
-            user_index[peer_id] = min(user_index.get(peer_id, 0) + 1, len(user_results.get(peer_id, [])) - 1)
-            if user_state[peer_id] == "parts":
-                show_part(peer_id)
-            elif user_state[peer_id] == "donors":
-                show_donor(peer_id)
+    if text_lower in ["➡️", "⬅️"]:
+        navigate_results(peer_id, text_lower)
+        return
 
-    elif text_lower == "⬅️":
-        if user_state.get(peer_id) in ["parts", "donors"]:
-            user_index[peer_id] = max(user_index.get(peer_id, 0) - 1, 0)
-            if user_state[peer_id] == "parts":
-                show_part(peer_id)
-            elif user_state[peer_id] == "donors":
-                show_donor(peer_id)
-
-    # Обработка поиска
+    # Обработка поиска по состоянию
     mode = user_state.get(peer_id)
     
     if mode == "parts":
@@ -251,6 +246,28 @@ def handle(event):
             send(peer_id, f"🛞 Найденные диски: {results[0].get('Производитель диска')}")
         else:
             send(peer_id, "❌ Диски не найдены")
+
+    elif mode == "donors":
+        show_donor(peer_id)
+
+# ===== НАВИГАЦИЯ =====
+def navigate_results(user_id, direction):
+    try:
+        if direction == "➡️":
+            user_index[user_id] = min(user_index[user_id] + 1, len(user_results[user_id]) - 1)
+        elif direction == "⬅️":
+            user_index[user_id] = max(user_index[user_id] - 1, 0)
+
+        mode = user_state[user_id]
+        if mode == "parts":
+            show_part(user_id)
+        elif mode == "wheels":
+            show_wheel(user_id)
+        elif mode == "donors":
+            show_donor(user_id)
+    except Exception as e:
+        logging.error(f"Ошибка навигации: {e}")
+        send(user_id, "❌ Ошибка при навигации")
 
 # ===== ГЛАВНЫЙ ЦИКЛ =====
 def run_bot():
