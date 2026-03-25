@@ -30,22 +30,37 @@ STATS_FILE = "stats.json"
 # ===== ИНИЦИАЛИЗАЦИЯ ФАЙЛОВ =====
 def init_files():
     try:
-        # Создаем файлы, если их нет
         for file in [FAV_FILE, STATS_FILE]:
             if not os.path.exists(file):
                 with open(file, 'w', encoding='utf-8') as f:
-                    f.write('{}')  # Создаем пустой JSON файл
-            
-            # Проверяем права доступа
+                    f.write('{}')
             if not os.access(file, os.W_OK):
                 raise PermissionError(f"Нет прав записи в файл {file}")
-                
     except Exception as e:
-        print(f"Ошибка при инициализации файлов: {e}")
+        logging.error(f"Ошибка при инициализации файлов: {e}")
         exit(1)
 
-# Инициализируем файлы после их определения
+# Инициализируем файлы
 init_files()
+
+# ===== ИНИЦИАЛИЗАЦИЯ VK API =====
+def init_vk_api():
+    try:
+        vk_session = vk_api.VkApi(token=TOKEN)
+        longpoll = VkBotLongPoll(vk_session, GROUP_ID)
+        vk = vk_session.get_api()
+        print("Подключение к VK API успешно")
+        return vk_session, longpoll, vk
+    except Exception as e:
+        logging.error(f"Ошибка инициализации VK API: {e}")
+        raise
+
+# Инициализируем VK API
+try:
+    vk_session, longpoll, vk = init_vk_api()
+except Exception as e:
+    logging.error(f"Не удалось инициализировать VK API: {e}")
+    exit(1)
 
 # ===== ХРАНИЛИЩЕ =====
 def load_json(file):
@@ -65,11 +80,6 @@ def save_json(file, data):
 
 favorites = load_json(FAV_FILE)
 stats = load_json(STATS_FILE)
-
-# ===== ИНИЦИАЛИЗАЦИЯ VK =====
-vk_session = vk_api.VkApi(token=TOKEN)
-longpoll = VkBotLongPoll(vk_session, 236843733)  
-vk = vk_session.get_api()
 # ===== КЭШ =====
 class DataCache:
     def __init__(self):
@@ -82,8 +92,11 @@ class DataCache:
             r = requests.get(url, timeout=15)
             r.encoding = "cp1251"
             return list(csv.DictReader(io.StringIO(r.text), delimiter=";"))
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Ошибка загрузки CSV с {url}: {e}")
+            return []
         except Exception as e:
-            logging.error(f"Ошибка загрузки CSV: {e}")
+            logging.error(f"Неизвестная ошибка при загрузке CSV: {e}")
             return []
 
     def update(self):
@@ -92,18 +105,22 @@ class DataCache:
             self.parts = self.load_csv(PARTS_CSV)
             self.wheels = self.load_csv(WHEELS_CSV)
             self.donors = self.load_csv(DONORS_CSV)
+            print("База данных успешно обновлена")
         except Exception as e:
-            logging.error(f"Ошибка обновления базы: {e}")
+            logging.error(f"Критическая ошибка при обновлении базы: {e}")
 
-    def find_part(self, query):
+    def search_parts(self, query):
+        """Поиск деталей по названию или артикулу"""
         query = query.lower()
         results = []
         for part in self.parts:
-            if query in part.get('Название', '').lower() or query in part.get('Артикул', '').lower():
+            if query in part.get('Название', '').lower() or \
+               query in part.get('Артикул', '').lower():
                 results.append(part)
         return results
 
-    def find_wheels(self, query):
+    def search_wheels(self, query):
+        """Поиск дисков по производителю"""
         query = query.lower()
         results = []
         for wheel in self.wheels:
@@ -111,13 +128,22 @@ class DataCache:
                 results.append(wheel)
         return results
 
-    def find_donor(self, query):
+    def search_donors(self, query):
+        """Поиск доноров по марке или модели"""
         query = query.lower()
         results = []
         for donor in self.donors:
-            if query in donor.get('Марка', '').lower() or query in donor.get('Модель', '').lower():
+            if query in donor.get('Марка', '').lower() or \
+               query in donor.get('Модель', '').lower():
                 results.append(donor)
         return results
+
+    def get_part_details(self, part_id):
+        """Получение детальной информации о детали"""
+        for part in self.parts:
+            if part.get('ID') == part_id:
+                return part
+        return None
 
 # Создаем экземпляр кэша
 cache = DataCache()
@@ -128,324 +154,72 @@ try:
 except Exception as e:
     logging.error(f"Ошибка при первом обновлении данных: {e}")
 
-# ===== ДОБАВЛЕНО (чтобы не падало) =====
-user_index = {}
-user_results = {}
-
-def send(peer_id, text):
-    try:
-        vk.messages.send(
-            user_id=peer_id,
-            message=text,
-            random_id=0
-        )
-    except Exception as e:
-        logging.error(f"Ошибка отправки: {e}")
-
-# Функция для отображения найденной детали
-def show_part(peer_id):
-    index = user_index.get(peer_id, 0)
-    results = user_results.get(peer_id, [])
-
-    if index < len(results):
-        part = results[index]
-        message = f"Карточка детали:\n"
-        message += f"Название: {part.get('Название', 'Не указано')}\n"
-        message += f"Артикул: {part.get('Артикул', 'Не указан')}\n"
-        message += f"Цена: {part.get('Цена', 'Не указана')}\n"
-        message += f"Ссылка: {part.get('Ссылка', 'Нет ссылки')}"
-        send(peer_id, message)
-    else:
-        send(peer_id, "Нет данных для отображения")
-
-# Автообновление
+# Автообновление в отдельном потоке
 def auto_update():
     while True:
         try:
             cache.update()
         except Exception as e:
             logging.error(f"Ошибка автообновления: {e}")
-        time.sleep(300)
-
-threading.Thread(target=auto_update, daemon=True).start()
-
-
-            
-# ===== ГЛАВНЫЙ ЦИКЛ =====
-def run_bot():
-    print("🔥 VK BOT ULTRA ЗАПУЩЕН")
-    try:
-        for event in longpoll.listen():
-            if event.type == VkBotEventType.MESSAGE_NEW:
-                handle(event)
-    except Exception as e:
-        logging.error(f"Критическая ошибка: {e}")
-        time.sleep(5)  # пауза перед перезапуском
-        run_bot()  # перезапуск бота
-
-# ===== ОБРАБОТКА СООБЩЕНИЙ =====
-def handle(event):
-    msg = event.obj.message
-    peer_id = msg['peer_id']
-    text = msg.get('text', '').strip()
-
-    if not text:
-        send(peer_id, "Я получил сообщение, но оно не текстовое 😅")
-        return
-
-    # Приводим текст к нижнему регистру и убираем эмодзи/лишние пробелы
-    text_lower = text.lower()
-    text_clean = text_lower.replace("🚗", "").replace("🛞", "").replace("🚗", "").strip()
-
-    # ------------------------------
-    # 1. Обработка состояний пользователя (поиск запчастей, дисков, доноров)
-    # ------------------------------
-    state = user_state.get(peer_id)
-
-    if state == "parts":
-        track(peer_id, "search")
-        user_results[peer_id] = cache.find_part(text_clean)
-        user_index[peer_id] = 0
-
-        if user_results[peer_id]:
-            show_part(peer_id)
-        else:
-            send(peer_id, "❌ Деталь не найдена")
-        return
-
-    if state == "wheels":
-        track(peer_id, "search_wheels")
-        user_results[peer_id] = cache.find_wheels(text_clean)
-        user_index[peer_id] = 0
-
-        if user_results[peer_id]:
-            show_part(peer_id)
-        else:
-            send(peer_id, "❌ Диск не найден")
-        return
-
-    if state == "donors":
-        track(peer_id, "search_donors")
-        user_results[peer_id] = cache.find_donor(text_clean)
-        user_index[peer_id] = 0
-
-        if user_results[peer_id]:
-            show_part(peer_id)
-        else:
-            send(peer_id, "❌ Донор не найден")
-        return
-
-    # ------------------------------
-    # 2. Основные команды /start и кнопки
-    # ------------------------------
-    if text_clean in ["/start", "start", "начать"]:
-        send(peer_id, "Привет! 👋 Выберите команду:", keyboard=get_main_keyboard())
-        return
-
-    # Кнопки выбора
-    if "запчаст" in text_clean:
-        user_state[peer_id] = "parts"
-        send(peer_id, "Введите номер детали или код:")
-        return
-
-    if "диск" in text_clean:
-        user_state[peer_id] = "wheels"
-        send(peer_id, "Введите модель диска или производителя:")
-        return
-
-    if "донор" in text_clean:
-        user_state[peer_id] = "donors"
-        send(peer_id, "Введите марку и модель автомобиля:")
-        return
-
-    # Команда поиска
-    if text_clean == "поиск":
-        send(peer_id, "Введите поисковый запрос:")
-        user_state[peer_id] = "search"
-        return
-
-    # ------------------------------
-    # 3. Листание результатов (вперед/назад)
-    # ------------------------------
-    if text_clean in ["вперед", "следующий", "next"]:
-        idx = user_index.get(peer_id, 0) + 1
-        results = user_results.get(peer_id, [])
-        if idx < len(results):
-            user_index[peer_id] = idx
-            show_part(peer_id)
-        else:
-            send(peer_id, "🚫 Это последний результат")
-        return
-
-    if text_clean in ["назад", "back", "prev"]:
-        idx = user_index.get(peer_id, 0) - 1
-        if idx >= 0:
-            user_index[peer_id] = idx
-            show_part(peer_id)
-        else:
-            send(peer_id, "🚫 Это первый результат")
-        return
-
-    # ------------------------------
-    # 4. Если команда неизвестна
-    # ------------------------------
-    send(peer_id, "Не понял команду. Напишите /start или выберите кнопку на клавиатуре")
-
-# ===== КЭШ =====
-class DataCache:
-    def __init__(self):
-        self.parts = []
-        self.wheels = []
-        self.donors = []
-
-    def load_csv(self, url):
-        try:
-            r = requests.get(url)
-            r.encoding = "cp1251"
-            return list(csv.DictReader(io.StringIO(r.text), delimiter=";"))
-        except Exception as e:
-            logging.error(f"Ошибка загрузки CSV: {e}")
-            return []
-
-    def update(self):
-        try:
-            print("🔄 Обновление базы...")
-            self.parts = self.load_csv(PARTS_CSV)
-            self.wheels = self.load_csv(WHEELS_CSV)
-            self.donors = self.load_csv(DONORS_CSV)
-        except Exception as e:
-            logging.error(f"Ошибка обновления базы: {e}")
-
-# Создаем экземпляр кэша
-cache = DataCache()
-
-# Функция автообновления
-def auto_update():
-    while True:
-        try:
-            cache.update()
-        except Exception as e:
-            logging.error(f"Ошибка в автообновлении: {e}")
         time.sleep(300)  # Обновляем каждые 5 минут
 
 # Запускаем поток автообновления
 threading.Thread(target=auto_update, daemon=True).start()
 
-# Инициализируем начальное обновление
-cache.update()
+# Добавляем методы для работы с результатами поиска
+def show_part_info(peer_id, part):
+    message = f"Информация о детали:\n"
+    message += f"Название: {part.get('Название', 'Не указано')}\n"
+    message += f"Артикул: {part.get('Артикул', 'Не указан')}\n"
+    message += f"Цена: {part.get('Цена', 'Не указана')}\n"
+    message += f"Ссылка: {part.get('Ссылка', 'Нет ссылки')}"
+    send(peer_id, message)
+def show_donor_info(peer_id, donor):
+    try:
+        message = f"🚘 Информация о доноре:\n"
+        message += f"Марка: {donor.get('Марка', 'Не указана')}\n"
+        message += f"Модель: {donor.get('Модель', 'Не указана')}\n"
+        message += f"Год выпуска: {donor.get('Год', 'Не указан')}\n"
+        message += f"Цена: {donor.get('Цена', 'Не указана')}\n"
+        message += f"Пробег: {donor.get('Пробег', 'Не указан')}\n"
+        message += f"Город: {donor.get('Город', 'Не указан')}\n"
+        message += f"Ссылка: {donor.get('Ссылка', 'Нет ссылки')}"
+        
+        send(peer_id, message)
+    except Exception as e:
+        logging.error(f"Ошибка при отображении информации о доноре: {e}")
+        send(peer_id, "Произошла ошибка при получении информации о доноре")
 
-# Добавляем функцию поиска деталей
-def find_part(self, query):
-        query = query.lower()
-        results = []
-        for part in self.parts:
-            if query in part.get('Название', '').lower() or query in part.get('Номер', '').lower():
-                results.append(part)
-        return results
-    
-# Добавляем функцию поиска дисков
-def find_wheels(query):
-    query = query.lower()
-    results = []
-    for wheel in cache.wheels:
-        if query in wheel['R18'].lower():
-            results.append(wheel)
-    return results
-
-# Функция отображения найденной детали
-def show_part(peer_id):
-    index = user_index.get(peer_id, 0)
-    results = user_results.get(peer_id, [])
-    
-    if index < len(results):
-        part = results[index]
-        message = f"Карточка детали:\n"
+# Функция для показа информации о детали
+def show_part_info(peer_id, part):
+    try:
+        message = f"🚗 Информация о детали:\n"
         message += f"Название: {part.get('Название', 'Не указано')}\n"
         message += f"Артикул: {part.get('Артикул', 'Не указан')}\n"
         message += f"Цена: {part.get('Цена', 'Не указана')}\n"
+        message += f"Наличие: {part.get('Наличие', 'Не указано')}\n"
         message += f"Ссылка: {part.get('Ссылка', 'Нет ссылки')}"
+        
         send(peer_id, message)
-    else:
-        send(peer_id, "Нет данных для отображения")
+    except Exception as e:
+        logging.error(f"Ошибка при отображении информации о детали: {e}")
+        send(peer_id, "Произошла ошибка при получении информации о детали")
 
-# Функция отображения найденного донора
-def show_donor(peer_id):
-    index = user_index.get(peer_id, 0)
-    results = user_results.get(peer_id, [])
-    
-    if index < len(results):
-        donor = results[index]
-        message = f"Донор №{index + 1}\n"
-        message += f"Марка: {donor.get('Марка', 'Не указана')}\n"
-        message += f"Модель: {donor.get('Модель', 'Не указана')}\n"
-        message += f"Год: {donor.get('Год', 'Не указан')}\n"
-        message += f"Цена: {donor.get('Цена', 'Не указана')}"
-        send(peer_id, message)
-    else:
-        send(peer_id, "Нет данных для отображения")
-
-# Не забудьте добавить эти функции в ваш основной файл
-
-
-# ===== СОСТОЯНИЯ =====
-user_state = {}  # Хранит текущее состояние пользователя
-user_results = {}  # Хранит результаты поиска для пользователя
-user_index = {}  # Хранит текущий индекс в результатах поиска
-
-# ===== СТАТИСТИКА =====
-def track(user_id, action):
-    user_id = str(user_id)
-    if user_id not in stats:
-        stats[user_id] = {"search": 0, "views": 0}
-    
-    stats[user_id][action] += 1
-    save_json(STATS_FILE, stats)
-
-# ===== КНОПКИ =====
-def keyboard():
-    return json.dumps({
-        "one_time": False,
-        "buttons": [
-            [{"action": {"type": "text", "label": "🚗 Запчасти"}},
-             {"action": {"type": "text", "label": "🛞 Диски"}}],
-            [{"action": {"type": "text", "label": "🚘 Доноры"}},
-             {"action": {"type": "text", "label": "❤️ Избранное"}}],
-            [{"action": {"type": "text", "label": "⬅️"}},
-             {"action": {"type": "text", "label": "➡️"}}]
-        ]
-    })
-
-# ===== ОТПРАВКА СООБЩЕНИЙ =====
-def send(peer_id, text, keyboard=None):
+# Функция для показа информации о диске
+def show_wheel_info(peer_id, wheel):
     try:
-        vk.messages.send(
-            peer_id=peer_id,
-            message=text,
-            random_id=0,
-            keyboard=keyboard if keyboard else get_main_keyboard()
-        )
-    except vk_api.exceptions.ApiError as e:
-        logging.error(f"Ошибка отправки сообщения: {e}")
-        time.sleep(2)  # пауза перед повторной попыткой
-        send(peer_id, text, keyboard)  # повторная попытка отправки
+        message = f"🛞 Информация о диске:\n"
+        message += f"Производитель: {wheel.get('Производитель диска', 'Не указан')}\n"
+        message += f"Размер: {wheel.get('Размер', 'Не указан')}\n"
+        message += f"Цена: {wheel.get('Цена', 'Не указана')}\n"
+        message += f"Ссылка: {wheel.get('Ссылка', 'Нет ссылки')}"
+        
+        send(peer_id, message)
+    except Exception as e:
+        logging.error(f"Ошибка при отображении информации о диске: {e}")
+        send(peer_id, "Произошла ошибка при получении информации о диске")
 
-# ===== КНОПКИ =====
-def get_main_keyboard():
-    return json.dumps({
-        "one_time": False,
-        "buttons": [
-            [
-                {"action": {"type": "text", "label": "🚗 Запчасти"}, "color": "primary"},
-                {"action": {"type": "text", "label": "🛞 Диски"}, "color": "primary"}
-            ],
-            [
-                {"action": {"type": "text", "label": "🚘 Доноры"}, "color": "positive"},
-                {"action": {"type": "text", "label": "❤️ Избранное"}, "color": "negative"}
-            ]
-        ]
-    })
-
-# ===== ОБРАБОТКА СООБЩЕНИЙ =====
+# Обновляем функцию обработки сообщений
 def handle(event):
     msg = event.obj.message
     peer_id = msg['peer_id']
@@ -462,14 +236,196 @@ def handle(event):
         send(peer_id, "Привет! 👋 Выберите команду:")
         return
 
-    # Обработка основных кнопок
+    # Обработка поиска доноров
+    if user_state.get(peer_id) == "donors":
+        track(peer_id, "search_donors")
+        user_results[peer_id] = cache.search_donors(text)
+        user_index[peer_id] = 0
+
+        if user_results[peer_id]:
+            show_donor_info(peer_id, user_results[peer_id][0])
+        else:
+            send(peer_id, "❌ Донор не найден")
+        return
+    # Обработка навигации для доноров
+elif text_lower in ["➡️", "следующий"]:
+    if user_state.get(peer_id) == "donors":
+        try:
+            # Получаем текущий индекс
+            current_index = user_index.get(peer_id, 0)
+            # Получаем результаты поиска
+            results = user_results.get(peer_id, [])
+            
+            # Проверяем, есть ли следующие элементы
+            if current_index + 1 < len(results):
+                # Увеличиваем индекс
+                user_index[peer_id] = current_index + 1
+                # Показываем следующую запись
+                show_donor_info(peer_id, results[user_index[peer_id]])
+            else:
+                send(peer_id, "🚫 Это последний результат")
+                
+        except Exception as e:
+            logging.error(f"Ошибка при переходе к следующему донору: {e}")
+            send(peer_id, "Произошла ошибка при переходе к следующему результату")
+
+elif text_lower in ["⬅️", "предыдущий"]:
+    if user_state.get(peer_id) == "donors":
+        try:
+            # Получаем текущий индекс
+            current_index = user_index.get(peer_id, 0)
+            # Получаем результаты поиска
+            results = user_results.get(peer_id, [])
+            
+            # Проверяем, есть ли предыдущие элементы
+            if current_index > 0:
+                # Уменьшаем индекс
+                user_index[peer_id] = current_index - 1
+                # Показываем предыдущую запись
+                show_donor_info(peer_id, results[user_index[peer_id]])
+            else:
+                send(peer_id, "🚫 Это первый результат")
+                
+        except Exception as e:
+            logging.error(f"Ошибка при переходе к предыдущему донору: {e}")
+            send(peer_id, "Произошла ошибка при переходе к предыдущему результату")
+
+# Обработка поиска доноров
+elif user_state.get(peer_id) == "donors":
+    try:
+        track(peer_id, "search_donors")
+        # Выполняем поиск
+        user_results[peer_id] = cache.search_donors(text)
+        user_index[peer_id] = 0
+        
+        if user_results[peer_id]:
+            # Показываем первый результат
+            show_donor_info(peer_id, user_results[peer_id][0])
+        else:
+            send(peer_id, "❌ Донор не найден")
+            
+    except Exception as e:
+        logging.error(f"Ошибка при поиске донора: {e}")
+        send(peer_id, "Произошла ошибка при поиске донора")
+
+# ===== ДОБАВЛЯЕМ ФУНКЦИИ ПОКАЗА ИНФОРМАЦИИ =====
+
+def show_part(peer_id):
+    try:
+        index = user_index.get(peer_id, 0)
+        results = user_results.get(peer_id, [])
+        
+        if index < len(results):
+            part = results[index]
+            message = f"🚗 Карточка детали:\n"
+            message += f"Название: {part.get('Название', 'Не указано')}\n"
+            message += f"Артикул: {part.get('Артикул', 'Не указан')}\n"
+            message += f"Цена: {part.get('Цена', 'Не указана')}\n"
+            message += f"Ссылка: {part.get('Ссылка', 'Нет ссылки')}"
+            send(peer_id, message)
+        else:
+            send(peer_id, "Нет данных для отображения")
+    except Exception as e:
+        logging.error(f"Ошибка при показе детали: {e}")
+
+def show_donor(peer_id):
+    try:
+        index = user_index.get(peer_id, 0)
+        results = user_results.get(peer_id, [])
+        
+        if index < len(results):
+            donor = results[index]
+            message = f"🚘 Карточка донора:\n"
+            message += f"Марка: {donor.get('Марка', 'Не указана')}\n"
+            message += f"Модель: {donor.get('Модель', 'Не указана')}\n"
+            message += f"Год: {donor.get('Год', 'Не указан')}\n"
+            message += f"Цена: {donor.get('Цена', 'Не указана')}\n"
+            message += f"Ссылка: {donor.get('Ссылка', 'Нет ссылки')}"
+            send(peer_id, message)
+        else:
+            send(peer_id, "Нет данных для отображения")
+    except Exception as e:
+        logging.error(f"Ошибка при показе донора: {e}")
+
+# ===== ДОБАВЛЯЕМ ПОИСК ПО КРИТЕРИЯМ =====
+
+def find_part(query):
+    query = query.lower()
+    results = []
+    for part in cache.parts:
+        if query in part.get('Название', '').lower() or query in part.get('Артикул', '').lower():
+            results.append(part)
+    return results
+
+def find_donor(query):
+    query = query.lower()
+    results = []
+    for donor in cache.donors:
+        if query in donor.get('Марка', '').lower() or query in donor.get('Модель', '').lower():
+            results.append(donor)
+    return results
+
+# ===== ДОБАВЛЯЕМ ИЗБРАННОЕ =====
+
+def add_to_favorites(peer_id, item):
+    if peer_id not in favorites:
+        favorites[peer_id] = []
+    if item not in favorites[peer_id]:
+        favorites[peer_id].append(item)
+        save_json(FAV_FILE, favorites)
+        send(peer_id, "Добавлено в избранное!")
+    else:
+        send(peer_id, "Уже в избранном!")
+
+def show_favorites(peer_id):
+    fav_items = favorites.get(peer_id, [])
+    if fav_items:
+        message = "❤️ Избранное:\n"
+        for i, item in enumerate(fav_items, 1):
+            message += f"{i}. {item.get('Название', 'Не указано')}\n"
+        send(peer_id, message)
+    else:
+        send(peer_id, "Избранное пустое")
+
+# ===== ОБНОВЛЯЕМ HANDLE() =====
+
+def handle(event):
+    msg = event.obj.message
+    peer_id = msg['peer_id']
+    text = msg.get('text', '').strip()
+
+    if not text:
+        send(peer_id, "Я получил сообщение, но оно не текстовое 😅")
+        return
+
+    text_lower = text.lower()
+
+    # Обработка команд
+    if text_lower in ["/start", "начать"]:
+        send(peer_id, "Привет! 👋 Выберите команду:", keyboard=get_main_keyboard())
+        return
+
+    # Обработка кнопки "Запчасти"
     if text_lower == "🚗 запчасти":
         user_state[peer_id] = "parts"
-        send(peer_id, "Введи номер детали или код:")
+        send(peer_id, "Введите номер детали или код:")
         return
+
+    # Обработка кнопки "Диски"
     elif text_lower == "🛞 диски":
         user_state[peer_id] = "wheels"
-        send(peer_id, "Введи бренд диска:")
+        send(peer_id, "Введите бренд диска:")
+        return
+
+    # Обработка кнопки "Доноры"
+    elif text_lower == "🚘 доноры":
+        user_state[peer_id] = "donors"
+        send(peer_id, "Введите марку автомобиля:")
+        return
+
+    # Обработка кнопки "Избранное"
+    elif text_lower == "❤️ избранное":
+        show_favorites(peer_id)
         return
 
     # Обработка навигации
@@ -489,43 +445,42 @@ def handle(event):
             elif user_state[peer_id] == "donors":
                 show_donor(peer_id)
 
-    # Обработка поиска
-    mode = user_state.get(peer_id)
-    
-    if mode == "parts":
+    # Обработка поиска деталей
+    if user_state.get(peer_id) == "parts":
         track(peer_id, "search")
-        user_results[peer_id] = find_part(text)
+        user_results[peer_id] = cache.search_parts(text)
         user_index[peer_id] = 0
         
         if user_results[peer_id]:
             show_part(peer_id)
         else:
-            send(peer_id, "❌ Ничего не найдено")
+            send(peer_id, "❌ Детали не найдены")
 
-    elif mode == "wheels":
-        results = find_wheels(text)
+    # Обработка поиска дисков
+    elif user_state.get(peer_id) == "wheels":
+        results = cache.search_wheels(text)
         if results:
             send(peer_id, f"🛞 Найденные диски: {results[0].get('Производитель диска')}")
         else:
             send(peer_id, "❌ Диски не найдены")
 
-# ===== ГЛАВНЫЙ ЦИКЛ =====
-def run_bot():
-    print("🔥 VK BOT ULTRA ЗАПУЩЕН")
-    while True:
-        try:
-            for event in longpoll.listen():
-                if event.type == VkBotEventType.MESSAGE_NEW:
-                    handle(event)
-                    
-        except vk_api.exceptions.ApiError as e:
-            print(f"API ошибка: {e}. Переподключение...")
-            time.sleep(5)  # пауза перед повторным подключением
-            vk_session, longpoll, vk = init_vk_api()
-            
-        except Exception as e:
-            logging.error(f"Критическая ошибка: {e}")
-            time.sleep(5)  # пауза перед повторной попыткой
+    # Обработка поиска доноров
+    elif user_state.get(peer_id) == "donors":
+        results = cache.search_donors(text)
+        if results:
+            user_results[peer_id] = results
+            user_index[peer_id] = 0
+            show_donor(peer_id)
+        else:
+            send(peer_id, "❌ Доноры не найдены")
 
+    # Если команда не распознана
+    else:
+        send(peer_id, "Неизвестная команда. Используйте кнопки меню или команду /start")
+
+# Запуск бота
 if __name__ == "__main__":
-    run_bot()
+    try:
+        run_bot()
+    except Exception as e:
+        logging.error(f"Критическая ошибка при запуске бота: {e}")
