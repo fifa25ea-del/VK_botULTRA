@@ -480,18 +480,14 @@ def send_wheel_card(peer_id, index):
     try:
         track(peer_id, "views")
         results = user_results.get(peer_id, [])
+        
         if not results or index >= len(results):
+            send(peer_id, "Нет доступных записей")
             return
         
         part = results[index]
-def send_wheel_card(peer_id, index):
-    try:
-        track(peer_id, "views")
-        results = user_results.get(peer_id, [])
-        if not results or index >= len(results):
-            return
         
-        part = results[index]
+        # Формируем основную информацию
         text = f"""🛞 {part.get('Производитель диска', '')} {part.get('Модель диска', '')}
 R{part.get('Диаметр диска', '')}
 Ширина: {part.get('Ширина диска', '')}
@@ -499,18 +495,30 @@ R{part.get('Диаметр диска', '')}
 Цена: {part.get('Цена', '')} ₽
 ({index+1}/{len(results)})"""
         
-        # Добавляем информацию о крепеже и других параметрах, если они есть
+        # Добавляем дополнительную информацию, если она есть
+        additional_info = []
+        
         mounting = part.get('Крепеж', '')
         if mounting:
-            text += f"\nКрепеж: {mounting}"
+            additional_info.append(f"Крепеж: {mounting}")
             
         pcd = part.get('PCD', '')
         if pcd:
-            text += f"\nPCD: {pcd}"
+            additional_info.append(f"PCD: {pcd}")
             
+        h_size = part.get('H-размер', '')
+        if h_size:
+            additional_info.append(f"H-размер: {h_size}")
+            
+        if additional_info:
+            text += "\n" + "\n".join(additional_info)
+            
+        # Отправляем сообщение
         send(peer_id, text)
+        
     except Exception as e:
         logging.error(f"Ошибка отправки карточки диска: {e}")
+        send(peer_id, "Произошла ошибка при отправке карточки диска")
 
 # Допишем функцию отправки сообщений с проверкой ошибок
 def send(peer_id, text, keyboard=None):
