@@ -336,37 +336,32 @@ def navigate(peer_id, direction):
 def run_bot():
     print("🔥 VK BOT ULTRA ЗАПУЩЕН")
     try:
-        while True:
-            try:
-                for event in longpoll.listen():
-                    try:
-                        handle(event)
-                    except Exception as e:
-                        logging.error(f"Ошибка обработки события: {e}")
-            except Exception as e:
-                logging.error(f"Ошибка в основном цикле: {e}")
-                time.sleep(5)  # пауза перед повторной попыткой
-    except KeyboardInterrupt:
-        print("Бот остановлен вручную")
+        for event in longpoll.listen():
+            handle(event)
     except Exception as e:
-        logging.critical(f"Критическая ошибка в главном цикле: {e}")
+        logging.error(f"Критическая ошибка: {e}")
 
 # ===== СТАРТ БОТА =====
 if __name__ == "__main__":
     try:
-        # Инициализация кэша
+        # Создаем экземпляр DataCache
         cache = DataCache()
+        
+        # Загружаем базу данных
         cache.update()
         
-        # Запуск потока обновления
+        # Запускаем автообновление в отдельном потоке
         threading.Thread(target=auto_update, daemon=True).start()
         
-        # Запуск основного цикла
+        # Запускаем бота
         run_bot()
         
     except Exception as e:
-        logging.critical(f"Ошибка при запуске бота: {e}")
+        logging.error(f"Ошибка при запуске бота: {e}")
         exit(1)
+
+# Остальные функции остаются без изменений
+
 
 # ===== ДОПОЛНИТЕЛЬНЫЕ ФУНКЦИИ =====
 
