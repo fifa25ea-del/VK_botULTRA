@@ -25,8 +25,36 @@ WHEELS_CSV = "https://baz-on.ru/export/c592/77023/drom-wheels.csv"
 FAV_FILE = "favorites.json"
 STATS_FILE = "stats.json"
 
+# Функция инициализации файлов
+def init_files():
+    try:
+        # Создаем директорию для файлов, если её нет
+        if not os.path.exists('data'):
+            os.makedirs('data')
+            
+        # Обновляем пути к файлам
+        global FAV_FILE, STATS_FILE
+        FAV_FILE = os.path.join('data', 'favorites.json')
+        STATS_FILE = os.path.join('data', 'stats.json')
+        
+        # Создаем файлы, если их нет
+        for file in [FAV_FILE, STATS_FILE]:
+            if not os.path.exists(file):
+                with open(file, 'w', encoding='utf-8') as f:
+                    f.write('{}')  # Создаем пустой JSON файл
+            
+            # Проверяем права доступа
+            if not os.access(file, os.W_OK):
+                raise PermissionError(f"Нет прав записи в файл {file}")
+                
+    except Exception as e:
+        print(f"Ошибка при инициализации файлов: {e}")
+        exit(1)
 
-# Инициализация VK API с обработкой ошибок
+# Инициализируем файлы
+init_files()
+
+# Функция инициализации VK API
 def init_vk_api():
     max_retries = 5
     retry_delay = 2  # задержка между попытками в секундах
@@ -67,11 +95,6 @@ def save_json(file, data):
 
 favorites = load_json(FAV_FILE)
 stats = load_json(STATS_FILE)
-
-# ===== ИНИЦИАЛИЗАЦИЯ VK =====
-vk_session = vk_api.VkApi(token=TOKEN)
-longpoll = VkBotLongPoll(vk_session, 236843733)  
-vk = vk_session.get_api()
 
 # ===== ГЛАВНЫЙ ЦИКЛ =====
 def run_bot():
