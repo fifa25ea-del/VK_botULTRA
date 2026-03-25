@@ -1,8 +1,8 @@
-
 # =========================
 # VK BOT ULTRA (ТОП ВЕРСИЯ)
 # =========================
 
+import os
 import vk_api
 import requests
 import csv
@@ -11,9 +11,13 @@ import threading
 import time
 import json
 from vk_api.bot_longpoll import VkBotLongPoll, VkBotEventType
+import logging
+
+# Настройка логирования
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # ===== НАСТРОЙКИ =====
-TOKEN = "vk1.a.Fmog-6rNUAOTYVwC9-SJBo9dC5a87pMUET1xK_9Raxhk_l5V4Zqx1jCtWJXV7tZLappcJR6fIizfOv9X0OhMLnJbqjzej47aY5evfAj53IvfIgUo2w_vhBpjLGbgiBvaPZ3GrwFTdtR9D0TSGstCQM-L7aFf8_j6oqTxiRV7saahsFCInnvs7u53dtgLJB4lNI_apA5PsIpDqA3IWViAlA"
+TOKEN = os.getenv("vk1.a.Fmog-6rNUAOTYVwC9-SJBo9dC5a87pMUET1xK_9Raxhk_l5V4Zqx1jCtWJXV7tZLappcJR6fIizfOv9X0OhMLnJbqjzej47aY5evfAj53IvfIgUo2w_vhBpjLGbgiBvaPZ3GrwFTdtR9D0TSGstCQM-L7aFf8_j6oqTxiRV7saahsFCInnvs7u53dtgLJB4lNI_apA5PsIpDqA3IWViAlA")
 ADMIN_ID = 888230055
 
 DONORS_CSV = "https://baz-on.ru/export/c592/5c6ca/stuttgart-site-carsrc.csv"
@@ -24,9 +28,6 @@ FAV_FILE = "favorites.json"
 STATS_FILE = "stats.json"
 
 # ===== VK INIT =====
-from vk_api.bot_longpoll import VkBotLongPoll, VkBotEventType
-import vk_api
-
 vk_session = vk_api.VkApi(token=TOKEN)
 longpoll = VkBotLongPoll(vk_session, 236843733)  
 vk = vk_session.get_api()
@@ -39,12 +40,16 @@ class DataCache:
         self.donors = []
 
     def load_csv(self, url):
-        r = requests.get(url)
-        r.encoding = "cp1251"
-        return list(csv.DictReader(io.StringIO(r.text), delimiter=";"))
+        try:
+            r = requests.get(url, timeout=10)
+            r.encoding = "cp1251"
+            return list(csv.DictReader(io.StringIO(r.text), delimiter=";"))
+        except Exception as e:
+            logging.error(f"Ошибка загрузки CSV {url}: {e}")
+            return []
 
     def update(self):
-        print("🔄 Обновление базы...")
+        logging.info("🔄 Обновление базы...")
         self.parts = self.load_csv(PARTS_CSV)
         self.wheels = self.load_csv(WHEELS_CSV)
         self.donors = self.load_csv(DONORS_CSV)
@@ -55,7 +60,10 @@ cache.update()
 # ===== АВТООБНОВЛЕНИЕ =====
 def auto_update():
     while True:
-        cache.update()
+        try:
+            cache.update()
+        except Exception as e:
+            logging.error(f"Ошибка автообновления: {e}")
         time.sleep(300)
 
 threading.Thread(target=auto_update, daemon=True).start()
@@ -65,12 +73,16 @@ def load_json(file):
     try:
         with open(file, "r", encoding="utf-8") as f:
             return json.load(f)
-    except:
+    except Exception as e:
+        logging.error(f"Ошибка загрузки {file}: {e}")
         return {}
 
 def save_json(file, data):
-    with open(file, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+    try:
+        with open(file, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logging.error(f"Ошибка сохранения {file}: {e}")
 
 favorites = load_json(FAV_FILE)
 stats = load_json(STATS_FILE)
@@ -84,10 +96,17 @@ user_index = {}
 def track(user_id, action):
     user_id = str(user_id)
     if user_id not in stats:
-        stats[user_id] = {"search":0,"views":0}
-
+        stats[user_id] = {"search": 0, "views": 0}
     stats[user_id][action] += 1
     save_json(STATS_FILE, stats)
+
+# ===== КНОПКИ =====
+def keyboard():
+    return json.dumps({
+        "one_time": False,
+        "buttons": [
+            [{"action": {"type": "text", "label": "🚗 Запчасти"}},
+             {"action": {"type": "text",
 
 # ===== КНОПКИ =====
 def keyboard():
@@ -161,6 +180,7 @@ def get_main_keyboard():
         ]
     }
     return json.dumps(keyboard, ensure_ascii=False)
+
 # ===== ОБРАБОТКА СООБЩЕНИЙ =====
 def handle(event):
     msg = event.obj.message
