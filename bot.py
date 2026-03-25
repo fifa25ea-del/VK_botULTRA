@@ -39,23 +39,15 @@ def init_files():
 
 init_files()
 
-# ===== ИНИЦИАЛИЗАЦИЯ VK API =====
-def init_vk_api():
-    vk_session = vk_api.VkApi(token=TOKEN)
-    longpoll = VkBotLongPoll(vk_session, GROUP_ID)
-    vk = vk_session.get_api()
-    print("Подключение к VK API успешно")
-    return vk_session, longpoll, vk
-
 vk_session = vk_api.VkApi(token=TOKEN)
-longpoll = VkBotLongPoll(vk_session, GROUP_ID)
 vk = vk_session.get_api()
 
 try:
-    vk_session, longpoll, vk = init_vk_api()
+    longpoll = VkBotLongPoll(vk_session, GROUP_ID)
+    print("✅ VK LongPoll подключен")
 except Exception as e:
-    logging.error(f"Не удалось инициализировать VK API: {e}")
-    exit(1)
+    logging.critical(f"Ошибка LongPoll: {e}")
+    exit(1)  # обязательно останавливаем бота
 
 # ===== ХРАНИЛИЩЕ =====
 def load_json(file):
