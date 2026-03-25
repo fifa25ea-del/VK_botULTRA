@@ -15,12 +15,12 @@ import logging
 
 # Проверка прав доступа
 if not os.access(FAV_FILE, os.W_OK):
-logging.error(f"Нет прав на запись в файл {FAV_FILE}")
-exit(1)
+    logging.error(f"Нет прав на запись в файл {FAV_FILE}")
+    exit(1)
 
 if not os.access(STATS_FILE, os.W_OK):
-logging.error(f"Нет прав на запись в файл {STATS_FILE}")
-exit(1) 
+    logging.error(f"Нет прав на запись в файл {STATS_FILE}")
+    exit(1) 
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
