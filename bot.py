@@ -254,17 +254,17 @@ class DataCache:
             logging.error(f"Критическая ошибка при обновлении базы: {e}")
 
     def search_parts(self, query):
-    """Поиск всех деталей с точным совпадением номера или артикула"""
-    query = query.strip().lower()
-    results = []
-    for part in self.parts:
-        # Проверяем и номер, и артикул (на случай, если пользователь ввел артикул)
-        part_number = safe_get(part, 'Номер', '').lower()
-        part_article = safe_get(part, 'Артикул', '').lower()
-        
-        if query == part_number or query == part_article:
-            results.append(part)
-    return results
+        """Поиск всех деталей с точным совпадением номера или артикула"""
+        query = query.strip().lower()
+        results = []
+        for part in self.parts:
+            # Проверяем и номер, и артикул (на случай, если пользователь ввел артикул)
+            part_number = safe_get(part, 'Номер', '').lower()
+            part_article = safe_get(part, 'Артикул', '').lower()
+            
+            if query == part_number or query == part_article:
+                results.append(part)
+        return results
 
     def search_wheels(self, query):
         """Поиск дисков по производителю"""
