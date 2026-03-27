@@ -201,11 +201,13 @@ threading.Thread(target=auto_update, daemon=True).start()
 # Добавляем методы для работы с результатами поиска
 def show_part_info(peer_id, part):
     message = f"Информация о детали:\n"
-    message += f"Название: {part.get('Название', 'Не указано')}\n"
+    message += f"Название: {part.get('Наименование', 'Не указано')}\n"
     message += f"Артикул: {part.get('Артикул', 'Не указан')}\n"
+    message += f"Цена: {part.get('Номер', 'Не указана')}\n"
     message += f"Цена: {part.get('Цена', 'Не указана')}\n"
-    message += f"Ссылка: {part.get('Ссылка', 'Нет ссылки')}"
+    message += f"Цена: {part.get('Комментарий', 'Не указана')}\n"
     send(peer_id, message)
+
 def show_donor_info(peer_id, donor):
     try:
         message = f"🚘 Информация о доноре:\n"
