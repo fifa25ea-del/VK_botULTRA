@@ -83,6 +83,23 @@ def get_main_keyboard():
     return keyboard.get_keyboard()
 
 
+def get_first_photo(photo_field):
+    """
+    Извлекает первую ссылку на фото из поля, содержащего несколько URL через запятую.
+    Возвращает None, если фото нет.
+    """
+    if not photo_field:
+        return None
+
+    # Разделяем строку по запятым и убираем пробелы
+    photo_urls = [url.strip() for url in photo_field.split(',') if url.strip()]
+
+    # Берём первую ссылку, если есть хотя бы одна
+    if photo_urls:
+        return photo_urls[0]
+    return None
+
+
 # ===== ОТПРАВКА СООБЩЕНИЙ =====
 def send(peer_id, text, keyboard=None):
     try:
