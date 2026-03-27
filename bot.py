@@ -12,6 +12,7 @@ import time
 import json
 from vk_api.bot_longpoll import VkBotLongPoll, VkBotEventType
 import logging
+import chardet
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -48,6 +49,16 @@ def init_files():
 
 # Инициализируем файлы
 init_files()
+
+def load_csv(self, url):
+    try:
+        r = requests.get(url, timeout=15)
+        detected = chardet.detect(r.content)
+        r.encoding = detected['encoding']
+        return list(csv.DictReader(io.StringIO(r.text), delimiter=";"))
+    except Exception as e:
+        logging.error(f"Ошибка загрузки CSV с {url}: {e}")
+        return []
 
 # ===== ИНИЦИАЛИЗАЦИЯ VK API =====
 def init_vk_api():
@@ -330,62 +341,63 @@ def show_favorites(peer_id):
 
 
 def handle(event):
-    print("СРАБОТАЛ HANDLE")
-    print(event.obj.message)
     msg = event.obj.message
     peer_id = msg['peer_id']
     text = msg.get('text', '').strip()
     text_lower = text.lower()
 
-    print("TEXT:", text)
-    print("STATE:", user_state.get(peer_id))
+    try:
+        if not text:
+            return
 
-    # ===== КНОПКИ (ВСЕГДА СНАЧАЛА) =====
-    if text_lower in ["🚗 запчасти", "запчасти"]:
-        user_state[peer_id] = "parts"
-        send(peer_id, "Введите номер детали:")
-        return
+        # Обработка кнопок
+        if text_lower in ["🚗 запчасти", "запчасти"]:
+            user_state[peer_id] = "parts"
+            send(peer_id, "Введите номер детали:")
+            return
+        elif text_lower in ["🛞 диски", "диски"]:
+            user_state[peer_id] = "wheels"
+            send(peer_id, "Введите бренд диска:")
+            return
+        elif text_lower in ["🚘 доноры", "доноры"]:
+            user_state[peer_id] = "donors"
+            send(peer_id, "Введите марку авто:")
+            return
+        elif text_lower in ["❤️ избранное", "избранное"]:
+            show_favorites(peer_id)
+            return
 
-    elif text_lower in ["🛞 диски", "диски"]:
-        user_state[peer_id] = "wheels"
-        send(peer_id, "Введите бренд диска:")
-        return
-
-    elif text_lower in ["🚘 доноры", "доноры"]:
-        user_state[peer_id] = "donors"
-        send(peer_id, "Введите марку авто:")
-        return
-
-    elif text_lower in ["❤️ избранное", "избранное"]:
-        show_favorites(peer_id)
-        return
-
-    # ===== ПОИСК =====
-    if user_state.get(peer_id) == "parts":
-        results = cache.search_parts(text)
-        if results:
-            user_results[peer_id] = results
-            user_index[peer_id] = 0
-            show_part(peer_id)
-        else:
-            send(peer_id, "❌ Детали не найдены")
-
-    elif user_state.get(peer_id) == "wheels":
-        results = cache.search_wheels(text)
-        if results:
-            show_wheel_info(peer_id, results[0])
-        else:
-            send(peer_id, "❌ Диски не найдены")
-
-    elif user_state.get(peer_id) == "donors":
-        results = cache.search_donors(text)
-        if results:
-            user_results[peer_id] = results
-            user_index[peer_id] = 0
-            show_donor(peer_id)
-        else:
-            send(peer_id, "❌ Доноры не найдены")
-
+        # Поиск
+        current_state = user_state.get(peer_id)
+        if current_state == "parts":
+            results = cache.search_parts(text)
+            if results:
+                user_results[peer_id] = results
+                user_index[peer_id] = 0
+                show_part(peer_id)
+                log_search(peer_id, text, "parts", len(results))
+            else:
+                send(peer_id, "❌ Детали не найдены")
+        elif current_state == "wheels":
+            results = cache.search_wheels(text)
+            if results:
+                show_wheel_info(peer_id, results[0])
+                log_search(peer_id, text, "wheels", len(results))
+            else:
+                send(peer_id, "❌ Диски не найдены")
+        elif current_state == "donors":
+            results = cache.search_donors(text)
+            if results:
+                user_results[peer_id] = results
+                user_index[peer_id] = 0
+                show_donor(peer_id)
+                log_search(peer_id, text, "donors", len(results))
+            else:
+                send(peer_id, "❌ Доноры не найдены")
+    except Exception as e:
+        logging.error(f"Ошибка в handle для {peer_id}: {e}")
+        send(peer_id, "Произошла ошибка. Попробуйте позже.")
+        
 # Запуск бота
 # ===== ГЛАВНЫЙ ЦИКЛ =====
 def run_bot():
