@@ -317,6 +317,8 @@ def show_favorites(peer_id):
         send(peer_id, "Избранное пустое")
 
 # ===== ОБНОВЛЯЕМ HANDLE() =====
+print("СРАБОТАЛ HANDLE")
+print(event.obj.message)
 
 def handle(event):
     msg = event.obj.message
