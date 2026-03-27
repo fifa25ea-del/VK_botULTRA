@@ -258,8 +258,10 @@ def show_part(peer_id):
             message = "🚗 Карточка детали:\n"
             message += f"Название: {part.get('Наименование', 'Не указано')}\n"
             message += f"Артикул: {part.get('Артикул', 'Не указан')}\n"
+            message += f"Номер: {part.get('Номер', 'Не указан')}\n"
             message += f"Цена: {part.get('Цена', 'Не указана')}\n"
-            message += f"Ссылка: {part.get('Ссылка', 'Нет ссылки')}"
+            message += f"Комментарий: {part.get('Комментарий', 'Не указан')}"
+        
             send(peer_id, message)
         else:
             send(peer_id, "Нет данных для отображения")
