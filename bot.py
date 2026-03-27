@@ -12,7 +12,7 @@ import time
 import json
 from vk_api.bot_longpoll import VkBotLongPoll, VkBotEventType
 import logging
-from urllib.parse import urlpars
+from urllib.parse import urlparse
 
 
 # Настройка логирования
