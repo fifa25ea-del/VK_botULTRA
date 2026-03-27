@@ -14,6 +14,16 @@ from vk_api.bot_longpoll import VkBotLongPoll, VkBotEventType
 import logging
 import chardet
 
+def load_csv(self, url):
+    try:
+        r = requests.get(url, timeout=15)
+        detected = chardet.detect(r.content)
+        r.encoding = detected['encoding']
+        return list(csv.DictReader(io.StringIO(r.text), delimiter=";"))
+    except Exception as e:
+        logging.error(f"Ошибка загрузки CSV с {url}: {e}")
+        return []
+
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -49,16 +59,6 @@ def init_files():
 
 # Инициализируем файлы
 init_files()
-
-def load_csv(self, url):
-    try:
-        r = requests.get(url, timeout=15)
-        detected = chardet.detect(r.content)
-        r.encoding = detected['encoding']
-        return list(csv.DictReader(io.StringIO(r.text), delimiter=";"))
-    except Exception as e:
-        logging.error(f"Ошибка загрузки CSV с {url}: {e}")
-        return []
 
 # ===== ИНИЦИАЛИЗАЦИЯ VK API =====
 def init_vk_api():
