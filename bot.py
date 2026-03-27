@@ -238,25 +238,6 @@ def show_wheel_info(peer_id, wheel):
         logging.error(f"Ошибка при отображении информации о диске: {e}")
         send(peer_id, "Произошла ошибка при получении информации о диске")
     
-    # Обработка поиска доноров
-    elif user_state.get(peer_id) == "donors":
-        try:
-            track(peer_id, "search_donors")
-            # Выполняем поиск
-            user_results[peer_id] = cache.search_donors(text)
-            user_index[peer_id] = 0
-            
-            if user_results[peer_id]:
-                # Показываем первый результат
-                show_donor_info(peer_id, user_results[peer_id][0])
-            else:
-                send(peer_id, "❌ Донор не найден")
-                
-        except Exception as e:
-            logging.error(f"Ошибка при поиске донора: {e}")
-            send(peer_id, "Произошла ошибка при поиске донора")
-    
-    # ===== ДОБАВЛЯЕМ ФУНКЦИИ ПОКАЗА ИНФОРМАЦИИ =====
 
 def show_part(peer_id):
     try:
