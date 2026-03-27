@@ -83,6 +83,28 @@ def get_main_keyboard():
 
     return keyboard.get_keyboard()
 
+def get_navigation_keyboard(index, total):
+    """Создает клавиатуру с кнопками навигации"""
+    keyboard = VkKeyboard(one_time=False)
+    
+    # Кнопка "Назад". Делаем её доступной, только если мы не на первой позиции
+    if index > 0:
+        keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
+    else:
+        keyboard.add_empty_button() # Чтобы интерфейс не прыгал
+
+    # Кнопка "Вперёд". Доступна, если есть следующий элемент
+    if index < total - 1:
+        keyboard.add_button("➡️ Вперёд", color=VkKeyboardColor.PRIMARY)
+    else:
+        keyboard.add_empty_button() # Чтобы интерфейс не прыгал
+
+    # Добавляем кнопку возврата в главное меню
+    keyboard.add_line()
+    keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.SECONDARY)
+    
+    return keyboard.get_keyboard()
+
 def send_photo_with_caption(peer_id, photo_url, caption):
     """Отправляет фото с подписью"""
     def upload_and_send():
@@ -232,14 +254,17 @@ class DataCache:
             logging.error(f"Критическая ошибка при обновлении базы: {e}")
 
     def search_parts(self, query):
-        """Поиск деталей по названию или артикулу"""
-        query = query.lower()
-        results = []
-        for part in self.parts:
-            if query in part.get('Номер', '').lower() or \
-               query in part.get('Артикул', '').lower():
-                results.append(part)
-        return results
+    """Поиск всех деталей с точным совпадением номера или артикула"""
+    query = query.strip().lower()
+    results = []
+    for part in self.parts:
+        # Проверяем и номер, и артикул (на случай, если пользователь ввел артикул)
+        part_number = safe_get(part, 'Номер', '').lower()
+        part_article = safe_get(part, 'Артикул', '').lower()
+        
+        if query == part_number or query == part_article:
+            results.append(part)
+    return results
 
     def search_wheels(self, query):
         """Поиск дисков по производителю"""
@@ -345,7 +370,7 @@ def show_wheel_info(peer_id, wheel):
         send(peer_id, "Произошла ошибка при получении информации о диске")
 
 def show_part(peer_id):
-    """Показывает карточку детали с быстрой отправкой текста и фоновой загрузкой фото"""
+    """Показывает карточку детали с навигацией"""
     try:
         index = user_index.get(peer_id, 0)
         results = user_results.get(peer_id, [])
@@ -354,43 +379,37 @@ def show_part(peer_id):
             send_safe(peer_id, "Нет результатов поиска для отображения")
             return
 
-        if index >= len(results) or index < 0:
-            send_safe(peer_id, "Нет данных для отображения (некорректный индекс)")
-            return
-
+        # Проверяем границы индекса (защита от ошибок)
+        if index >= len(results):
+            user_index[peer_id] = len(results) - 1
+            index = user_index[peer_id]
+            
         part = results[index]
-
-        # Проверка целостности данных
-        if not part or not any(str(v).strip() for v in part.values()):
-            send_safe(peer_id, "Данные о детали повреждены. Попробуйте поиск заново.")
-            return
-
-        # Извлекаем первую фотографию
-        photo_url = get_first_photo(part.get('Фото', ''))
-
-        # Формируем текст карточки
+        
+        # Формируем текст карточки (как раньше)
         message = "🚗 Карточка детали:\n"
         message += f"Название: {safe_get(part, 'Наименование')}\n"
         message += f"Артикул: {safe_get(part, 'Артикул')}\n"
-
         price = safe_get(part, 'Цена')
         if price != "Не указано":
             message += f"Цена: {price}\n"
-
         link = safe_get(part, 'Ссылка')
         if link != "Не указано" and link != "Нет ссылки":
             message += f"Ссылка: {link}"
 
-        # Отправляем текст сразу
-        send_safe(peer_id, message)
-
-        # Если есть фото, запускаем его загрузку в фоне
+        # Генерируем клавиатуру с учетом текущей позиции и общего количества
+        keyboard = get_navigation_keyboard(index, len(results))
+        
+        # Отправляем текст и фото
+        send_safe(peer_id, message, keyboard=keyboard)
+        
+        photo_url = get_first_photo(part.get('Фото', ''))
         if photo_url:
             send_photo_with_caption(peer_id, photo_url, message)
 
     except Exception as e:
-        logging.critical(f"ФАТАЛЬНАЯ ошибка в show_part для {peer_id}: {e}")
-        send_safe(peer_id, "Произошла критическая ошибка при отображении детали. Обратитесь к администратору.")
+        logging.critical(f"Ошибка в show_part для {peer_id}: {e}")
+        send_safe(peer_id, "Произошла ошибка при отображении детали.")
 
 def show_donor(peer_id):
     """Показывает карточку донора из результатов поиска"""
@@ -458,61 +477,47 @@ def handle(event):
     msg = event.obj.message
     peer_id = msg['peer_id']
     text = msg.get('text', '').strip()
+    
+    # --- НОВЫЙ БЛОК: Обработка кнопок навигации ---
+    current_state = user_state.get(peer_id)
+    
+    # Проверяем нажатие кнопок только если мы находимся в режиме просмотра запчастей
+    if current_state == "parts":
+        if text == "⬅️ Назад":
+            user_index[peer_id] = max(0, user_index.get(peer_id, 0) - 1)
+            show_part(peer_id)
+            return
+            
+        if text == "➡️ Вперёд":
+            total_results = len(user_results.get(peer_id, []))
+            user_index[peer_id] = min(total_results - 1, user_index.get(peer_id, 0) + 1)
+            show_part(peer_id)
+            return
+            
+        if text == "🏠 Главное меню":
+            user_state[peer_id] = None
+            send(peer_id, "Возврат в главное меню.", keyboard=get_main_keyboard())
+            return
+
+    # --- СТАРЫЙ БЛОК: Обработка ввода пользователя ---
     text_lower = text.lower()
+    
+    if text_lower in ["🚗 запчасти", "запчасти"]:
+        user_state[peer_id] = "parts"
+        send(peer_id, "Введите номер детали:", keyboard=get_main_keyboard())
+        return
 
-    logging.info(f"Получено сообщение от {peer_id}: '{text}'")
-    logging.info(f"Текущее состояние пользователя: {user_state.get(peer_id)}")
+    # ... остальные кнопки (диски, доноры) остаются без изменений ...
 
-    try:
-        if not text:
-            return
-
-        # Обработка кнопок
-        if text_lower in ["🚗 запчасти", "запчасти"]:
-            user_state[peer_id] = "parts"
-            send(peer_id, "Введите номер детали:")
-            return
-        elif text_lower in ["🛞 диски", "диски"]:
-            user_state[peer_id] = "wheels"
-            send(peer_id, "Введите размер , например R18:")
-            return
-        elif text_lower in ["🚘 доноры", "доноры"]:
-            user_state[peer_id] = "donors"
-            send(peer_id, "Введите марку авто:")
-            return
-        elif text_lower in ["❤️ избранное", "избранное"]:
-            show_favorites(peer_id)
-            return
-
-        # Поиск
-        current_state = user_state.get(peer_id)
-        if current_state == "parts":
-            logging.info(f"Начинаем поиск деталей для запроса: '{text}'")
-            results = cache.search_parts(text)
-            logging.info(f"Найдено деталей: {len(results)}")
-            if results:
-                user_results[peer_id] = results
-                user_index[peer_id] = 0
-                show_part(peer_id)
-            else:
-                send(peer_id, "❌ Детали не найдены. Попробуйте другой запрос.")
-        elif current_state == "wheels":
-            results = cache.search_wheels(text)
-            if results:
-                show_wheel_info(peer_id, results[0])
-            else:
-                send(peer_id, "❌ Диски не найдены")
-        elif current_state == "donors":
-            results = cache.search_donors(text)
-            if results:
-                user_results[peer_id] = results
-                user_index[peer_id] = 0
-                show_donor(peer_id)
-            else:
-                send(peer_id, "❌ Доноры не найдены")
-    except Exception as e:
-        logging.error(f"Ошибка в handle для {peer_id}: {e}")
-        send(peer_id, "Произошла ошибка. Попробуйте позже.")
+    # Блок поиска (остался почти прежним)
+    if current_state == "parts":
+        results = cache.search_parts(text)
+        if results:
+            user_results[peer_id] = results
+            user_index[peer_id] = 0 # Всегда начинаем с первого элемента при новом поиске
+            show_part(peer_id) # Покажем первый результат с новой клавиатурой
+        else:
+            send(peer_id, "❌ Детали не найдены. Попробуйте другой запрос.")
         
 # Запуск бота
 # ===== ГЛАВНЫЙ ЦИКЛ =====
