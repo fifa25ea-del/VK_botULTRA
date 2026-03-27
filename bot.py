@@ -12,6 +12,7 @@ import time
 import json
 from vk_api.bot_longpoll import VkBotLongPoll, VkBotEventType
 import logging
+from urllib.parse import urlpars
 
 
 # Настройка логирования
@@ -85,73 +86,92 @@ def get_main_keyboard():
 def send_photo_with_caption(peer_id, photo_url, caption):
     """Отправляет фото с подписью через VK API. При ошибке — отправляет только текст."""
     try:
-        # Исправление протокола в URL
-        if photo_url.startswith('http://'):
-            photo_url = photo_url.replace('http://', 'https://', 1)
+        # Проверка корректности URL
+        parsed_url = urlparse(photo_url)
+        if not parsed_url.scheme or not parsed_url.netloc:
+            raise ValueError(f"Некорректный URL фото: {photo_url}")
 
-        # Проверка доступности фото
-        head_response = requests.head(photo_url, timeout=10, allow_redirects=True)
-        if head_response.status_code not in (200, 301, 302):
-            raise Exception(f"Фото недоступно (статус {head_response.status_code}): {photo_url}")
+        logging.info(f"DEBUG: Попытка загрузить фото: {photo_url}")
 
-        logging.info("DEBUG: Получаем URL для загрузки фото...")
-        upload_response = vk.photos.getMessagesUploadServer()
-        upload_url = upload_response['upload_url']
-        logging.info(f"DEBUG: URL загрузки получен: {upload_url}")
+        # Загрузка фото с увеличенным таймаутом и обработкой ошибок
+        with requests.get(
+            photo_url,
+            timeout=30,  # Увеличенный таймаут до 30 секунд
+            stream=True,
+            headers={'User-Agent': 'Mozilla/5.0'}  # Имитация браузера
+        ) as response:
+            response.raise_for_status()
 
-        # Загрузка фото во временное хранилище VK
-        logging.info("DEBUG: Загружаем фото во временное хранилище...")
-        with requests.get(photo_url, timeout=15, stream=True) as r:
-            r.raise_for_status()
-            response = requests.post(
-                upload_url,
-                files={'photo': ('photo.jpg', r.content, 'image/jpeg')}
+            if 'image' not in response.headers.get('Content-Type', ''):
+                raise ValueError(f"URL не содержит изображение: {photo_url}")
+
+            # Получение URL для загрузки во временное хранилище VK
+            upload_response = vk.photos.getMessagesUploadServer()
+            upload_url = upload_response['upload_url']
+
+            # Загрузка фото
+            files = {'photo': ('photo.jpg', response.content, 'image/jpeg')}
+            upload_result = requests.post(upload_url, files=files, timeout=30)
+            upload_data = upload_result.json()
+
+            # Валидация ответа сервера загрузки
+            if not upload_data.get('photo'):
+                raise ValueError("Сервер загрузки VK не вернул данные фото")
+
+            # Сохранение фото в альбоме сообщений
+            photo_data = vk.photos.saveMessagesPhoto(
+                server=upload_data['server'],
+                photo=upload_data['photo'],
+                hash=upload_data['hash']
+            )[0]
+
+            # Отправка сообщения с фото и подписью
+            vk.messages.send(
+                peer_id=peer_id,
+                message=caption,
+                attachment=f"photo{photo_data['owner_id']}_{photo_data['id']}",
+                random_id=0
             )
-        result = response.json()
-        logging.info(f"DEBUG: Ответ сервера загрузки: {json.dumps(result, ensure_ascii=False)}")
+            logging.info("DEBUG: Фото успешно отправлено")
 
-        # Валидация ответа сервера загрузки
-        if 'photo' not in result or not result['photo']:
-            raise Exception("Сервер загрузки не вернул данные фото")
-
-        # Сохранение фото в альбоме сообщений
-        logging.info("DEBUG: Сохраняем фото в альбоме VK...")
-        photo_data = vk.photos.saveMessagesPhoto(
-            server=result['server'],
-            photo=result['photo'],
-            hash=result['hash']
-        )[0]
-        logging.info(f"DEBUG: Фото сохранено: owner_id={photo_data['owner_id']}, id={photo_data['id']}")
-
-        # Отправка сообщения с фото и подписью
-        logging.info("DEBUG: Отправляем сообщение с фото...")
-        vk.messages.send(
-            peer_id=peer_id,
-            message=caption,
-            attachment=f"photo{photo_data['owner_id']}_{photo_data['id']}",
-            random_id=0
-        )
-        logging.info("DEBUG: Фото успешно отправлено")
-
+    except requests.exceptions.ConnectTimeout:
+        logging.error(f"Ошибка: Таймаут соединения при загрузке фото {photo_url}")
+        send_safe(peer_id, caption)
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Ошибка сети при загрузке фото {photo_url}: {e}")
+        send_safe(peer_id, caption)
+    except ValueError as e:
+        logging.error(f"Ошибка валидации фото {photo_url}: {e}")
+        send_safe(peer_id, caption)
     except Exception as e:
         logging.error(f"Критическая ошибка отправки фото {photo_url}: {e}")
-        # При любой ошибке отправляем только текст
         send_safe(peer_id, caption)
 
 def get_first_photo(photo_field):
     """Извлекает первую ссылку на фото из поля с несколькими URL, исправляет протокол"""
     if not photo_field:
         return None
+
     # Разделяем строку по запятым и убираем пробелы
     photo_urls = [url.strip() for url in photo_field.split(',') if url.strip()]
+
     # Исправление протокола для всех URL
     photo_urls = [
         url.replace('http://', 'https://') if url.startswith('http://') else url
         for url in photo_urls
     ]
-    if photo_urls:
-        return photo_urls[0]
-    return None
+
+    # Пробуем найти первое доступное фото
+    for url in photo_urls:
+        try:
+            # Быстрая проверка доступности (HEAD-запрос)
+            head_response = requests.head(url, timeout=5, allow_redirects=True)
+            if head_response.status_code == 200:
+                return url
+        except:
+            continue  # Пропускаем недоступные фото
+
+    return None  # Если ни одно фото не доступно
 
 # ===== ОТПРАВКА СООБЩЕНИЙ =====
 def send_safe(peer_id, text, keyboard=None):
