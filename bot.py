@@ -204,88 +204,78 @@ threading.Thread(target=auto_update, daemon=True).start()
 
 # Добавляем методы для работы с результатами поиска
 def show_part_info(peer_id, part):
-    message = f"Информация о детали:\n"
-    message += f"Название: {part.get('Наименование', 'Не указано')}\n"
-    message += f"Артикул: {part.get('Артикул', 'Не указан')}\n"
-    message += f"Номер: {part.get('Номер', 'Не указана')}\n"
-    message += f"Цена: {part.get('Цена', 'Не указана')}\n"
-    message += f"Комментарий: {part.get('Комментарий', 'Не указана')}"
-    send(peer_id, message)
-
-def show_donor_info(peer_id, donor):
+    """Показывает подробную информацию о детали"""
     try:
-        message = f"🚘 Информация о доноре:\n"
-        message += f"Марка: {donor.get('Марка', 'Не указана')}\n"
-        message += f"Модель: {donor.get('Модель', 'Не указана')}\n"
-        message += f"Год выпуска: {donor.get('Год', 'Не указан')}\n"
-        message += f"Цена: {donor.get('Цена', 'Не указана')}\n"
-        message += f"Пробег: {donor.get('Пробег', 'Не указан')}"
-        
-        
-        send(peer_id, message)
-    except Exception as e:
-        logging.error(f"Ошибка при отображении информации о доноре: {e}")
-        send(peer_id, "Произошла ошибка при получении информации о доноре")
-
-# Функция для показа информации о детали
-def show_part_info(peer_id, part):
-    try:
+        message = "🚗 Информация о детали:\n"
         message += f"Название: {part.get('Наименование', 'Не указано')}\n"
         message += f"Артикул: {part.get('Артикул', 'Не указан')}\n"
         message += f"Номер: {part.get('Номер', 'Не указан')}\n"
         message += f"Цена: {part.get('Цена', 'Не указана')}\n"
         message += f"Комментарий: {part.get('Комментарий', 'Не указан')}"
-        
         send(peer_id, message)
     except Exception as e:
         logging.error(f"Ошибка при отображении информации о детали: {e}")
         send(peer_id, "Произошла ошибка при получении информации о детали")
 
-# Функция для показа информации о диске
-def show_wheel_info(peer_id, wheel):
+def show_donor_info(peer_id, donor):
+    """Показывает подробную информацию о доноре"""
     try:
-        message = f"🛞 Информация о диске:\n"
+        message = "🚘 Информация о доноре:\n"
+        message += f"Марка: {donor.get('Марка', 'Не указана')}\n"
+        message += f"Модель: {donor.get('Модель', 'Не указана')}\n"
+        message += f"Год выпуска: {donor.get('Год', 'Не указан')}\n"
+        message += f"Цена: {donor.get('Цена', 'Не указана')}\n"
+        message += f"Пробег: {donor.get('Пробег', 'Не указан')}"
+        send(peer_id, message)
+    except Exception as e:
+        logging.error(f"Ошибка при отображении информации о доноре: {e}")
+        send(peer_id, "Произошла ошибка при получении информации о доноре")
+
+def show_wheel_info(peer_id, wheel):
+    """Показывает подробную информацию о диске"""
+    try:
+        message = "🛞 Информация о диске:\n"
         message += f"Производитель: {wheel.get('Производитель диска', 'Не указан')}\n"
         message += f"Артикул: {wheel.get('Артикул', 'Не указан')}\n"
         message += f"Модель диска: {wheel.get('Модель диска', 'Не указана')}\n"
         message += f"Размер: {wheel.get('Размер', 'Не указан')}\n"
         message += f"PCD диска: {wheel.get('PCD диска', 'Не указан')}\n"
         message += f"Тип диска: {wheel.get('Тип диска', 'Не указан')}\n"
-        message += f"Цена: {wheel.get('Цена', 'Нет ссылки')}"
-        
+        message += f"Цена: {wheel.get('Цена', 'Не указана')}"
         send(peer_id, message)
     except Exception as e:
         logging.error(f"Ошибка при отображении информации о диске: {e}")
         send(peer_id, "Произошла ошибка при получении информации о диске")
-    
 
 def show_part(peer_id):
+    """Показывает карточку детали из результатов поиска"""
     try:
         index = user_index.get(peer_id, 0)
         results = user_results.get(peer_id, [])
-        
+
         if index < len(results):
             part = results[index]
-            message = f"🚗 Карточка детали:\n"
+            message = "🚗 Карточка детали:\n"
             message += f"Название: {part.get('Наименование', 'Не указано')}\n"
             message += f"Артикул: {part.get('Артикул', 'Не указан')}\n"
-            message += f"Цена: {part.get('Номер', 'Не указан')}\n"
-            message += f"Ссылка: {part.get('Цена', 'Не указана')}"
-            message += f"Артикул: {part.get('Комментарий', 'Не указан')}\n"
+            message += f"Цена: {part.get('Цена', 'Не указана')}\n"
+            message += f"Ссылка: {part.get('Ссылка', 'Нет ссылки')}"
             send(peer_id, message)
         else:
             send(peer_id, "Нет данных для отображения")
     except Exception as e:
         logging.error(f"Ошибка при показе детали: {e}")
+        send(peer_id, "Произошла ошибка при отображении детали")
 
 def show_donor(peer_id):
+    """Показывает карточку донора из результатов поиска"""
     try:
         index = user_index.get(peer_id, 0)
         results = user_results.get(peer_id, [])
-        
+
         if index < len(results):
             donor = results[index]
-            message = f"🚘 Карточка донора:\n"
+            message = "🚘 Карточка донора:\n"
             message += f"Марка: {donor.get('Марка', 'Не указана')}\n"
             message += f"Модель: {donor.get('Модель', 'Не указана')}\n"
             message += f"Год: {donor.get('Год', 'Не указан')}\n"
@@ -296,6 +286,7 @@ def show_donor(peer_id):
             send(peer_id, "Нет данных для отображения")
     except Exception as e:
         logging.error(f"Ошибка при показе донора: {e}")
+        send(peer_id, "Произошла ошибка при отображении донора")
 
 # ===== ДОБАВЛЯЕМ ПОИСК ПО КРИТЕРИЯМ =====
 
