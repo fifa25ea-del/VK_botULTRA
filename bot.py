@@ -81,6 +81,8 @@ def get_main_keyboard():
     keyboard.add_button("❤️ Избранное", color=VkKeyboardColor.POSITIVE)
 
     return keyboard.get_keyboard()
+
+
 # ===== ОТПРАВКА СООБЩЕНИЙ =====
 def send(peer_id, text, keyboard=None):
     try:
@@ -112,6 +114,8 @@ def save_json(file, data):
 
 favorites = load_json(FAV_FILE)
 stats = load_json(STATS_FILE)
+
+
 # ===== КЭШ =====
 class DataCache:
     def __init__(self):
@@ -205,7 +209,7 @@ def show_part_info(peer_id, part):
     message += f"Артикул: {part.get('Артикул', 'Не указан')}\n"
     message += f"Номер: {part.get('Номер', 'Не указана')}\n"
     message += f"Цена: {part.get('Цена', 'Не указана')}\n"
-    message += f"Комментарий: {part.get('Комментарий', 'Не указана')}\n"
+    message += f"Комментарий: {part.get('Комментарий', 'Не указана')}"
     send(peer_id, message)
 
 def show_donor_info(peer_id, donor):
@@ -215,9 +219,8 @@ def show_donor_info(peer_id, donor):
         message += f"Модель: {donor.get('Модель', 'Не указана')}\n"
         message += f"Год выпуска: {donor.get('Год', 'Не указан')}\n"
         message += f"Цена: {donor.get('Цена', 'Не указана')}\n"
-        message += f"Пробег: {donor.get('Пробег', 'Не указан')}\n"
-        message += f"Город: {donor.get('Город', 'Не указан')}\n"
-        message += f"Ссылка: {donor.get('Ссылка', 'Нет ссылки')}"
+        message += f"Пробег: {donor.get('Пробег', 'Не указан')}"
+        
         
         send(peer_id, message)
     except Exception as e:
@@ -230,8 +233,8 @@ def show_part_info(peer_id, part):
         message += f"Название: {part.get('Наименование', 'Не указано')}\n"
         message += f"Артикул: {part.get('Артикул', 'Не указан')}\n"
         message += f"Номер: {part.get('Номер', 'Не указан')}\n"
-        message += f"Цена: {part.get('Цена', 'Не указана')}"
-        message += f"Комментарий: {part.get('Комментарий', 'Не указан')}\n"
+        message += f"Цена: {part.get('Цена', 'Не указана')}\n"
+        message += f"Комментарий: {part.get('Комментарий', 'Не указан')}"
         
         send(peer_id, message)
     except Exception as e:
@@ -247,7 +250,7 @@ def show_wheel_info(peer_id, wheel):
         message += f"Модель диска: {wheel.get('Модель диска', 'Не указана')}\n"
         message += f"Размер: {wheel.get('Размер', 'Не указан')}\n"
         message += f"PCD диска: {wheel.get('PCD диска', 'Не указан')}\n"
-        message += f"Тип диска: {wheel.get('Тип диска', 'Не указан')}"
+        message += f"Тип диска: {wheel.get('Тип диска', 'Не указан')}\n"
         message += f"Цена: {wheel.get('Цена', 'Нет ссылки')}"
         
         send(peer_id, message)
