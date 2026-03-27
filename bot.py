@@ -86,20 +86,28 @@ def get_main_keyboard():
 def get_navigation_keyboard(index, total):
     """Создает клавиатуру с кнопками навигации"""
     keyboard = VkKeyboard(one_time=False)
+
+    # --- Блок кнопок "Назад" и "Вперёд" ---
     
-    # Кнопка "Назад". Делаем её доступной, только если мы не на первой позиции
+    # Если мы не на первой позиции, добавляем кнопку "Назад"
     if index > 0:
         keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
     else:
-        keyboard.add_empty_button() # Чтобы интерфейс не прыгал
+        # Если мы на первой позиции, добавляем невидимую кнопку-заглушку,
+        # чтобы интерфейс не прыгал и кнопка "Вперёд" оставалась на своем месте.
+        keyboard.add_button(" ", color=VkKeyboardColor.SECONDARY) 
 
-    # Кнопка "Вперёд". Доступна, если есть следующий элемент
+    # Добавляем перенос строки, чтобы кнопки были друг под другом
+    keyboard.add_line() 
+
+    # Если есть следующий элемент, добавляем кнопку "Вперёд"
     if index < total - 1:
         keyboard.add_button("➡️ Вперёд", color=VkKeyboardColor.PRIMARY)
     else:
-        keyboard.add_empty_button() # Чтобы интерфейс не прыгал
+        # Если мы на последней позиции, добавляем заглушку
+        keyboard.add_button(" ", color=VkKeyboardColor.SECONDARY)
 
-    # Добавляем кнопку возврата в главное меню
+    # --- Блок возврата в меню ---
     keyboard.add_line()
     keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.SECONDARY)
     
