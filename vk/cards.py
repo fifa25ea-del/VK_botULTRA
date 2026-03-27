@@ -16,9 +16,12 @@ def build_keyboard():
 
 def send_card(vk, user_id, item, index, total):
     text = (
-        f"🔧 {item['name']}\n"
-        f"💰 {item['price']} ₽\n"
-        f"📦 {index+1} из {total}"
+        f"🔧 {name}\n"
+        f"Артикул: {article}\n"
+        f"Номер: {number}\n"
+        f"{brand} {model}\n"
+        f"💰 {price} ₽\n\n"
+        f"({index+1}/{len(results)})"
     )
 
     attachment = item.get("photo", "")
