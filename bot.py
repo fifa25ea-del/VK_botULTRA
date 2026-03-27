@@ -84,94 +84,88 @@ def get_main_keyboard():
     return keyboard.get_keyboard()
 
 def send_photo_with_caption(peer_id, photo_url, caption):
-    """Отправляет фото с подписью через VK API. При ошибке — отправляет только текст."""
-    try:
-        # Проверка корректности URL
-        parsed_url = urlparse(photo_url)
-        if not parsed_url.scheme or not parsed_url.netloc:
-            raise ValueError(f"Некорректный URL фото: {photo_url}")
+    """Отправляет фото с подписью через VK API с таймаутом 5 секунд"""
+    def upload_and_send():
+        try:
+            # Быстрая проверка URL
+            parsed_url = urlparse(photo_url)
+            if not parsed_url.scheme or not parsed_url.netloc:
+                raise ValueError(f"Некорректный URL фото: {photo_url}")
 
-        logging.info(f"DEBUG: Попытка загрузить фото: {photo_url}")
+            # Загрузка фото с коротким таймаутом
+            with requests.get(
+                photo_url,
+                timeout=5,  # Короткий таймаут — 5 секунд
+                stream=True,
+                headers={'User-Agent': 'Mozilla/5.0'}
+            ) as response:
+                response.raise_for_status()
 
-        # Загрузка фото с увеличенным таймаутом и обработкой ошибок
-        with requests.get(
-            photo_url,
-            timeout=30,  # Увеличенный таймаут до 30 секунд
-            stream=True,
-            headers={'User-Agent': 'Mozilla/5.0'}  # Имитация браузера
-        ) as response:
-            response.raise_for_status()
+                if 'image' not in response.headers.get('Content-Type', ''):
+                    raise ValueError(f"URL не содержит изображение: {photo_url}")
 
-            if 'image' not in response.headers.get('Content-Type', ''):
-                raise ValueError(f"URL не содержит изображение: {photo_url}")
+                # Ограничение размера файла (5 МБ)
+                content_length = response.headers.get('Content-Length')
+                if content_length and int(content_length) > 5 * 1024 * 1024:
+                    raise ValueError("Фото слишком большое (более 5 МБ)")
 
-            # Получение URL для загрузки во временное хранилище VK
-            upload_response = vk.photos.getMessagesUploadServer()
-            upload_url = upload_response['upload_url']
 
-            # Загрузка фото
-            files = {'photo': ('photo.jpg', response.content, 'image/jpeg')}
-            upload_result = requests.post(upload_url, files=files, timeout=30)
-            upload_data = upload_result.json()
+                # Загрузка во временное хранилище VK
+                upload_response = vk.photos.getMessagesUploadServer()
+                upload_url = upload_response['upload_url']
+                files = {'photo': ('photo.jpg', response.content, 'image/jpeg')}
+                upload_result = requests.post(upload_url, files=files, timeout=10)
+                upload_data = upload_result.json()
 
-            # Валидация ответа сервера загрузки
-            if not upload_data.get('photo'):
-                raise ValueError("Сервер загрузки VK не вернул данные фото")
+                if not upload_data.get('photo'):
+                    raise ValueError("Сервер загрузки VK не вернул данные фото")
 
-            # Сохранение фото в альбоме сообщений
-            photo_data = vk.photos.saveMessagesPhoto(
-                server=upload_data['server'],
-                photo=upload_data['photo'],
-                hash=upload_data['hash']
-            )[0]
+                # Сохранение и отправка
+                photo_data = vk.photos.saveMessagesPhoto(
+                    server=upload_data['server'],
+            photo=upload_data['photo'],
+            hash=upload_data['hash']
+        )[0]
 
-            # Отправка сообщения с фото и подписью
-            vk.messages.send(
-                peer_id=peer_id,
-                message=caption,
-                attachment=f"photo{photo_data['owner_id']}_{photo_data['id']}",
-                random_id=0
-            )
-            logging.info("DEBUG: Фото успешно отправлено")
-
-    except requests.exceptions.ConnectTimeout:
-        logging.error(f"Ошибка: Таймаут соединения при загрузке фото {photo_url}")
-        send_safe(peer_id, caption)
-    except requests.exceptions.RequestException as e:
-        logging.error(f"Ошибка сети при загрузке фото {photo_url}: {e}")
-        send_safe(peer_id, caption)
-    except ValueError as e:
-        logging.error(f"Ошибка валидации фото {photo_url}: {e}")
-        send_safe(peer_id, caption)
+        vk.messages.send(
+            peer_id=peer_id,
+            message=caption,
+            attachment=f"photo{photo_data['owner_id']}_{photo_data['id']}",
+            random_id=0
+        )
     except Exception as e:
-        logging.error(f"Критическая ошибка отправки фото {photo_url}: {e}")
-        send_safe(peer_id, caption)
+        logging.warning(f"Фото не отправлено (таймаут/ошибка): {e}")
+
+    # Запускаем загрузку в отдельном потоке
+    thread = threading.Thread(target=upload_and_send)
+    thread.daemon = True
+    thread.start()
+
+    # Сразу отправляем текстовую карточку
+    send_safe(peer_id, caption)
 
 def get_first_photo(photo_field):
-    """Извлекает первую ссылку на фото из поля с несколькими URL, исправляет протокол"""
+    """Извлекает первую ссылку на фото с быстрой проверкой доступности"""
     if not photo_field:
         return None
 
-    # Разделяем строку по запятым и убираем пробелы
     photo_urls = [url.strip() for url in photo_field.split(',') if url.strip()]
-
-    # Исправление протокола для всех URL
     photo_urls = [
         url.replace('http://', 'https://') if url.startswith('http://') else url
         for url in photo_urls
     ]
 
-    # Пробуем найти первое доступное фото
-    for url in photo_urls:
+    # Быстрая проверка первых 2 URL
+    for url in photo_urls[:2]:  # Проверяем только первые 2 фото
         try:
-            # Быстрая проверка доступности (HEAD-запрос)
-            head_response = requests.head(url, timeout=5, allow_redirects=True)
+            head_response = requests.head(url, timeout=3, allow_redirects=True)
             if head_response.status_code == 200:
                 return url
         except:
-            continue  # Пропускаем недоступные фото
+            continue
 
-    return None  # Если ни одно фото не доступно
+    return None
+
 
 # ===== ОТПРАВКА СООБЩЕНИЙ =====
 def send_safe(peer_id, text, keyboard=None):
@@ -369,7 +363,7 @@ def show_wheel_info(peer_id, wheel):
         send(peer_id, "Произошла ошибка при получении информации о диске")
 
 def show_part(peer_id):
-    """Показывает карточку детали из результатов поиска с фото"""
+    """Показывает карточку детали с быстрой отправкой текста и фоновой загрузкой фото"""
     try:
         index = user_index.get(peer_id, 0)
         results = user_results.get(peer_id, [])
@@ -385,14 +379,14 @@ def show_part(peer_id):
         part = results[index]
 
         # Проверка целостности данных
-        if not any(str(v).strip() for v in part.values()):
+        if not part or not any(str(v).strip() for v in part.values()):
             send_safe(peer_id, "Данные о детали повреждены. Попробуйте поиск заново.")
             return
 
         # Извлекаем первую фотографию
         photo_url = get_first_photo(part.get('Фото', ''))
 
-        # Формируем текст карточки (без упоминания фото)
+        # Формируем текст карточки
         message = "🚗 Карточка детали:\n"
         message += f"Название: {safe_get(part, 'Наименование')}\n"
         message += f"Артикул: {safe_get(part, 'Артикул')}\n"
@@ -405,15 +399,16 @@ def show_part(peer_id):
         if link != "Не указано" and link != "Нет ссылки":
             message += f"Ссылка: {link}"
 
-        # Отправляем фото с подписью или только текст
+        # Отправляем текст сразу
+        send_safe(peer_id, message)
+
+        # Если есть фото, запускаем его загрузку в фоне
         if photo_url:
             send_photo_with_caption(peer_id, photo_url, message)
-        else:
-            send_safe(peer_id, message)
 
     except Exception as e:
-        logging.error(f"Неожиданная ошибка в show_part для {peer_id}: {e}")
-        send_safe(peer_id, "Произошла ошибка при отображении детали. Попробуйте позже.")
+        logging.critical(f"ФАТАЛЬНАЯ ошибка в show_part для {peer_id}: {e}")
+        send_safe(peer_id, "Произошла критическая ошибка при отображении детали. Обратитесь к администратору.")
 
 def show_donor(peer_id):
     """Показывает карточку донора из результатов поиска"""
