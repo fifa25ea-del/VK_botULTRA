@@ -340,7 +340,7 @@ def handle(event):
     print("TEXT:", text)
     print("STATE:", user_state.get(peer_id))
 
-    # === КНОПКИ ===
+    # ===== КНОПКИ (ВСЕГДА СНАЧАЛА) =====
     if text_lower in ["🚗 запчасти", "запчасти"]:
         user_state[peer_id] = "parts"
         send(peer_id, "Введите номер детали:")
@@ -360,7 +360,7 @@ def handle(event):
         show_favorites(peer_id)
         return
 
-    # === ПОИСК ===
+    # ===== ПОИСК =====
     if user_state.get(peer_id) == "parts":
         results = cache.search_parts(text)
         if results:
@@ -368,14 +368,14 @@ def handle(event):
             user_index[peer_id] = 0
             show_part(peer_id)
         else:
-            send(peer_id, "❌ Не найдено")
+            send(peer_id, "❌ Детали не найдены")
 
     elif user_state.get(peer_id) == "wheels":
         results = cache.search_wheels(text)
         if results:
             show_wheel_info(peer_id, results[0])
         else:
-            send(peer_id, "❌ Не найдено")
+            send(peer_id, "❌ Диски не найдены")
 
     elif user_state.get(peer_id) == "donors":
         results = cache.search_donors(text)
@@ -384,17 +384,7 @@ def handle(event):
             user_index[peer_id] = 0
             show_donor(peer_id)
         else:
-            send(peer_id, "❌ Не найдено")
-    
-    payload = msg.get('payload')
-    if payload:
-        data = json.loads(payload)
-    
-        if data.get('cmd') == 'parts':
-            user_state[peer_id] = "parts"
-            send(peer_id, "Введите номер детали:")
-            return
-    
+            send(peer_id, "❌ Доноры не найдены")
 
 # Запуск бота
 # ===== ГЛАВНЫЙ ЦИКЛ =====
