@@ -146,7 +146,7 @@ class DataCache:
         query = query.lower()
         results = []
         for part in self.parts:
-            if query in part.get('Название', '').lower() or \
+            if query in part.get('Номер', '').lower() or \
                query in part.get('Артикул', '').lower():
                 results.append(part)
         return results
@@ -156,7 +156,7 @@ class DataCache:
         query = query.lower()
         results = []
         for wheel in self.wheels:
-            if query in wheel.get('Производитель диска', '').lower():
+            if query in wheel.get('Размер', '').lower():
                 results.append(wheel)
         return results
 
