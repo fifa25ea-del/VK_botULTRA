@@ -298,6 +298,7 @@ def safe_get(data_dict, field_name, default="Не указано"):
     return value if value else default
 
 def show_part_info(peer_id, part):
+    logging.debug(f"Пытаемся получить фото по ссылке: {part.get('Фото', '')}")
     """Показывает подробную информацию о детали"""
     try:
         message = "🚗 Информация о детали:\n"
