@@ -160,7 +160,7 @@ class DataCache:
         query = query.lower()
         results = []
         for wheel in self.wheels:
-            if query in wheel.get('Размер', '').lower():
+            if query in wheel.get('Диаметр диска', '').lower():
                 results.append(wheel)
         return results
 
