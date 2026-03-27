@@ -358,6 +358,9 @@ def handle(event):
     text = msg.get('text', '').strip()
     text_lower = text.lower()
 
+    logging.info(f"Получено сообщение от {peer_id}: '{text}'")
+    logging.info(f"Текущее состояние пользователя: {user_state.get(peer_id)}")
+
     try:
         if not text:
             return
@@ -369,11 +372,11 @@ def handle(event):
             return
         elif text_lower in ["🛞 диски", "диски"]:
             user_state[peer_id] = "wheels"
-            send(peer_id, "Введите размер, например R18:")
+            send(peer_id, "Введите размер , например R18:")
             return
         elif text_lower in ["🚘 доноры", "доноры"]:
             user_state[peer_id] = "donors"
-            send(peer_id, "Последние купленные авто:")
+            send(peer_id, "Введите марку авто:")
             return
         elif text_lower in ["❤️ избранное", "избранное"]:
             show_favorites(peer_id)
@@ -382,19 +385,19 @@ def handle(event):
         # Поиск
         current_state = user_state.get(peer_id)
         if current_state == "parts":
+            logging.info(f"Начинаем поиск деталей для запроса: '{text}'")
             results = cache.search_parts(text)
+            logging.info(f"Найдено деталей: {len(results)}")
             if results:
                 user_results[peer_id] = results
                 user_index[peer_id] = 0
                 show_part(peer_id)
-                log_search(peer_id, text, "parts", len(results))
             else:
-                send(peer_id, "❌ Детали не найдены")
+                send(peer_id, "❌ Детали не найдены. Попробуйте другой запрос.")
         elif current_state == "wheels":
             results = cache.search_wheels(text)
             if results:
                 show_wheel_info(peer_id, results[0])
-                log_search(peer_id, text, "wheels", len(results))
             else:
                 send(peer_id, "❌ Диски не найдены")
         elif current_state == "donors":
@@ -403,7 +406,6 @@ def handle(event):
                 user_results[peer_id] = results
                 user_index[peer_id] = 0
                 show_donor(peer_id)
-                log_search(peer_id, text, "donors", len(results))
             else:
                 send(peer_id, "❌ Доноры не найдены")
     except Exception as e:
