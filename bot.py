@@ -84,88 +84,67 @@ def get_main_keyboard():
     return keyboard.get_keyboard()
 
 def send_photo_with_caption(peer_id, photo_url, caption):
-    """Отправляет фото с подписью через VK API с таймаутом 5 секунд"""
+    """Отправляет фото с подписью"""
     def upload_and_send():
         try:
-            # Быстрая проверка URL
-            parsed_url = urlparse(photo_url)
-            if not parsed_url.scheme or not parsed_url.netloc:
-                raise ValueError(f"Некорректный URL фото: {photo_url}")
+            # Загружаем изображение
+            response = requests.get(photo_url, timeout=10, stream=True)
+            response.raise_for_status() # Проверка статуса 200 OK
 
-            # Загрузка фото с коротким таймаутом
-            with requests.get(
-                photo_url,
-                timeout=5,  # Короткий таймаут — 5 секунд
-                stream=True,
-                headers={'User-Agent': 'Mozilla/5.0'}
-            ) as response:
-                response.raise_for_status()
+            # Проверяем, что сервер вернул картинку (а не HTML-страницу с ошибкой 404)
+            content_type = response.headers.get('Content-Type', '')
+            if 'image' not in content_type:
+                logging.warning(f"URL не содержит изображение (Content-Type: {content_type}): {photo_url}")
+                return # Просто выходим, если это не картинка
 
-                if 'image' not in response.headers.get('Content-Type', ''):
-                    raise ValueError(f"URL не содержит изображение: {photo_url}")
+            # Загрузка во временное хранилище VK
+            upload_response = vk.photos.getMessagesUploadServer()
+            upload_url = upload_response['upload_url']
+            
+            # Используем content из ответа
+            files = {'photo': ('image.jpg', response.content)}
+            upload_result = requests.post(upload_url, files=files, timeout=15)
+            upload_data = upload_result.json()
 
-                # Ограничение размера файла (5 МБ)
-                content_length = response.headers.get('Content-Length')
-                if content_length and int(content_length) > 5 * 1024 * 1024:
-                    raise ValueError("Фото слишком большое (более 5 МБ)")
+            # Сохранение и отправка
+            photo_data = vk.photos.saveMessagesPhoto(
+                server=upload_data['server'],
+                photo=upload_data['photo'],
+                hash=upload_data['hash']
+            )[0]
 
-                # Загрузка во временное хранилище VK
-                upload_response = vk.photos.getMessagesUploadServer()
-                upload_url = upload_response['upload_url']
-                files = {'photo': ('photo.jpg', response.content, 'image/jpeg')}
-                upload_result = requests.post(upload_url, files=files, timeout=10)
-                upload_data = upload_result.json()
+            vk.messages.send(
+                peer_id=peer_id,
+                message=caption,
+                attachment=f"photo{photo_data['owner_id']}_{photo_data['id']}",
+                random_id=0
+            )
+            logging.info(f"Фото успешно отправлено: {photo_url}")
 
-                if not upload_data.get('photo'):
-                    raise ValueError("Сервер загрузки VK не вернул данные фото")
-
-                # Сохранение фото в альбоме сообщений
-                photo_data = vk.photos.saveMessagesPhoto(
-                    server=upload_data['server'],
-            photo=upload_data['photo'],
-            hash=upload_data['hash']
-        )[0]
-
-                # Отправка сообщения с фото и подписью
-                vk.messages.send(
-                    peer_id=peer_id,
-            message=caption,
-            attachment=f"photo{photo_data['owner_id']}_{photo_data['id']}",
-            random_id=0
-        )
-                logging.info(f"Фото успешно отправлено: {photo_url}")
-
+        except requests.exceptions.Timeout:
+            logging.warning(f"Таймаут при загрузке фото: {photo_url}")
+        except requests.exceptions.RequestException as e:
+            logging.warning(f"Ошибка сети при загрузке фото: {e}")
         except Exception as e:
-            logging.warning(f"Фото не отправлено (таймаут/ошибка): {e}")
+            logging.error(f"Неизвестная ошибка при обработке фото: {e}")
 
-    # Запускаем загрузку в отдельном потоке
     thread = threading.Thread(target=upload_and_send)
     thread.daemon = True
     thread.start()
 
-    # Сразу отправляем текстовую карточку
-    send_safe(peer_id, caption)
-
 def get_first_photo(photo_field):
-    """Извлекает первую ссылку на фото с быстрой проверкой доступности"""
+    """Извлекает первую валидную ссылку на фото"""
     if not photo_field:
         return None
 
-    photo_urls = [url.strip() for url in photo_field.split(',') if url.strip()]
-    photo_urls = [
-        url.replace('http://', 'https://') if url.startswith('http://') else url
-        for url in photo_urls
-    ]
-
-    # Быстрая проверка первых 2 URL
-    for url in photo_urls[:2]:  # Проверяем только первые 2 фото
-        try:
-            head_response = requests.head(url, timeout=3, allow_redirects=True)
-            if head_response.status_code == 200:
-                return url
-        except:
-            continue
-
+    # Убираем лишние пробелы и разбиваем по запятым
+    photo_urls = [url.strip() for url in str(photo_field).split(',') if url.strip()]
+    
+    # Проверяем наличие http/https
+    for url in photo_urls:
+        if url.startswith('http://') or url.startswith('https://'):
+            return url
+            
     return None
 
 
