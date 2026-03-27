@@ -68,6 +68,18 @@ except Exception as e:
     logging.error(f"Не удалось инициализировать VK API: {e}")
     exit(1)
 
+from vk_api.keyboard import VkKeyboard, VkKeyboardColor
+
+def get_main_keyboard():
+    keyboard = VkKeyboard(one_time=False)
+
+    keyboard.add_button("🚗 Запчасти", color=VkKeyboardColor.PRIMARY)
+    keyboard.add_button("🛞 Диски", color=VkKeyboardColor.PRIMARY)
+    keyboard.add_line()
+    keyboard.add_button("🚘 Доноры", color=VkKeyboardColor.SECONDARY)
+    keyboard.add_button("❤️ Избранное", color=VkKeyboardColor.POSITIVE)
+
+    return keyboard.get_keyboard()
 # ===== ОТПРАВКА СООБЩЕНИЙ =====
 def send(peer_id, text, keyboard=None):
     try:
