@@ -109,7 +109,6 @@ def send_photo_with_caption(peer_id, photo_url, caption):
                 if content_length and int(content_length) > 5 * 1024 * 1024:
                     raise ValueError("Фото слишком большое (более 5 МБ)")
 
-
                 # Загрузка во временное хранилище VK
                 upload_response = vk.photos.getMessagesUploadServer()
                 upload_url = upload_response['upload_url']
@@ -120,21 +119,24 @@ def send_photo_with_caption(peer_id, photo_url, caption):
                 if not upload_data.get('photo'):
                     raise ValueError("Сервер загрузки VK не вернул данные фото")
 
-                # Сохранение и отправка
+                # Сохранение фото в альбоме сообщений
                 photo_data = vk.photos.saveMessagesPhoto(
                     server=upload_data['server'],
             photo=upload_data['photo'],
             hash=upload_data['hash']
         )[0]
 
-        vk.messages.send(
-            peer_id=peer_id,
+                # Отправка сообщения с фото и подписью
+                vk.messages.send(
+                    peer_id=peer_id,
             message=caption,
             attachment=f"photo{photo_data['owner_id']}_{photo_data['id']}",
             random_id=0
         )
-    except Exception as e:
-        logging.warning(f"Фото не отправлено (таймаут/ошибка): {e}")
+                logging.info(f"Фото успешно отправлено: {photo_url}")
+
+        except Exception as e:
+            logging.warning(f"Фото не отправлено (таймаут/ошибка): {e}")
 
     # Запускаем загрузку в отдельном потоке
     thread = threading.Thread(target=upload_and_send)
