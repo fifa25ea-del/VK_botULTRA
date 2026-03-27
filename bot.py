@@ -80,30 +80,6 @@ def send(peer_id, text, keyboard=None):
     except Exception as e:
         logging.error(f"Ошибка отправки сообщения: {e}")
 
-# ===== ОБРАБОТКА СООБЩЕНИЙ =====
-def handle(event):
-    msg = event.obj.message
-    peer_id = msg['peer_id']
-    text = msg.get('text', '').strip()
-
-    if not text:
-        send(peer_id, "Я получил сообщение, но оно не текстовое 😅")
-        return
-
-    text_lower = text.lower()
-
-    # Обработка команды /start
-    if text_lower in ["/start", "начать"]:
-        send(peer_id, "Привет! 👋 Выберите команду:", keyboard=get_main_keyboard())
-        return
-
-    # Обработка основных команд
-    if text_lower == "🚗 запчасти":
-        user_state[peer_id] = "parts"
-        send(peer_id, "Введи номер детали или код:")
-        return
-
-
 
 # ===== ХРАНИЛИЩЕ =====
 def load_json(file):
@@ -261,76 +237,6 @@ def show_wheel_info(peer_id, wheel):
     except Exception as e:
         logging.error(f"Ошибка при отображении информации о диске: {e}")
         send(peer_id, "Произошла ошибка при получении информации о диске")
-
-# Обновляем функцию обработки сообщений
-def handle(event):
-    msg = event.obj.message
-    peer_id = msg['peer_id']
-    text = msg.get('text', '').strip()
-
-    if not text:
-        send(peer_id, "Я получил сообщение, но оно не текстовое 😅")
-        return
-
-    text_lower = text.lower()
-
-    # Обработка команд
-    if text_lower == "/start":
-        send(peer_id, "Привет! 👋 Выберите команду:")
-        return
-
-    # Обработка поиска доноров
-    if user_state.get(peer_id) == "donors":
-        track(peer_id, "search_donors")
-        user_results[peer_id] = cache.search_donors(text)
-        user_index[peer_id] = 0
-
-        if user_results[peer_id]:
-            show_donor_info(peer_id, user_results[peer_id][0])
-        else:
-            send(peer_id, "❌ Донор не найден")
-        return
-    # Обработка навигации для доноров
-    elif text_lower in ["➡️", "следующий"]:
-        if user_state.get(peer_id) == "donors":
-            try:
-                # Получаем текущий индекс
-                current_index = user_index.get(peer_id, 0)
-                # Получаем результаты поиска
-                results = user_results.get(peer_id, [])
-                
-                # Проверяем, есть ли следующие элементы
-                if current_index + 1 < len(results):
-                    # Увеличиваем индекс
-                    user_index[peer_id] = current_index + 1
-                    # Показываем следующую запись
-                    show_donor_info(peer_id, results[user_index[peer_id]])
-                else:
-                    send(peer_id, "🚫 Это последний результат")
-                    
-            except Exception as e:
-                logging.error(f"Ошибка при переходе к следующему донору: {e}")
-                send(peer_id, "Произошла ошибка при переходе к следующему результату")
-    elif text_lower in ["⬅️", "предыдущий"]:
-        if user_state.get(peer_id) == "donors":
-            try:
-                # Получаем текущий индекс
-                current_index = user_index.get(peer_id, 0)
-                # Получаем результаты поиска
-                results = user_results.get(peer_id, [])
-                
-                # Проверяем, есть ли предыдущие элементы
-                if current_index > 0:
-                    # Уменьшаем индекс
-                    user_index[peer_id] = current_index - 1
-                    # Показываем предыдущую запись
-                    show_donor_info(peer_id, results[user_index[peer_id]])
-                else:
-                    send(peer_id, "🚫 Это первый результат")
-                    
-            except Exception as e:
-                logging.error(f"Ошибка при переходе к предыдущему донору: {e}")
-                send(peer_id, "Произошла ошибка при переходе к предыдущему результату")
     
     # Обработка поиска доноров
     elif user_state.get(peer_id) == "donors":
@@ -435,78 +341,48 @@ def handle(event):
     msg = event.obj.message
     peer_id = msg['peer_id']
     text = msg.get('text', '').strip()
-
-    if not text:
-        send(peer_id, "Я получил сообщение, но оно не текстовое 😅")
-        return
-
     text_lower = text.lower()
 
-    # Обработка команд
-    if text_lower in ["/start", "начать"]:
-        send(peer_id, "Привет! 👋 Выберите команду:", keyboard=get_main_keyboard())
-        return
+    print("TEXT:", text)
+    print("STATE:", user_state.get(peer_id))
 
-    # Обработка кнопки "Запчасти"
-    if text_lower == "🚗 запчасти":
+    # === КНОПКИ ===
+    if text_lower in ["🚗 запчасти", "запчасти"]:
         user_state[peer_id] = "parts"
-        send(peer_id, "Введите номер детали или код:")
+        send(peer_id, "Введите номер детали:")
         return
 
-    # Обработка кнопки "Диски"
-    elif text_lower == "🛞 диски":
+    elif text_lower in ["🛞 диски", "диски"]:
         user_state[peer_id] = "wheels"
         send(peer_id, "Введите бренд диска:")
         return
 
-    # Обработка кнопки "Доноры"
-    elif text_lower == "🚘 доноры":
+    elif text_lower in ["🚘 доноры", "доноры"]:
         user_state[peer_id] = "donors"
-        send(peer_id, "Введите марку автомобиля:")
+        send(peer_id, "Введите марку авто:")
         return
 
-    # Обработка кнопки "Избранное"
-    elif text_lower == "❤️ избранное":
+    elif text_lower in ["❤️ избранное", "избранное"]:
         show_favorites(peer_id)
         return
 
-    # Обработка навигации
-    elif text_lower == "➡️":
-        if user_state.get(peer_id) in ["parts", "donors"]:
-            user_index[peer_id] = min(user_index.get(peer_id, 0) + 1, len(user_results.get(peer_id, [])) - 1)
-            if user_state[peer_id] == "parts":
-                show_part(peer_id)
-            elif user_state[peer_id] == "donors":
-                show_donor(peer_id)
-
-    elif text_lower == "⬅️":
-        if user_state.get(peer_id) in ["parts", "donors"]:
-            user_index[peer_id] = max(user_index.get(peer_id, 0) - 1, 0)
-            if user_state[peer_id] == "parts":
-                show_part(peer_id)
-            elif user_state[peer_id] == "donors":
-                show_donor(peer_id)
-
-    # Обработка поиска деталей
+    # === ПОИСК ===
     if user_state.get(peer_id) == "parts":
-        track(peer_id, "search")
-        user_results[peer_id] = cache.search_parts(text)
-        user_index[peer_id] = 0
-        
-        if user_results[peer_id]:
+        results = cache.search_parts(text)
+        if results:
+            user_results[peer_id] = results
+            user_index[peer_id] = 0
             show_part(peer_id)
         else:
-            send(peer_id, "❌ Детали не найдены")
+            send(peer_id, "❌ Не найдено")
 
-    # Обработка поиска дисков
     elif user_state.get(peer_id) == "wheels":
         results = cache.search_wheels(text)
         if results:
-            send(peer_id, f"🛞 Найденные диски: {results[0].get('Производитель диска')}")
+            show_wheel_info(peer_id, results[0])
         else:
-            send(peer_id, "❌ Диски не найдены")
+            send(peer_id, "❌ Не найдено")
 
-    # Обработка поиска доноров
     elif user_state.get(peer_id) == "donors":
         results = cache.search_donors(text)
         if results:
@@ -514,11 +390,17 @@ def handle(event):
             user_index[peer_id] = 0
             show_donor(peer_id)
         else:
-            send(peer_id, "❌ Доноры не найдены")
-
-    # Если команда не распознана
-    else:
-        send(peer_id, "Неизвестная команда. Используйте кнопки меню или команду /start")
+            send(peer_id, "❌ Не найдено")
+    
+    payload = msg.get('payload')
+    if payload:
+        data = json.loads(payload)
+    
+        if data.get('cmd') == 'parts':
+            user_state[peer_id] = "parts"
+            send(peer_id, "Введите номер детали:")
+            return
+    
 
 # Запуск бота
 # ===== ГЛАВНЫЙ ЦИКЛ =====
