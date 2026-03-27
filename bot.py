@@ -275,37 +275,53 @@ def show_wheel_info(peer_id, wheel):
         send(peer_id, "Произошла ошибка при получении информации о диске")
 
 def show_part(peer_id):
-    """Показывает карточку детали из результатов поиска"""
+    """Показывает карточку детали из результатов поиска с фото"""
     try:
         index = user_index.get(peer_id, 0)
         results = user_results.get(peer_id, [])
 
         if not results:
-            send(peer_id, "Нет результатов поиска для отображения")
+            send_safe(peer_id, "Нет результатов поиска для отображения")
             return
 
-        if index < len(results):
-            part = results[index]
-            # Проверяем, что запись не пустая
-            if not any(str(v).strip() for v in part.values()):
-                send(peer_id, "Данные о детали повреждены. Попробуйте поиск заново.")
-                return
+        if index >= len(results) or index < 0:
+            send_safe(peer_id, "Нет данных для отображения (некорректный индекс)")
+            return
 
-            message = "🚗 Карточка детали:\n"
-            message += f"Название: {safe_get(part, 'Наименование')}\n"
-            message += f"Артикул: {safe_get(part, 'Артикул')}\n"
-            price = safe_get(part, 'Цена')
-            if price != "Не указано":
-                message += f"Цена: {price}\n"
-            link = safe_get(part, 'Ссылка')
-            if link != "Не указано" and link != "Нет ссылки":
-                message += f"Ссылка: {link}"
-            send(peer_id, message)
+        part = results[index]
+
+        # Проверяем, что запись содержит данные
+        if not any(str(v).strip() for v in part.values()):
+            send_safe(peer_id, "Данные о детали повреждены. Попробуйте поиск заново.")
+            return
+
+        # Извлекаем первую фотографию
+        photo_url = get_first_photo(part.get('Фото', ''))
+
+        # Формируем текст карточки
+        message = "🚗 Карточка детали:\n"
+        message += f"Название: {safe_get(part, 'Наименование')}\n"
+        message += f"Артикул: {safe_get(part, 'Артикул')}\n"
+
+        price = safe_get(part, 'Цена')
+        if price != "Не указано":
+            message += f"Цена: {price}\n"
+
+        link = safe_get(part, 'Ссылка')
+        if link != "Не указано" and link != "Нет ссылки":
+            message += f"Ссылка: {link}"
+
+        # Отправляем фото и текст
+        if photo_url:
+            # Отправляем фото с подписью-текстом
+            send_photo_with_caption(peer_id, photo_url, message)
         else:
-            send(peer_id, "Нет данных для отображения")
+            # Если фото нет, отправляем только текст
+            send_safe(peer_id, message)
+
     except Exception as e:
         logging.error(f"Ошибка при показе детали: {e}")
-        send(peer_id, "Произошла ошибка при отображении детали")
+        send_safe(peer_id, "Произошла ошибка при отображении детали")
 
 def show_donor(peer_id):
     """Показывает карточку донора из результатов поиска"""
