@@ -203,9 +203,9 @@ def show_part_info(peer_id, part):
     message = f"Информация о детали:\n"
     message += f"Название: {part.get('Наименование', 'Не указано')}\n"
     message += f"Артикул: {part.get('Артикул', 'Не указан')}\n"
-    message += f"Цена: {part.get('Номер', 'Не указана')}\n"
+    message += f"Номер: {part.get('Номер', 'Не указана')}\n"
     message += f"Цена: {part.get('Цена', 'Не указана')}\n"
-    message += f"Цена: {part.get('Комментарий', 'Не указана')}\n"
+    message += f"Комментарий: {part.get('Комментарий', 'Не указана')}\n"
     send(peer_id, message)
 
 def show_donor_info(peer_id, donor):
@@ -229,9 +229,9 @@ def show_part_info(peer_id, part):
     try:
         message += f"Название: {part.get('Наименование', 'Не указано')}\n"
         message += f"Артикул: {part.get('Артикул', 'Не указан')}\n"
-        message += f"Цена: {part.get('Номер', 'Не указан')}\n"
-        message += f"Ссылка: {part.get('Цена', 'Не указана')}"
-        message += f"Артикул: {part.get('Комментарий', 'Не указан')}\n"
+        message += f"Номер: {part.get('Номер', 'Не указан')}\n"
+        message += f"Цена: {part.get('Цена', 'Не указана')}"
+        message += f"Комментарий: {part.get('Комментарий', 'Не указан')}\n"
         
         send(peer_id, message)
     except Exception as e:
@@ -243,12 +243,12 @@ def show_wheel_info(peer_id, wheel):
     try:
         message = f"🛞 Информация о диске:\n"
         message += f"Производитель: {wheel.get('Производитель диска', 'Не указан')}\n"
-        message += f"Размер: {wheel.get('Артикул', 'Не указан')}\n"
-        message += f"Цена: {wheel.get('Модель диска', 'Не указана')}\n"
+        message += f"Артикул: {wheel.get('Артикул', 'Не указан')}\n"
+        message += f"Модель диска: {wheel.get('Модель диска', 'Не указана')}\n"
         message += f"Размер: {wheel.get('Размер', 'Не указан')}\n"
-        message += f"Размер: {wheel.get('PCD диска', 'Не указан')}\n"
-        message += f"Ссылка: {wheel.get('Тип диска', 'Нет ссылки')}"
-        message += f"Ссылка: {wheel.get('Цена', 'Нет ссылки')}"
+        message += f"PCD диска: {wheel.get('PCD диска', 'Не указан')}\n"
+        message += f"Тип диска: {wheel.get('Тип диска', 'Не указан')}"
+        message += f"Цена: {wheel.get('Цена', 'Нет ссылки')}"
         
         send(peer_id, message)
     except Exception as e:
