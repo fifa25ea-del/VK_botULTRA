@@ -294,7 +294,7 @@ def find_part(query):
     query = query.lower()
     results = []
     for part in cache.parts:
-        if query in part.get('Название', '').lower() or query in part.get('Артикул', '').lower():
+        if query in part.get('Номер', '').lower() or query in part.get('Артикул', '').lower():
             results.append(part)
     return results
 
