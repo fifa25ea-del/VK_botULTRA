@@ -82,6 +82,32 @@ def get_main_keyboard():
 
     return keyboard.get_keyboard()
 
+def send_photo_with_caption(peer_id, photo_url, caption):
+    """Отправляет фото с подписью через VK API"""
+    try:
+        # Загружаем фото во временное хранилище VK
+        upload_url = vk.photos.getMessagesUploadServer()['upload_url']
+        response = requests.post(upload_url, files={'photo': requests.get(photo_url).content})
+        result = response.json()
+
+        # Сохраняем фото в альбоме сообщений
+        photo_data = vk.photos.saveMessagesPhoto(
+            server=result['server'],
+            photo=result['photo'],
+            hash=result['hash']
+        )[0]
+
+        # Отправляем сообщение с фото и подписью
+        vk.messages.send(
+            peer_id=peer_id,
+            message=caption,
+            attachment=f"photo{photo_data['owner_id']}_{photo_data['id']}",
+            random_id=0
+        )
+    except Exception as e:
+        logging.error(f"Ошибка отправки фото {photo_url}: {e}")
+        # Если отправка фото не удалась, отправляем только текст
+        send_safe(peer_id, caption)
 
 def get_first_photo(photo_field):
     """
