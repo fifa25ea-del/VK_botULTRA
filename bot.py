@@ -244,9 +244,12 @@ def show_wheel_info(peer_id, wheel):
     try:
         message = f"🛞 Информация о диске:\n"
         message += f"Производитель: {wheel.get('Производитель диска', 'Не указан')}\n"
+        message += f"Размер: {wheel.get('Артикул', 'Не указан')}\n"
+        message += f"Цена: {wheel.get('Модель диска', 'Не указана')}\n"
         message += f"Размер: {wheel.get('Размер', 'Не указан')}\n"
-        message += f"Цена: {wheel.get('Цена', 'Не указана')}\n"
-        message += f"Ссылка: {wheel.get('Ссылка', 'Нет ссылки')}"
+        message += f"Размер: {wheel.get('PCD диска', 'Не указан')}\n"
+        message += f"Ссылка: {wheel.get('Тип диска', 'Нет ссылки')}"
+        message += f"Ссылка: {wheel.get('Цена', 'Нет ссылки')}"
         
         send(peer_id, message)
     except Exception as e:
@@ -262,10 +265,11 @@ def show_part(peer_id):
         if index < len(results):
             part = results[index]
             message = f"🚗 Карточка детали:\n"
-            message += f"Название: {part.get('Название', 'Не указано')}\n"
+            message += f"Название: {part.get('Наименование', 'Не указано')}\n"
             message += f"Артикул: {part.get('Артикул', 'Не указан')}\n"
-            message += f"Цена: {part.get('Цена', 'Не указана')}\n"
-            message += f"Ссылка: {part.get('Ссылка', 'Нет ссылки')}"
+            message += f"Цена: {part.get('Номер', 'Не указана')}\n"
+            message += f"Ссылка: {part.get('Цена', 'Нет ссылки')}"
+            message += f"Артикул: {part.get('Комментарий', 'Не указан')}\n"
             send(peer_id, message)
         else:
             send(peer_id, "Нет данных для отображения")
@@ -349,11 +353,11 @@ def handle(event):
             return
         elif text_lower in ["🛞 диски", "диски"]:
             user_state[peer_id] = "wheels"
-            send(peer_id, "Введите бренд диска:")
+            send(peer_id, "Введите размер, например R18:")
             return
         elif text_lower in ["🚘 доноры", "доноры"]:
             user_state[peer_id] = "donors"
-            send(peer_id, "Введите марку авто:")
+            send(peer_id, "Последние купленные авто:")
             return
         elif text_lower in ["❤️ избранное", "избранное"]:
             show_favorites(peer_id)
