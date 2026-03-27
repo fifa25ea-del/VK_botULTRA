@@ -83,21 +83,24 @@ def get_main_keyboard():
     return keyboard.get_keyboard()
 
 def send_photo_with_caption(peer_id, photo_url, caption):
-    """Отправляет фото с подписью через VK API"""
+    """Отправляет фото с подписью через VK API или ссылку на фото"""
     try:
-        # Загружаем фото во временное хранилище VK
+        # Проверяем доступность фото (HEAD-запрос)
+        head_response = requests.head(photo_url, timeout=10)
+        if head_response.status_code != 200:
+            raise Exception(f"Фото недоступно: {photo_url}")
+
+        # Пробуем отправить фото через VK API
         upload_url = vk.photos.getMessagesUploadServer()['upload_url']
-        response = requests.post(upload_url, files={'photo': requests.get(photo_url).content})
+        response = requests.post(upload_url, files={'photo': requests.get(photo_url, timeout=10).content})
         result = response.json()
 
-        # Сохраняем фото в альбоме сообщений
         photo_data = vk.photos.saveMessagesPhoto(
             server=result['server'],
             photo=result['photo'],
             hash=result['hash']
         )[0]
 
-        # Отправляем сообщение с фото и подписью
         vk.messages.send(
             peer_id=peer_id,
             message=caption,
@@ -106,27 +109,42 @@ def send_photo_with_caption(peer_id, photo_url, caption):
         )
     except Exception as e:
         logging.error(f"Ошибка отправки фото {photo_url}: {e}")
-        # Если отправка фото не удалась, отправляем только текст
-        send_safe(peer_id, caption)
+        # Если фото не удалось отправить, добавляем ссылку на фото в текст
+        final_message = f"{caption}\n\nФото: {photo_url}"
+        send_safe(peer_id, final_message)
 
 def get_first_photo(photo_field):
-    """
-    Извлекает первую ссылку на фото из поля, содержащего несколько URL через запятую.
-    Возвращает None, если фото нет.
-    """
+    """Извлекает первую ссылку на фото из поля с несколькими URL"""
     if not photo_field:
         return None
-
-    # Разделяем строку по запятым и убираем пробелы
     photo_urls = [url.strip() for url in photo_field.split(',') if url.strip()]
-
-    # Берём первую ссылку, если есть хотя бы одна
     if photo_urls:
         return photo_urls[0]
     return None
 
 
 # ===== ОТПРАВКА СООБЩЕНИЙ =====
+def send_safe(peer_id, text, keyboard=None):
+    """Безопасная отправка сообщения с обработкой ошибок"""
+    try:
+        vk.messages.send(
+            peer_id=peer_id,
+            message=text,
+            random_id=0,
+            keyboard=keyboard if keyboard else get_main_keyboard()
+        )
+    except Exception as e:
+        logging.error(f"Критическая ошибка отправки VK API для {peer_id}: {e}")
+        # Попытка отправить простое сообщение без клавиатуры
+        try:
+            vk.messages.send(
+                peer_id=peer_id,
+                message="Произошла ошибка при отправке сообщения. Попробуйте позже.",
+                random_id=0
+            )
+        except:
+            pass  # Игнорируем, если даже простое сообщение не отправляется
+
 def send(peer_id, text, keyboard=None):
     try:
         vk.messages.send(
@@ -316,7 +334,7 @@ def show_part(peer_id):
 
         part = results[index]
 
-        # Проверяем, что запись содержит данные
+        # Проверка целостности данных
         if not any(str(v).strip() for v in part.values()):
             send_safe(peer_id, "Данные о детали повреждены. Попробуйте поиск заново.")
             return
@@ -337,17 +355,15 @@ def show_part(peer_id):
         if link != "Не указано" and link != "Нет ссылки":
             message += f"Ссылка: {link}"
 
-        # Отправляем фото и текст
+        # Отправляем фото и текст или только текст
         if photo_url:
-            # Отправляем фото с подписью-текстом
             send_photo_with_caption(peer_id, photo_url, message)
         else:
-            # Если фото нет, отправляем только текст
             send_safe(peer_id, message)
 
     except Exception as e:
-        logging.error(f"Ошибка при показе детали: {e}")
-        send_safe(peer_id, "Произошла ошибка при отображении детали")
+        logging.error(f"Неожиданная ошибка в show_part для {peer_id}: {e}")
+        send_safe(peer_id, "Произошла ошибка при отображении детали. Попробуйте позже.")
 
 def show_donor(peer_id):
     """Показывает карточку донора из результатов поиска"""
