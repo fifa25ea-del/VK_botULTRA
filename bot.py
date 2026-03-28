@@ -375,7 +375,7 @@ def show_wheel_info(peer_id, wheel):
 
 
 def show_part(peer_id):
-    """Показывает карточку детали: фото + текст с кнопками навигации + нумерация"""
+    """Показывает карточку детали с кнопками навигации"""
     try:
         index = user_index.get(peer_id, 0)
         results = user_results.get(peer_id, [])
@@ -384,76 +384,91 @@ def show_part(peer_id):
             send_safe(peer_id, "Нет результатов поиска для отображения")
             return
 
-        # Проверка, что индекс в пределах списка
-        if index >= len(results):
-            user_index[peer_id] = 0
-            index = 0
+        # --- НОВОЕ: РЕВЕРСИВНЫЙ ПОРЯДОК ---
+        # Создаем перевернутую копию списка, чтобы не ломать исходные данные
+        reversed_results = list(results)  # Создаем копию
+        reversed_results.reverse()        # Переворачиваем (свежие будут первыми)
 
-        part = results[index]
+        # Обновляем индекс, так как список перевернулся
+        # Если был индекс 0 (первый в старом списке), он станет последним в новом
+        total_items = len(reversed_results)
+        reversed_index = total_items - 1 - index
 
-        # Проверка целостности данных
-        if not part or not any(str(v).strip() for v in part.values()):
-            send_safe(peer_id, "Данные о детали повреждены. Попробуйте поиск заново.")
+        # Проверяем границы нового индекса
+        if reversed_index >= total_items or reversed_index < 0:
+            send_safe(peer_id, "Нет данных для отображения")
             return
 
-        # Формируем текст карточки
+        part = reversed_results[reversed_index]
+
+        # Формируем текст карточки (остальной код без изменений)
         message = "🚗 Карточка детали:\n"
         message += f"Название: {safe_get(part, 'Наименование')}\n"
         message += f"Артикул: {safe_get(part, 'Артикул')}\n"
-
+        
         price = safe_get(part, 'Цена')
         if price != "Не указано":
             message += f"Цена: {price}\n"
 
         link = safe_get(part, 'Ссылка')
         if link != "Не указано" and link != "Нет ссылки":
-            message += f"Ссылка: {link}\n"
+            message += f"Ссылка: {link}"
 
-        # Добавляем информацию о позиции в списке
-        total_parts = len(results)
-        current_position = index + 1
-        message += f"\n📊 {current_position} из {total_parts}"
+        # Добавляем нумерацию с учетом перевернутого списка
+        current_position = reversed_index + 1
+        message += f"\n📊 {current_position} из {total_items}"
 
         # Создаём клавиатуру
         keyboard = VkKeyboard(one_time=False)
 
-        # Кнопка "Назад" (доступна, если есть что листать назад)
-        if len(results) > 1:
+        if total_items > 1:
             keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
 
-        # Кнопка "Обновить фото/текст"
         keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
 
-        # Кнопка "Вперед" (доступна, если есть что листать вперед)
-        if len(results) > 1:
+        if total_items > 1:
             keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
-
+            
         keyboard_data = keyboard.get_keyboard()
+        
+        # Отправляем фото и текст (как мы исправили ранее)
         photo_url = get_first_photo(part.get('Фото', ''))
-
-        # Отправляем фото (если URL корректен)
-        if photo_url and isinstance(photo_url, str) and photo_url.strip():
+        
+        if photo_url:
             try:
-                send_photo_with_caption(
-                    peer_id=peer_id,
-            photo_url=photo_url,
-            caption=""  # Пустая подпись — фото без текста
-                )
-                logging.info(f"Фото отправлено для {peer_id}: {photo_url}")
-            except Exception as photo_error:
-                logging.warning(f"Не удалось отправить фото для {peer_id}: {photo_error}")
+                # Загрузка фото и отправка ОДНИМ сообщением
+                response = requests.get(photo_url, timeout=10)
+                response.raise_for_status()
+                
+                upload_url = vk.photos.getMessagesUploadServer()['upload_url']
+                files = {'photo': ('image.jpg', response.content)}
+                upload_data = requests.post(upload_url, files=files, timeout=15).json()
 
-        # Отправляем текстовое сообщение с клавиатурой (всегда)
-        send_safe(
-            peer_id=peer_id,
-            text=message,
-            keyboard=keyboard_data
-        )
+                photo_data = vk.photos.saveMessagesPhoto(
+                    server=upload_data['server'],
+                    photo=upload_data['photo'],
+                    hash=upload_data['hash']
+                )[0]
+                
+                attachment = f"photo{photo_data['owner_id']}_{photo_data['id']}"
+                
+                vk.messages.send(
+                    peer_id=peer_id,
+                    message=message,
+                    attachment=attachment,
+                    keyboard=keyboard_data,
+                    random_id=get_random_id()
+                )
+            except Exception as e:
+                logging.warning(f"Ошибка отправки фото: {e}. Отправляем только текст.")
+                send_safe(peer_id, message, keyboard=keyboard_data)
+        else:
+            send_safe(peer_id, message, keyboard=keyboard_data)
 
     except Exception as e:
-        logging.critical(f"ФАТАЛЬНАЯ ошибка в show_part для {peer_id}: {e}")
-        send_safe(peer_id, "Произошла критическая ошибка при отображении детали.")
-
+        logging.critical(f"Ошибка в show_part для {peer_id}: {e}")
+        send_safe(peer_id, "Произошла ошибка при отображении детали.")
+        
 def show_wheel(peer_id):
     """Показывает карточку диска: фото + текст с кнопками навигации одним сообщением"""
     try:
