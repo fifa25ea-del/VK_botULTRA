@@ -488,7 +488,7 @@ def handle(event):
             return
         elif text_lower in ["🛞 диски", "диски"]:
             user_state[peer_id] = "wheels"
-            send(peer_id, "Введите размер , например R18:", keyboard=None)
+            send(peer_id, "Введите размер, например R18:", keyboard=None)
             return
         elif text_lower in ["🚘 доноры", "доноры"]:
             user_state[peer_id] = "donors"
@@ -498,53 +498,70 @@ def handle(event):
             show_favorites(peer_id)
             return
         elif text_lower in ["⬅️ назад", "назад", "сброс", "отмена"]:
-            user_state[peer_id] = None 
-            user_results[peer_id] = [] 
+            user_state[peer_id] = None
+            user_results[peer_id] = []
             user_index[peer_id] = 0
             send(peer_id, "Меню сброшено. Чем помочь?", keyboard=get_main_keyboard())
             return
 
-        # --- ОСНОВНАЯ ЛОГИКА ПОИСКА И НАВИГАЦИИ ---
+        # Основная логика поиска и навигации
         current_state = user_state.get(peer_id)
-        
-        # Проверяем состояние "Поиск запчастей"
+
         if current_state == "parts":
-            # Сначала проверяем, не нажал ли пользователь кнопки навигации
-            if text in ["⬅️ Назад", "Назад"]:
-                results = user_results.get(peer_id, [])
-                if results and len(results) > 1:
-                    new_index = user_index.get(peer_id, 0) - 1
-                    if new_index < 0:
-                        new_index = len(results) - 1
-                    user_index[peer_id] = new_index
-                    show_part(peer_id)
-                return
+            # Нормализуем текст для проверки навигационных команд
+            normalized_text = text.strip().lower()
 
-            elif text in ["➡️ Вперед", "Вперед"]:
-                results = user_results.get(peer_id, [])
-                if results and len(results) > 1:
-                    new_index = user_index.get(peer_id, 0) + 1
-                    if new_index >= len(results):
-                        new_index = 0
-                    user_index[peer_id] = new_index
-                    show_part(peer_id)
+            # Обрабатываем навигационные команды
+            if normalized_text in ["⬅️ назад", "назад"]:
+                _handle_navigation(peer_id, -1)
                 return
-
-            elif text in ["🔄 Обновить", "Обновить"]:
+            elif normalized_text in ["➡️ вперед", "вперед"]:
+                _handle_navigation(peer_id, 1)
+                return
+            elif normalized_text in ["🔄 обновить", "обновить"]:
                 show_part(peer_id)
                 return
 
-            # --- Если это НЕ кнопка навигации, значит это поисковый запрос ---
+            # Если это не кнопка навигации — выполняем поиск
+            logging.info(f"Начинаем поиск деталей для запроса: '{text}'")
+            results = cache.search_parts(text)
+
+            if results:
+                user_results[peer_id] = results
+                user_index[peer_id] = 0
+                show_part(peer_id)
             else:
-                logging.info(f"Начинаем поиск деталей для запроса: '{text}'")
-                results = cache.search_parts(text)
-                
-                if results:
-                    user_results[peer_id] = results
-                    user_index[peer_id] = 0 
-                    show_part(peer_id)
-                else:
-                    send(peer_id, "❌ Детали не найдены. Попробуйте другой запрос или номер.")
+                send(peer_id, "❌ Детали не найдены. Попробуйте другой запрос или номер.")
+
+    except Exception as e:
+        logging.error(f"Ошибка при обработке сообщения от {peer_id}: {e}")
+        send(peer_id, "Произошла ошибка. Попробуйте позже.")
+
+
+
+def _handle_navigation(peer_id: int, direction: int) -> None:
+    """
+    Обрабатывает навигацию по результатам (вперёд/назад).
+
+    Args:
+        peer_id: ID пользователя.
+        direction: направление (-1 — назад, 1 — вперёд).
+    """
+    results = user_results.get(peer_id, [])
+    if not results or len(results) <= 1:
+        return  # Навигация не нужна для 0–1 результата
+
+    current_index = user_index.get(peer_id, 0)
+    new_index = current_index + direction
+
+    # Циклическая навигация
+    if new_index < 0:
+        new_index = len(results) - 1
+    elif new_index >= len(results):
+        new_index = 0
+
+    user_index[peer_id] = new_index
+    show_part(peer_id)
 # Запуск бота
 # ===== ГЛАВНЫЙ ЦИКЛ =====
 def run_bot():
