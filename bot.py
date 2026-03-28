@@ -354,7 +354,7 @@ def show_wheel_info(peer_id, wheel):
 
 
 def show_part(peer_id):
-    """Показывает карточку детали: фото + текст с кнопками навигации"""
+    """Показывает карточку детали: фото + текст с кнопками навигации + нумерация"""
     try:
         index = user_index.get(peer_id, 0)
         results = user_results.get(peer_id, [])
@@ -386,7 +386,12 @@ def show_part(peer_id):
 
         link = safe_get(part, 'Ссылка')
         if link != "Не указано" and link != "Нет ссылки":
-            message += f"Ссылка: {link}"
+            message += f"Ссылка: {link}\n"
+
+        # Добавляем информацию о позиции в списке
+        total_parts = len(results)
+        current_position = index + 1
+        message += f"\n📊 {current_position} из {total_parts}"
 
         # Создаём клавиатуру
         keyboard = VkKeyboard(one_time=False)
@@ -396,16 +401,16 @@ def show_part(peer_id):
             keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
 
         # Кнопка "Обновить фото/текст"
-        keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
+        keyboard.addbutton("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
 
         # Кнопка "Вперед" (доступна, если есть что листать вперед)
         if len(results) > 1:
-            keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
+            keyboard.addbutton("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
 
         keyboard_data = keyboard.get_keyboard()
         photo_url = get_first_photo(part.get('Фото', ''))
 
-        # Сначала отправляем фото (без подписи), если URL корректен
+        # Отправляем фото (если URL корректен)
         if photo_url and isinstance(photo_url, str) and photo_url.strip():
             try:
                 send_photo_with_caption(
@@ -417,7 +422,7 @@ def show_part(peer_id):
             except Exception as photo_error:
                 logging.warning(f"Не удалось отправить фото для {peer_id}: {photo_error}")
 
-        # Затем отправляем текстовое сообщение с клавиатурой (всегда)
+        # Отправляем текстовое сообщение с клавиатурой (всегда)
         send_safe(
             peer_id=peer_id,
             text=message,
@@ -427,7 +432,6 @@ def show_part(peer_id):
     except Exception as e:
         logging.critical(f"ФАТАЛЬНАЯ ошибка в show_part для {peer_id}: {e}")
         send_safe(peer_id, "Произошла критическая ошибка при отображении детали.")
-
 def show_donor(peer_id):
     """Показывает карточку донора из результатов поиска"""
     try:
