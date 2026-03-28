@@ -280,18 +280,21 @@ def show_wheel_info(peer_id, wheel):
         pcd = safe_get(wheel, 'PCD диска')
         
         if size != "Не указано":
-             message += f"Размер: {size}\n"
-             
+            message += f"Размер: {size}\n"
+            
         if pcd != "Не указано":
-             message += f"PCD: {pcd}\n"
-             
-         message += f"Тип: {safe_get(wheel, 'Тип диска')}\n"
-         message += f"Цена: {safe_get(wheel, 'Цена')}"
-         
-         send_safe(peer_id, message)
-     except Exception as e:
-         logging.error(f"Ошибка диска: {e}")
-         send_safe(peer_id, "Ошибка при получении информации о диске.")
+            message += f"PCD: {pcd}\n"
+        
+        # --- ИСПРАВЛЕННЫЙ ОТСТУП ---
+        message += f"Тип: {safe_get(wheel, 'Тип диска')}\n"
+        # --- ИСПРАВЛЕННЫЙ ОТСТУП ---
+        
+        message += f"Цена: {safe_get(wheel, 'Цена')}"
+        
+        send_safe(peer_id, message)
+    except Exception as e:
+        logging.error(f"Ошибка диска: {e}")
+        send_safe(peer_id, "Ошибка при получении информации о диске.")
 
 # ===== ИЗБРАННОЕ =====
 def add_to_favorites(peer_id, item):
