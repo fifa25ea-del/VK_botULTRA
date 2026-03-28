@@ -1,5 +1,5 @@
 # =========================
-# VK BOT ULTRA (ТОП ВЕРСИЯ)
+# VK BOT ULTRA (ИСПРАВЛЕННАЯ ВЕРСИЯ)
 # =========================
 
 import os
@@ -10,18 +10,12 @@ import io
 import threading
 import time
 import json
-from vk_api.bot_longpoll import VkBotLongPoll, VkBotEventType
 import logging
-from urllib.parse import urlparse
-
-
-# Настройка логирования
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+from vk_api.bot_longpoll import VkBotLongPoll, VkBotEventType
 
 # ===== НАСТРОЙКИ =====
 TOKEN = "vk1.a.Ze-bIlYgJf9rdkgnhYmWc6U6Eg9DRgi0vLkokPQVV5fIMsfsLm8kVPpCBMD04qwimSsaZZS1R0e1qwndF1hj3ROCvebCapjcT7xVeOSAvAdIJ1rqPYevdcbGAIt6OxV9xreMd2w4JROXJnnKvE4XiDLIieNoPE6BMKERAjlIt8jpeKIughzD9VC7x9DdPjzgF_tvoZMRDGkbvIBycGNoeA"
-GROUP_ID = 236843733
-ADMIN_ID = 888230055
+GROUP_ID = 236843733 # ID вашей группы
 
 DONORS_CSV = "https://baz-on.ru/export/c592/5c6ca/stuttgart-site-carsrc.csv"
 PARTS_CSV = "https://baz-on.ru/export/c592/e61a0/stuttgart-drom.csv"
@@ -31,9 +25,9 @@ FAV_FILE = "favorites.json"
 STATS_FILE = "stats.json"
 
 # ===== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ СОСТОЯНИЯ =====
-user_state = {}  # Хранит текущее состояние пользователя
+user_state = {}    # Хранит текущее состояние пользователя (parts, wheels, donors)
 user_results = {}  # Хранит результаты поиска для пользователя
-user_index = {}  # Хранит текущий индекс в результатах поиска
+user_index = {}    # Хранит текущий индекс в результатах поиска
 
 # ===== ИНИЦИАЛИЗАЦИЯ ФАЙЛОВ =====
 def init_files():
@@ -42,115 +36,68 @@ def init_files():
             if not os.path.exists(file):
                 with open(file, 'w', encoding='utf-8') as f:
                     f.write('{}')
-            if not os.access(file, os.W_OK):
-                raise PermissionError(f"Нет прав записи в файл {file}")
     except Exception as e:
-        logging.error(f"Ошибка при инициализации файлов: {e}")
+        logging.error(f"Ошибка файлов: {e}")
         exit(1)
 
-# Инициализируем файлы
-init_files()
-
 # ===== ИНИЦИАЛИЗАЦИЯ VK API =====
-def init_vk_api():
+def init_vk():
     try:
         vk_session = vk_api.VkApi(token=TOKEN)
         longpoll = VkBotLongPoll(vk_session, GROUP_ID)
         vk = vk_session.get_api()
-        print("Подключение к VK API успешно")
-        return vk_session, longpoll, vk
+        logging.info("Подключение к VK API успешно")
+        return vk, longpoll
     except Exception as e:
-        logging.error(f"Ошибка инициализации VK API: {e}")
+        logging.error(f"Ошибка VK API: {e}")
         raise
 
-# Инициализируем VK API
+# Инициализация
+init_files()
 try:
-    vk_session, longpoll, vk = init_vk_api()
+    vk, longpoll = init_vk()
 except Exception as e:
-    logging.error(f"Не удалось инициализировать VK API: {e}")
+    logging.error(f"Не удалось запустить бота: {e}")
     exit(1)
 
 from vk_api.keyboard import VkKeyboard, VkKeyboardColor
 
+# ===== КЛАВИАТУРЫ =====
 def get_main_keyboard():
     keyboard = VkKeyboard(one_time=False)
-
     keyboard.add_button("🚗 Запчасти", color=VkKeyboardColor.PRIMARY)
     keyboard.add_button("🛞 Диски", color=VkKeyboardColor.PRIMARY)
     keyboard.add_line()
     keyboard.add_button("🚘 Доноры", color=VkKeyboardColor.SECONDARY)
     keyboard.add_button("❤️ Избранное", color=VkKeyboardColor.POSITIVE)
-
     return keyboard.get_keyboard()
 
-def send_photo_with_caption(peer_id, photo_url, caption):
-    """Отправляет фото с подписью"""
-    def upload_and_send():
-        try:
-            # Загружаем изображение
-            response = requests.get(photo_url, timeout=10, stream=True)
-            response.raise_for_status() # Проверка статуса 200 OK
-
-            # Проверяем, что сервер вернул картинку (а не HTML-страницу с ошибкой 404)
-            content_type = response.headers.get('Content-Type', '')
-            if 'image' not in content_type:
-                logging.warning(f"URL не содержит изображение (Content-Type: {content_type}): {photo_url}")
-                return # Просто выходим, если это не картинка
-
-            # Загрузка во временное хранилище VK
-            upload_response = vk.photos.getMessagesUploadServer()
-            upload_url = upload_response['upload_url']
-            
-            # Используем content из ответа
-            files = {'photo': ('image.jpg', response.content)}
-            upload_result = requests.post(upload_url, files=files, timeout=15)
-            upload_data = upload_result.json()
-
-            # Сохранение и отправка
-            photo_data = vk.photos.saveMessagesPhoto(
-                server=upload_data['server'],
-                photo=upload_data['photo'],
-                hash=upload_data['hash']
-            )[0]
-
-            vk.messages.send(
-                peer_id=peer_id,
-                message=caption,
-                attachment=f"photo{photo_data['owner_id']}_{photo_data['id']}",
-                random_id=0
-            )
-            logging.info(f"Фото успешно отправлено: {photo_url}")
-
-        except requests.exceptions.Timeout:
-            logging.warning(f"Таймаут при загрузке фото: {photo_url}")
-        except requests.exceptions.RequestException as e:
-            logging.warning(f"Ошибка сети при загрузке фото: {e}")
-        except Exception as e:
-            logging.error(f"Неизвестная ошибка при обработке фото: {e}")
-
-    thread = threading.Thread(target=upload_and_send)
-    thread.daemon = True
-    thread.start()
-
-def get_first_photo(photo_field):
-    """Извлекает первую валидную ссылку на фото"""
-    if not photo_field:
-        return None
-
-    # Убираем лишние пробелы и разбиваем по запятым
-    photo_urls = [url.strip() for url in str(photo_field).split(',') if url.strip()]
+def get_navigation_keyboard(index, total):
+    keyboard = VkKeyboard(one_time=False)
+    inv_char = '\u200B'
     
-    # Проверяем наличие http/https
-    for url in photo_urls:
-        if url.startswith('http://') or url.startswith('https://'):
-            return url
-            
-    return None
-
+    # Назад
+    if index > 0:
+        keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY, payload={"action": "prev"})
+    else:
+        keyboard.add_button(inv_char, color=VkKeyboardColor.SECONDARY, payload={"action": "empty"})
+    
+    keyboard.add_line()
+    
+    # Вперёд
+    if index < total - 1:
+        keyboard.add_button("➡️ Вперёд", color=VkKeyboardColor.PRIMARY, payload={"action": "next"})
+    else:
+        keyboard.add_button(inv_char, color=VkKeyboardColor.SECONDARY, payload={"action": "empty"})
+        
+    keyboard.add_line()
+    keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.SECONDARY, payload={"action": "home"})
+    
+    return keyboard.get_keyboard()
 
 # ===== ОТПРАВКА СООБЩЕНИЙ =====
 def send_safe(peer_id, text, keyboard=None):
-    """Безопасная отправка сообщения с обработкой ошибок"""
+    """Отправляет сообщение с обработкой ошибок"""
     try:
         vk.messages.send(
             peer_id=peer_id,
@@ -159,36 +106,18 @@ def send_safe(peer_id, text, keyboard=None):
             keyboard=keyboard if keyboard else get_main_keyboard()
         )
     except Exception as e:
-        logging.error(f"Критическая ошибка отправки VK API для {peer_id}: {e}")
-        # Попытка отправить простое сообщение без клавиатуры
+        logging.error(f"Ошибка отправки: {e}")
         try:
-            vk.messages.send(
-                peer_id=peer_id,
-                message="Произошла ошибка при отправке сообщения. Попробуйте позже.",
-                random_id=0
-            )
+            vk.messages.send(peer_id=peer_id, message="Ошибка. Попробуйте позже.", random_id=0)
         except:
-            pass  # Игнорируем, если даже простое сообщение не отправляется
+            pass
 
-def send(peer_id, text, keyboard=None):
-    try:
-        vk.messages.send(
-            peer_id=peer_id,
-            message=text,
-            random_id=0,
-            keyboard=keyboard if keyboard else get_main_keyboard()
-        )
-    except Exception as e:
-        logging.error(f"Ошибка отправки сообщения: {e}")
-
-
-# ===== ХРАНИЛИЩЕ =====
+# ===== ХРАНИЛИЩЕ (Избранное) =====
 def load_json(file):
     try:
         with open(file, "r", encoding="utf-8") as f:
             return json.load(f)
-    except Exception as e:
-        logging.error(f"Ошибка загрузки {file}: {e}")
+    except:
         return {}
 
 def save_json(file, data):
@@ -196,13 +125,11 @@ def save_json(file, data):
         with open(file, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
     except Exception as e:
-        logging.error(f"Ошибка сохранения {file}: {e}")
+        logging.error(f"Ошибка сохранения: {e}")
 
 favorites = load_json(FAV_FILE)
-stats = load_json(STATS_FILE)
 
-
-# ===== КЭШ =====
+# ===== КЭШ ДАННЫХ =====
 class DataCache:
     def __init__(self):
         self.parts = []
@@ -211,345 +138,277 @@ class DataCache:
 
     def load_csv(self, url):
         try:
-            r = requests.get(url, timeout=15)
+            r = requests.get(url, timeout=20)
             r.encoding = "cp1251"
             return list(csv.DictReader(io.StringIO(r.text), delimiter=";"))
-        except requests.exceptions.RequestException as e:
-            logging.error(f"Ошибка загрузки CSV с {url}: {e}")
-            return []
         except Exception as e:
-            logging.error(f"Неизвестная ошибка при загрузке CSV: {e}")
+            logging.error(f"Ошибка загрузки {url}: {e}")
             return []
 
     def update(self):
         try:
-            print("🔄 Обновление базы...")
+            logging.info("🔄 Обновление базы...")
             self.parts = self.load_csv(PARTS_CSV)
             self.wheels = self.load_csv(WHEELS_CSV)
             self.donors = self.load_csv(DONORS_CSV)
-            print("База данных успешно обновлена")
+            logging.info("База обновлена")
         except Exception as e:
-            logging.error(f"Критическая ошибка при обновлении базы: {e}")
+            logging.error(f"Критическая ошибка обновления: {e}")
 
-    def search_parts(self, query):
-        """Поиск деталей по названию или артикулу"""
-        query = query.lower()
-        results = []
-        for part in self.parts:
-            if query in part.get('Номер', '').lower() or \
-               query in part.get('Артикул', '').lower():
-                results.append(part)
-        return results
-
-    def search_wheels(self, query):
-        """Поиск дисков по производителю"""
-        query = query.lower()
-        results = []
-        for wheel in self.wheels:
-            if query in wheel.get('Диаметр диска', '').lower():
-                results.append(wheel)
-        return results
-
-    def search_donors(self, query):
-        """Поиск доноров по марке или модели"""
-        query = query.lower()
-        results = []
-        for donor in self.donors:
-            if query in donor.get('Марка', '').lower() or \
-               query in donor.get('Модель', '').lower():
-                results.append(donor)
-        return results
-
-    def get_part_details(self, part_id):
-        """Получение детальной информации о детали"""
-        for part in self.parts:
-            if part.get('ID') == part_id:
-                return part
-        return None
-
-# Создаем экземпляр кэша
+# Создаем кэш и запускаем автообновление
 cache = DataCache()
+cache.update() # Первое обновление сразу
 
-# Первое обновление данных
-try:
-    cache.update()
-except Exception as e:
-    logging.error(f"Ошибка при первом обновлении данных: {e}")
-
-# Автообновление в отдельном потоке
 def auto_update():
     while True:
-        try:
-            cache.update()
-        except Exception as e:
-            logging.error(f"Ошибка автообновления: {e}")
-        time.sleep(300)  # Обновляем каждые 5 минут
+        cache.update()
+        time.sleep(300) # 5 минут
 
-# Запускаем поток автообновления
 threading.Thread(target=auto_update, daemon=True).start()
 
-# Добавляем методы для работы с результатами поиска
+# ===== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ =====
 def safe_get(data_dict, field_name, default="Не указано"):
-    """Безопасно получает значение из словаря, очищает от пробелов"""
     value = data_dict.get(field_name, "")
     if value is None:
         return default
     value = str(value).strip()
     return value if value else default
 
-def show_part_info(peer_id, part):
-    logging.debug(f"Пытаемся получить фото по ссылке: {part.get('Фото', '')}")
-    """Показывает подробную информацию о детали"""
-    try:
-        message = "🚗 Информация о детали:\n"
-        message += f"Название: {safe_get(part, 'Наименование')}\n"
-        message += f"Артикул: {safe_get(part, 'Артикул')}\n"
-        message += f"Номер: {safe_get(part, 'Номер')}\n"
-        message += f"Цена: {safe_get(part, 'Цена')}\n"
-        comment = safe_get(part, 'Комментарий')
-        if comment != "Не указано":
-            message += f"Комментарий: {comment}"
-        send(peer_id, message)
-    except Exception as e:
-        logging.error(f"Критическая ошибка в show_part_info: {e}")
-        send(peer_id, "Произошла ошибка при получении информации о детали")
+def get_first_photo(photo_field):
+    if not photo_field:
+        return None
+    for url in str(photo_field).split(','):
+        url = url.strip()
+        if url.startswith('http'):
+            return url
+    return None
 
-def show_donor_info(peer_id, donor):
-    """Показывает подробную информацию о доноре"""
-    try:
-        message = "🚘 Информация о доноре:\n"
-        message += f"Марка: {donor.get('Марка', 'Не указана')}\n"
-        message += f"Модель: {donor.get('Модель', 'Не указана')}\n"
-        message += f"Год выпуска: {donor.get('Год', 'Не указан')}\n"
-        message += f"Цена: {donor.get('Цена', 'Не указана')}\n"
-        message += f"Пробег: {donor.get('Пробег', 'Не указан')}"
-        send(peer_id, message)
-    except Exception as e:
-        logging.error(f"Ошибка при отображении информации о доноре: {e}")
-        send(peer_id, "Произошла ошибка при получении информации о доноре")
+def send_photo_with_caption(peer_id, photo_url, caption):
+    """Отправляет фото с подписью в отдельном потоке"""
+    def upload_and_send():
+        try:
+            response = requests.get(photo_url, timeout=10)
+            response.raise_for_status()
+            
+            upload_url = vk.photos.getMessagesUploadServer()['upload_url']
+            files = {'photo': ('image.jpg', response.content)}
+            upload_data = requests.post(upload_url, files=files).json()
+            
+            photo_data = vk.photos.saveMessagesPhoto(**upload_data)[0]
+            vk.messages.send(
+                peer_id=peer_id,
+                message=caption,
+                attachment=f"photo{photo_data['owner_id']}_{photo_data['id']}",
+                random_id=0,
+                keyboard=get_main_keyboard() # Клавиатура для фото (можно убрать)
+            )
+            logging.info(f"Фото отправлено: {photo_url}")
+        except Exception as e:
+            logging.warning(f"Ошибка фото: {e}")
 
-def show_wheel_info(peer_id, wheel):
-    """Показывает подробную информацию о диске"""
-    try:
-        message = "🛞 Информация о диске:\n"
-        message += f"Производитель: {wheel.get('Производитель диска', 'Не указан')}\n"
-        message += f"Артикул: {wheel.get('Артикул', 'Не указан')}\n"
-        message += f"Модель диска: {wheel.get('Модель диска', 'Не указана')}\n"
-        message += f"Размер: {wheel.get('Размер', 'Не указан')}\n"
-        message += f"PCD диска: {wheel.get('PCD диска', 'Не указан')}\n"
-        message += f"Тип диска: {wheel.get('Тип диска', 'Не указан')}\n"
-        message += f"Цена: {wheel.get('Цена', 'Не указана')}"
-        send(peer_id, message)
-    except Exception as e:
-        logging.error(f"Ошибка при отображении информации о диске: {e}")
-        send(peer_id, "Произошла ошибка при получении информации о диске")
+    thread = threading.Thread(target=upload_and_send)
+    thread.daemon = True
+    thread.start()
 
-def show_part(peer_id):
-    """Показывает карточку детали с быстрой отправкой текста и фоновой загрузкой фото"""
-    try:
-        index = user_index.get(peer_id, 0)
-        results = user_results.get(peer_id, [])
+# ===== ЛОГИКА ПОИСКА И ОТОБРАЖЕНИЯ =====
 
-        if not results:
-            send_safe(peer_id, "Нет результатов поиска для отображения")
-            return
+def show_item(peer_id):
+    """Универсальная функция для показа карточки (деталь/донор)"""
+    state = user_state.get(peer_id)
+    index = user_index.get(peer_id, 0)
+    results = user_results.get(peer_id, [])
+    
+    if not results or index >= len(results):
+        send_safe(peer_id, "Нет данных для отображения.")
+        return
 
-        if index >= len(results) or index < 0:
-            send_safe(peer_id, "Нет данных для отображения (некорректный индекс)")
-            return
-
-        part = results[index]
-
-        # Проверка целостности данных
-        if not part or not any(str(v).strip() for v in part.values()):
-            send_safe(peer_id, "Данные о детали повреждены. Попробуйте поиск заново.")
-            return
-
-        # Извлекаем первую фотографию
-        photo_url = get_first_photo(part.get('Фото', ''))
-
-        # Формируем текст карточки
+    item = results[index]
+    
+    if state == "parts":
         message = "🚗 Карточка детали:\n"
-        message += f"Название: {safe_get(part, 'Наименование')}\n"
-        message += f"Артикул: {safe_get(part, 'Артикул')}\n"
-
-        price = safe_get(part, 'Цена')
+        message += f"Название: {safe_get(item, 'Наименование')}\n"
+        message += f"Артикул: {safe_get(item, 'Артикул')}\n"
+        
+        price = safe_get(item, 'Цена')
+        link = safe_get(item, 'Ссылка')
+        
         if price != "Не указано":
             message += f"Цена: {price}\n"
-
-        link = safe_get(part, 'Ссылка')
-        if link != "Не указано" and link != "Нет ссылки":
+            
+        if link != "Не указано":
             message += f"Ссылка: {link}"
+            
+        photo_url = get_first_photo(item.get('Фото'))
+        
+    elif state == "donors":
+        message = "🚘 Карточка донора:\n"
+        message += f"Марка: {safe_get(item, 'Марка')}\n"
+        message += f"Модель: {safe_get(item, 'Модель')}\n"
+        
+        year = safe_get(item, 'Год')
+        price = safe_get(item, 'Цена')
+        
+        if year != "Не указано":
+            message += f"Год: {year}\n"
+            
+        if price != "Не указано":
+            message += f"Цена: {price}\n"
+            
+        link = safe_get(item, 'Ссылка')
+        if link != "Не указано":
+            message += f"Ссылка: {link}"
+            
+        photo_url = None # Фото доноров не обрабатываются в этом примере
 
-        # Отправляем текст сразу
-        send_safe(peer_id, message)
+    # Отправляем текст с навигацией
+    keyboard = get_navigation_keyboard(index, len(results))
+    send_safe(peer_id, message, keyboard=keyboard)
+    
+    # Отправляем фото в фоне (если есть и это деталь)
+    if state == "parts" and photo_url:
+         send_photo_with_caption(peer_id, photo_url, message)
 
-        # Если есть фото, запускаем его загрузку в фоне
-        if photo_url:
-            send_photo_with_caption(peer_id, photo_url, message)
-
-    except Exception as e:
-        logging.critical(f"ФАТАЛЬНАЯ ошибка в show_part для {peer_id}: {e}")
-        send_safe(peer_id, "Произошла критическая ошибка при отображении детали. Обратитесь к администратору.")
-
-def show_donor(peer_id):
-    """Показывает карточку донора из результатов поиска"""
+def show_wheel_info(peer_id, wheel):
+    """Показывает информацию о диске (без навигации)"""
     try:
-        index = user_index.get(peer_id, 0)
-        results = user_results.get(peer_id, [])
+        message = "🛞 Информация о диске:\n"
+        message += f"Производитель: {safe_get(wheel, 'Производитель диска')}\n"
+        message += f"Артикул: {safe_get(wheel, 'Артикул')}\n"
+        message += f"Модель: {safe_get(wheel, 'Модель диска')}\n"
+        
+        size = safe_get(wheel, 'Размер')
+        pcd = safe_get(wheel, 'PCD диска')
+        
+        if size != "Не указано":
+             message += f"Размер: {size}\n"
+             
+        if pcd != "Не указано":
+             message += f"PCD: {pcd}\n"
+             
+         message += f"Тип: {safe_get(wheel, 'Тип диска')}\n"
+         message += f"Цена: {safe_get(wheel, 'Цена')}"
+         
+         send_safe(peer_id, message)
+     except Exception as e:
+         logging.error(f"Ошибка диска: {e}")
+         send_safe(peer_id, "Ошибка при получении информации о диске.")
 
-        if index < len(results):
-            donor = results[index]
-            message = "🚘 Карточка донора:\n"
-            message += f"Марка: {donor.get('Марка', 'Не указана')}\n"
-            message += f"Модель: {donor.get('Модель', 'Не указана')}\n"
-            message += f"Год: {donor.get('Год', 'Не указан')}\n"
-            message += f"Цена: {donor.get('Цена', 'Не указана')}\n"
-            message += f"Ссылка: {donor.get('Ссылка', 'Нет ссылки')}"
-            send(peer_id, message)
-        else:
-            send(peer_id, "Нет данных для отображения")
-    except Exception as e:
-        logging.error(f"Ошибка при показе донора: {e}")
-        send(peer_id, "Произошла ошибка при отображении донора")
-
-# ===== ДОБАВЛЯЕМ ПОИСК ПО КРИТЕРИЯМ =====
-
-def find_part(query):
-    query = query.lower()
-    results = []
-    for part in cache.parts:
-        if query in part.get('Номер', '').lower() or query in part.get('Артикул', '').lower():
-            results.append(part)
-    return results
-
-def find_donor(query):
-    query = query.lower()
-    results = []
-    for donor in cache.donors:
-        if query in donor.get('Марка', '').lower() or query in donor.get('Модель', '').lower():
-            results.append(donor)
-    return results
-
-# ===== ДОБАВЛЯЕМ ИЗБРАННОЕ =====
-
+# ===== ИЗБРАННОЕ =====
 def add_to_favorites(peer_id, item):
-    if peer_id not in favorites:
-        favorites[peer_id] = []
-    if item not in favorites[peer_id]:
-        favorites[peer_id].append(item)
-        save_json(FAV_FILE, favorites)
-        send(peer_id, "Добавлено в избранное!")
-    else:
-        send(peer_id, "Уже в избранном!")
-
+     if peer_id not in favorites:
+         favorites[peer_id] = []
+     if item not in favorites[peer_id]:
+         favorites[peer_id].append(item)
+         save_json(FAV_FILE, favorites)
+         send_safe(peer_id, "Добавлено в избранное!")
+     else:
+         send_safe(peer_id, "Уже в избранном!")
+         
 def show_favorites(peer_id):
-    fav_items = favorites.get(peer_id, [])
-    if fav_items:
-        message = "❤️ Избранное:\n"
-        for i, item in enumerate(fav_items, 1):
-            message += f"{i}. {item.get('Название', 'Не указано')}\n"
-        send(peer_id, message)
-    else:
-        send(peer_id, "Избранное пустое")
+     fav_items = favorites.get(peer_id, [])
+     if fav_items:
+         message = "❤️ Избранное:\n"
+         for i, item in enumerate(fav_items[:10], 1): # Покажем максимум 10 шт
+             name = item.get('Наименование') or item.get('Марка') or str(item)
+             message += f"{i}. {name}\n"
+         send_safe(peer_id, message)
+     else:
+         send_safe(peer_id, "Избранное пустое.")
 
-
+# ===== ГЛАВНЫЙ ОБРАБОТЧИК СОБЫТИЙ =====
 def handle(event):
-    msg = event.obj.message
-    peer_id = msg['peer_id']
-    text = msg.get('text', '').strip()
-    text_lower = text.lower()
+     msg = event.obj.message
+     peer_id = msg['peer_id']
+     
+     # --- ОБРАБОТКА НАЖАТИЙ НА КНОПКИ ---
+     payload_raw = msg.get('payload')
+     action = None
+     if payload_raw:
+         try:
+             action = json.loads(payload_raw).get('action')
+         except Exception as e:
+             logging.error(f"Плохой payload: {e}")
+             
+     text = msg.get('text', '').strip().lower()
+     
+     # Логика для кнопок (имеет приоритет над текстом)
+     if action == "prev":
+         user_index[peer_id] = max(0, user_index.get(peer_id, 0) - 1)
+         show_item(peer_id)
+         return
+         
+     if action == "next":
+         total_results = len(user_results.get(peer_id, []))
+         if total_results > 0:
+             user_index[peer_id] = min(total_results - 1, user_index.get(peer_id, 0) + 1)
+             show_item(peer_id)
+         return
+         
+     if action == "home":
+         user_state[peer_id] = None # Сброс состояния
+         send_safe(peer_id, "🏠 Главное меню", keyboard=get_main_keyboard())
+         return
 
-    logging.info(f"Получено сообщение от {peer_id}: '{text}'")
-    logging.info(f"Текущее состояние пользователя: {user_state.get(peer_id)}")
-
-    try:
-        if not text:
-            return
-
-        # Обработка кнопок
-        if text_lower in ["🚗 запчасти", "запчасти"]:
-            user_state[peer_id] = "parts"
-            send(peer_id, "Введите номер детали:")
-            return
-        elif text_lower in ["🛞 диски", "диски"]:
-            user_state[peer_id] = "wheels"
-            send(peer_id, "Введите размер , например R18:")
-            return
-        elif text_lower in ["🚘 доноры", "доноры"]:
-            user_state[peer_id] = "donors"
-            send(peer_id, "Введите марку авто:")
-            return
-        elif text_lower in ["❤️ избранное", "избранное"]:
-            show_favorites(peer_id)
-            return
-
-        # Поиск
-        current_state = user_state.get(peer_id)
-        if current_state == "parts":
-            logging.info(f"Начинаем поиск деталей для запроса: '{text}'")
-            results = cache.search_parts(text)
-            logging.info(f"Найдено деталей: {len(results)}")
-            if results:
-                user_results[peer_id] = results
-                user_index[peer_id] = 0
-                show_part(peer_id)
-            else:
-                send(peer_id, "❌ Детали не найдены. Попробуйте другой запрос.")
-        elif current_state == "wheels":
-            results = cache.search_wheels(text)
-            if results:
-                show_wheel_info(peer_id, results[0])
-            else:
-                send(peer_id, "❌ Диски не найдены")
-        elif current_state == "donors":
-            results = cache.search_donors(text)
-            if results:
-                user_results[peer_id] = results
-                user_index[peer_id] = 0
-                show_donor(peer_id)
-            else:
-                send(peer_id, "❌ Доноры не найдены")
-    except Exception as e:
-        logging.error(f"Ошибка в handle для {peer_id}: {e}")
-        send(peer_id, "Произошла ошибка. Попробуйте позже.")
-        
-# Запуск бота
-# ===== ГЛАВНЫЙ ЦИКЛ =====
+     # --- ОБРАБОТКА ТЕКСТА ПОЛЬЗОВАТЕЛЯ ---
+     current_state = user_state.get(peer_id)
+     
+     # Кнопки главного меню (работают по тексту или эмодзи)
+     if text in ["🚗 запчасти", "запчасти"]:
+         user_state[peer_id] = "parts"
+         send_safe(peer_id, "🔎 Введите номер детали или артикул:", keyboard=get_main_keyboard())
+         
+     elif text in ["🛞 диски", "диски"]:
+         user_state[peer_id] = "wheels"
+         send_safe(peer_id, "🔎 Введите размер диска (например R18):", keyboard=get_main_keyboard())
+         
+     elif text in ["🚘 доноры", "доноры"]:
+         user_state[peer_id] = "donors"
+         send_safe(peer_id, "🔎 Введите марку или модель авто:", keyboard=get_main_keyboard())
+         
+     elif text in ["❤️ избранное", "избранное"]:
+          show_favorites(peer_id)
+          
+     # Логика поиска по состоянию
+     elif current_state == "parts":
+          results = cache.search_parts(text)
+          if results:
+              user_results[peer_id] = results
+              user_index[peer_id] = 0
+              show_item(peer_id) # Покажет первую деталь с кнопками навигации
+          else:
+              send_safe(peer_id, "❌ Детали не найдены. Попробуйте другой запрос.")
+              
+     elif current_state == "wheels":
+          results = cache.search_wheels(text)
+          if results:
+              show_wheel_info(peer_id, results[0]) # Для дисков показываем только первый результат без навигации
+          else:
+              send_safe(peer_id, "❌ Диски не найдены.")
+              
+     elif current_state == "donors":
+          results = cache.search_donors(text)
+          if results:
+              user_results[peer_id] = results
+              user_index[peer_id] = 0
+              show_item(peer_id) # Покажет первого донора с кнопками навигации
+          else:
+              send_safe(peer_id, "❌ Доноры не найдены.")
+              
+# ===== ГЛАВНЫЙ ЦИКЛ БОТА =====
 def run_bot():
-    print("🔥 VK BOT ULTRA ЗАПУЩЕН")
-    try:
-        for event in longpoll.listen():
-            if event.type == VkBotEventType.MESSAGE_NEW:
-                handle(event)
-    except Exception as e:
-        logging.error(f"Критическая ошибка: {e}")
-        time.sleep(5)  # пауза перед перезапуском
-        run_bot()  # перезапуск бота
+     logging.basicConfig(level=logging.INFO,
+                         format='%(asctime)s - %(levelname)s - %(message)s')
+     print("🔥 VK BOT ULTRA ЗАПУЩЕН")
+     try:
+          for event in longpoll.listen():
+               if event.type == VkBotEventType.MESSAGE_NEW:
+                    handle(event)
+     except KeyboardInterrupt:
+          logging.info("Бот остановлен вручную.")
+     except Exception as e:
+          logging.critical(f"Критическая ошибка цикла: {e}")
+          time.sleep(5)
+          run_bot() # Перезапуск
 
-# Добавляем обработку ошибок при запуске
 if __name__ == "__main__":
-    try:
-        # Инициализируем все компоненты
-        init_files()
-        load_json(FAV_FILE)
-        load_json(STATS_FILE)
-        
-        # Запускаем основной цикл
-        run_bot()
-    except Exception as e:
-        logging.error(f"Критическая ошибка при запуске бота: {e}")
-        time.sleep(10)  # пауза перед повторной попыткой
-        run_bot()  # повторный запуск
-
-# Добавляем автоматический перезапуск при падении
-def auto_restart():
-    while True:
-        try:
-            run_bot()
-        except Exception as e:
-            logging.error(f"Бот упал. Перезапуск... {e}")
-            time.sleep(10)
-
-# Запускаем поток с автоперезапуском
-threading.Thread(target=auto_restart, daemon=True).start()
+     run_bot()
