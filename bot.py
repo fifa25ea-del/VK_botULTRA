@@ -36,9 +36,9 @@ FAV_FILE = "favorites.json"
 STATS_FILE = "stats.json"
 
 # ===== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ СОСТОЯНИЯ =====
-user_state = {}  # Хранит текущее состояние пользователя
-user_results = {}  # Хранит результаты поиска для пользователя
-user_index = {}  # Хранит текущий индекс в результатах поиска
+user_state = {}      # Хранит текущее состояние пользователя (parts, wheels...)
+user_results = {}    # Хранит результаты поиска для пользователя
+user_page = {}       # Новая переменная: номер текущей страницы (начинаем с 0)
 
 
 # ===== ИНИЦИАЛИЗАЦИЯ ФАЙЛОВ =====
@@ -651,6 +651,63 @@ def show_favorites(peer_id):
     else:
         send(peer_id, "Избранное пустое")
 
+def show_wheel_page(peer_id):
+    """Показывает страницу с несколькими карточками дисков (по 3 шт)."""
+    try:
+        results = user_results.get(peer_id, [])
+        if not results:
+            send_safe(peer_id, "Нет результатов для отображения.")
+            return
+
+        # Реверсивный порядок (свежие первыми)
+        reversed_results = list(results)
+        reversed_results.reverse()
+        user_results[peer_id] = reversed_results # Сохраняем новый порядок
+
+        total_items = len(reversed_results)
+        current_page = user_page.get(peer_id, 0)
+        items_per_page = 3
+
+        start_index = current_page * items_per_page
+        end_index = start_index + items_per_page
+
+        # Проверяем, есть ли данные для этой страницы
+        if start_index >= total_items:
+            send_safe(peer_id, "Данных на этой странице нет.")
+            return
+
+        message = "🛞 **Результаты поиска дисков:**\n\n"
+        keyboard = VkKeyboard(inline=False) # Обычная клавиатура внизу
+
+        # Добавляем карточки для текущей страницы
+        for i in range(start_index, min(end_index, total_items)):
+            wheel = reversed_results[i]
+            
+            # Берем первую ссылку на фото для превью в списке
+            photo_url = get_first_photo(wheel.get('Фото', ''))
+            
+            brand = safe_get(wheel, 'Производитель диска')
+            model = safe_get(wheel, 'Модель диска')
+            price = safe_get(wheel, 'Цена')
+            
+            # Формируем строку для списка
+            card_text = f"🛞 {brand} {model}\n💰 {price} ₽"
+            
+            if photo_url:
+                message += f"[Фото]({photo_url}) {card_text}\n\n"
+            else:
+                message += f"{card_text} (Фото нет)\n\n"
+        
+        # Добавляем кнопку "Показать еще", если есть еще карточки
+        if end_index < total_items:
+            keyboard.add_button("Показать еще", color=VkKeyboardColor.PRIMARY)
+        
+        send_safe(peer_id, message, keyboard=keyboard.get_keyboard())
+
+    except Exception as e:
+        logging.critical(f"Ошибка в show_wheel_page для {peer_id}: {e}")
+        send_safe(peer_id, "Произошла ошибка при отображении списка дисков.")
+
 
 def handle(event):
     msg = event.obj.message
@@ -717,52 +774,46 @@ def handle(event):
 
         # --- Блок для ДИСКОВ (Wheels) ---
         elif current_state == "wheels":
-            # Получаем текущие результаты для этого пользователя
             results = user_results.get(peer_id, [])
+            current_page = user_page.get(peer_id, 0)
+            items_per_page = 3 # Сколько карточек показывать за раз
 
-            # --- 1. СНАЧАЛА ПРОВЕРЯЕМ НАВИГАЦИОННЫЕ КОМАНДЫ ---
-            if text in ["⬅️ Назад", "Назад"]:
-                if results and len(results) > 1:
-                    new_index = user_index.get(peer_id, 0) - 1
-                    if new_index < 0:
-                        new_index = len(results) - 1 # Цикл в начало
-                    user_index[peer_id] = new_index
-                    show_wheel(peer_id)
-                else:
-                    # Если результатов нет или он один, просто игнорируем или выводим подсказку
-                    send(peer_id, "Сначала нужно выполнить поиск. Введите размер диска (например, R18).")
+            # Проверяем, не нажал ли пользователь "Показать еще"
+            if text in ["Показать еще", "показать еще"]:
+                if results:
+                    user_page[peer_id] = current_page + 1
+                    show_wheel_page(peer_id)
+                return
+
+            # Проверяем кнопки навигации (Вперед/Назад) внутри текущей тройки
+            # Эти кнопки теперь будут листать только внутри видимых 3-х карточек
+            elif text in ["⬅️ Назад", "Назад"]:
+                # Логика "Назад" остается похожей, но работает в рамках страницы
+                # Для простоты в этом примере мы просто переходим на предыдущую страницу
+                if current_page > 0 and results:
+                    user_page[peer_id] = current_page - 1
+                    show_wheel_page(peer_id)
                 return
 
             elif text in ["➡️ Вперед", "Вперед"]:
-                if results and len(results) > 1:
-                    new_index = user_index.get(peer_id, 0) + 1
-                    if new_index >= len(results):
-                        new_index = 0 # Цикл в конец
-                    user_index[peer_id] = new_index
-                    show_wheel(peer_id)
-                else:
-                    send(peer_id, "Сначала нужно выполнить поиск. Введите размер диска (например, R18).")
+                # Логика "Вперед" - переходим на следующую страницу
+                max_page = (len(results) - 1) // items_per_page
+                if current_page < max_page and results:
+                    user_page[peer_id] = current_page + 1
+                    show_wheel_page(peer_id)
                 return
 
-            elif text in ["🔄 Обновить", "Обновить"]:
-                # Если нажали обновить без поиска, просто просим ввести размер
-                if not results:
-                     send(peer_id, "Сначала нужно выполнить поиск. Введите размер диска (например, R18).")
-                else:
-                    show_wheel(peer_id)
-                return
-
-            # --- 2. ЕСЛИ ЭТО НЕ КНОПКА, ЗНАЧИТ ЭТО ПОИСКОВЫЙ ЗАПРОС ---
+            # Если это новый поисковый запрос
             else:
                 logging.info(f"Начинаем поиск дисков для запроса: '{text}'")
-                results = cache.search_wheels(text)
+                search_results = cache.search_wheels(text)
 
-                if results:
-                    user_results[peer_id] = results
-                    user_index[peer_id] = 0 # Всегда начинаем с первого элемента при новом поиске
-                    show_wheel(peer_id)
+                if search_results:
+                    user_results[peer_id] = search_results 
+                    user_page[peer_id] = 0 # Всегда начинаем с первой страницы при новом поиске
+                    show_wheel_page(peer_id)
                 else:
-                    send(peer_id, "❌ Диски не найдены. Проверьте введенное число (например, 17 или R18).")
+                    send(peer_id, "❌ Диски не найдены.")
 
         # --- Блок для ДОНОРОВ (Donors) ---
         elif current_state == "donors":
