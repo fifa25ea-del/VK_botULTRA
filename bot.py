@@ -481,80 +481,70 @@ def handle(event):
         if not text:
             return
 
-        # Обработка кнопок
+        # Обработка кнопок главного меню
         if text_lower in ["🚗 запчасти", "запчасти"]:
             user_state[peer_id] = "parts"
-            send(peer_id, "Введите номер детали:")
+            send(peer_id, "Введите номер детали:", keyboard=None)
             return
         elif text_lower in ["🛞 диски", "диски"]:
             user_state[peer_id] = "wheels"
-            send(peer_id, "Введите размер , например R18:")
+            send(peer_id, "Введите размер , например R18:", keyboard=None)
             return
         elif text_lower in ["🚘 доноры", "доноры"]:
             user_state[peer_id] = "donors"
-            send(peer_id, "Введите марку авто:")
+            send(peer_id, "Введите марку авто:", keyboard=None)
             return
         elif text_lower in ["❤️ избранное", "избранное"]:
             show_favorites(peer_id)
             return
         elif text_lower in ["⬅️ назад", "назад", "сброс", "отмена"]:
-            user_state[peer_id] = None # Сбрасываем состояние
-            user_results[peer_id] = [] # Очищаем результаты
+            user_state[peer_id] = None 
+            user_results[peer_id] = [] 
             user_index[peer_id] = 0
             send(peer_id, "Меню сброшено. Чем помочь?", keyboard=get_main_keyboard())
+            return
 
+        # --- ОСНОВНАЯ ЛОГИКА ПОИСКА И НАВИГАЦИИ ---
         current_state = user_state.get(peer_id)
+        
+        # Проверяем состояние "Поиск запчастей"
         if current_state == "parts":
-            # Получаем текущие результаты для этого пользователя
-            results = user_results.get(peer_id, [])
-            
-            # --- НОВЫЙ БЛОК: Обработка нажатий кнопок навигации ---
+            # Сначала проверяем, не нажал ли пользователь кнопки навигации
             if text in ["⬅️ Назад", "Назад"]:
+                results = user_results.get(peer_id, [])
                 if results and len(results) > 1:
                     new_index = user_index.get(peer_id, 0) - 1
                     if new_index < 0:
-                        new_index = len(results) - 1 # Цикл в начало
+                        new_index = len(results) - 1
                     user_index[peer_id] = new_index
                     show_part(peer_id)
                 return
-                
+
             elif text in ["➡️ Вперед", "Вперед"]:
+                results = user_results.get(peer_id, [])
                 if results and len(results) > 1:
                     new_index = user_index.get(peer_id, 0) + 1
                     if new_index >= len(results):
-                        new_index = 0 # Цикл в конец
+                        new_index = 0
                     user_index[peer_id] = new_index
                     show_part(peer_id)
                 return
-                
+
             elif text in ["🔄 Обновить", "Обновить"]:
                 show_part(peer_id)
                 return
 
-            # --- СТАРЫЙ БЛОК: Если это не кнопка, значит это поисковый запрос ---
+            # --- Если это НЕ кнопка навигации, значит это поисковый запрос ---
             else:
                 logging.info(f"Начинаем поиск деталей для запроса: '{text}'")
                 results = cache.search_parts(text)
                 
                 if results:
                     user_results[peer_id] = results
-                    user_index[peer_id] = 0 # Всегда начинаем с первого элемента при новом поиске
+                    user_index[peer_id] = 0 
                     show_part(peer_id)
                 else:
                     send(peer_id, "❌ Детали не найдены. Попробуйте другой запрос или номер.")
-
-    # --- СТАРЫЙ БЛОК: Если это не кнопка, значит это поисковый запрос ---
-    elif current_state == "parts":
-        logging.info(f"Начинаем поиск деталей для запроса: '{text}'")
-        results = cache.search_parts(text)
-        
-        if results:
-            user_results[peer_id] = results
-            user_index[peer_id] = 0 # Всегда начинаем с первого элемента при новом поиске
-            show_part(peer_id)
-        else:
-            send(peer_id, "❌ Детали не найдены. Попробуйте другой запрос или номер.")
-        
 # Запуск бота
 # ===== ГЛАВНЫЙ ЦИКЛ =====
 def run_bot():
