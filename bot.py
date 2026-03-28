@@ -13,6 +13,7 @@ import json
 from vk_api.bot_longpoll import VkBotLongPoll, VkBotEventType
 import logging
 from urllib.parse import urlparse
+from vk_api.keyboard import VkKeyboard, VkKeyboardColor
 
 def get_random_id():
     """Генерирует случайный ID для VK API (от 0 до 2^31−1)"""
@@ -401,11 +402,11 @@ def show_part(peer_id):
             keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
 
         # Кнопка "Обновить фото/текст"
-        keyboard.addbutton("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
+        keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
 
         # Кнопка "Вперед" (доступна, если есть что листать вперед)
         if len(results) > 1:
-            keyboard.addbutton("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
+            keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
 
         keyboard_data = keyboard.get_keyboard()
         photo_url = get_first_photo(part.get('Фото', ''))
@@ -432,6 +433,7 @@ def show_part(peer_id):
     except Exception as e:
         logging.critical(f"ФАТАЛЬНАЯ ошибка в show_part для {peer_id}: {e}")
         send_safe(peer_id, "Произошла критическая ошибка при отображении детали.")
+
 def show_donor(peer_id):
     """Показывает карточку донора из результатов поиска"""
     try:
