@@ -548,64 +548,7 @@ def show_wheel(peer_id):
         logging.critical(f"ФАТАЛЬНАЯ ошибка в show_wheel для {peer_id}: {e}")
         send_safe(peer_id, "Произошла критическая ошибка при отображении диска.")
 
-def show_donor(peer_id):
-    """
-    Формирует и отправляет сообщение с карточкой донора.
-    Использует VkKeyboard для совместимости с основным меню.
-    """
-    # Получаем список доноров и текущий индекс
-    results = user_results.get(peer_id, [])
-    index = user_index.get(peer_id, 0)
-    
-    # Защита от пустого списка
-    if not results:
-        send(peer_id, "🚫 Список доноров пуст. Попробуйте позже.")
-        return
-
-    # Берем текущее авто по индексу
-    donor = results[index]
-    
-    # Формируем текст сообщения (карточку)
-    message_text = (
-        f"🚗 Донор: {donor.get('Марка', 'Не указана')} {donor.get('Модель', 'Не указана')}\n"
-        f"📅 Год: {donor.get('Год', 'Не указан')}\n"
-        f"⚙️ Двигатель: {donor.get('Двигатель', 'Не указан')}\n"
-        f"🆔 VIN: {donor.get('VIN', 'Не указан')}"
-    )
-    
-    # --- ИСПРАВЛЕННАЯ ЧАСТЬ: Создаем клавиатуру через VkKeyboard ---
-    keyboard = VkKeyboard(one_time=False)
-    
-    # Добавляем кнопку "Главное меню" на первый ряд
-    keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.NEGATIVE)
-    keyboard.add_line() # Переходим на второй ряд
-    
-    # Добавляем кнопки навигации и обновления
-    keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
-    keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
-    keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
-    
-    # Получаем готовую JSON-строку для VK API
-    keyboard_data = keyboard.get_keyboard()
-    
-    # --- ОТПРАВКА СООБЩЕНИЯ ---
-    photo_url = donor.get('Фото') # Убедись, что колонка называется 'Фото'
-    
-    if photo_url:
-        try:
-            # Используем твою готовую функцию для отправки фото с подписью
-            send_photo_with_caption(peer_id, photo_url, message_text)
-            
-            # Отправляем второе сообщение с клавиатурой (так как фото и кнопки нельзя в одном сообщении методом messages.send)
-            send(peer_id, "Используйте кнопки ниже для навигации.", keyboard=keyboard_data)
-            
-        except Exception as e:
-            logging.error(f"Ошибка при отправке фото донора: {e}")
-            send(peer_id, message_text, keyboard=keyboard_data)
-    else:
-        # Если фото нет, отправляем все одним сообщением
-        send(peer_id, message_text, keyboard=keyboard_data)
-        
+2026-03-28 08:55:06,365 - WARNING - Ошибка сети при загрузке фото: 404 Client Error: Not Found for url: https://3fb394a7-cdc0-4e09-a75f-727196cc50fd.selcdn.net/pub/c592/referencevalueimage/0000/06/0000_06_781.jpg,%20https://3fb394a7-cdc0-4e09-a75f-727196cc50fd.selcdn.net/pub/c592/referencevalueimage/0000/06/0000_06_782.jpg,%20https://3fb394a7-cdc0-4e09-a75f-727196cc50fd.selcdn.net/pub/c592/referencevalueimage/0000/06/0000_06_783.jpg,%20https://3fb394a7-cdc0-4e09-a75f-727196cc50fd.selcdn.net/pub/c592/referencevalueimage/0000/06/0000_06_784.jpg,%20https://3fb394a7-cdc0-4e09-a75f-727196cc50fd.selcdn.net/pub/c592/referencevalueimage/0000/06/0000_06_785.jpg,%20https://3fb394a7-cdc0-4e09-a75f-727196cc50fd.selcdn.net/pub/c592/referencevalueimage/0000/06/0000_06_786.jpg,%20https://3fb394a7-cdc0-4e09-a75f-727196cc50fd.selcdn.net/pub/c592/referencevalueimage/0000/06/0000_06_787.jpg
 # ===== ДОБАВЛЯЕМ ПОИСК ПО КРИТЕРИЯМ =====
 
 def find_part(query):
