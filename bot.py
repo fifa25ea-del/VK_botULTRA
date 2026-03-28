@@ -13,6 +13,11 @@ import json
 from vk_api.bot_longpoll import VkBotLongPoll, VkBotEventType
 import logging
 from urllib.parse import urlparse
+import random
+
+def get_random_id():
+    """Генерирует случайный ID для VK API (от 0 до 2^31−1)"""
+    return random.randint(0, 2**31 - 1)
 
 
 # Настройка логирования
