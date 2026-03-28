@@ -503,34 +503,45 @@ def handle(event):
             user_index[peer_id] = 0
             send(peer_id, "Меню сброшено. Чем помочь?", keyboard=get_main_keyboard())
 
-        # Поиск
         current_state = user_state.get(peer_id)
         if current_state == "parts":
-        results = user_results.get(peer_id, [])
-        
-        # Проверяем, нажал ли пользователь кнопку навигации
-        if text in ["⬅️ Назад", "Назад"]:
-            if results and len(results) > 1:
-                new_index = user_index.get(peer_id, 0) - 1
-                if new_index < 0:
-                    new_index = len(results) - 1 # Цикл в начало
-                user_index[peer_id] = new_index
-                show_part(peer_id)
-            return
+            # Получаем текущие результаты для этого пользователя
+            results = user_results.get(peer_id, [])
             
-        elif text in ["➡️ Вперед", "Вперед"]:
-            if results and len(results) > 1:
-                new_index = user_index.get(peer_id, 0) + 1
-                if new_index >= len(results):
-                    new_index = 0 # Цикл в конец
-                user_index[peer_id] = new_index
+            # --- НОВЫЙ БЛОК: Обработка нажатий кнопок навигации ---
+            if text in ["⬅️ Назад", "Назад"]:
+                if results and len(results) > 1:
+                    new_index = user_index.get(peer_id, 0) - 1
+                    if new_index < 0:
+                        new_index = len(results) - 1 # Цикл в начало
+                    user_index[peer_id] = new_index
+                    show_part(peer_id)
+                return
+                
+            elif text in ["➡️ Вперед", "Вперед"]:
+                if results and len(results) > 1:
+                    new_index = user_index.get(peer_id, 0) + 1
+                    if new_index >= len(results):
+                        new_index = 0 # Цикл в конец
+                    user_index[peer_id] = new_index
+                    show_part(peer_id)
+                return
+                
+            elif text in ["🔄 Обновить", "Обновить"]:
                 show_part(peer_id)
-            return
-            
-        elif text in ["🔄 Обновить", "Обновить"]:
-            # Просто обновляем текущую карточку (полезно, если фото не прогрузилось)
-            show_part(peer_id)
-            return
+                return
+
+            # --- СТАРЫЙ БЛОК: Если это не кнопка, значит это поисковый запрос ---
+            else:
+                logging.info(f"Начинаем поиск деталей для запроса: '{text}'")
+                results = cache.search_parts(text)
+                
+                if results:
+                    user_results[peer_id] = results
+                    user_index[peer_id] = 0 # Всегда начинаем с первого элемента при новом поиске
+                    show_part(peer_id)
+                else:
+                    send(peer_id, "❌ Детали не найдены. Попробуйте другой запрос или номер.")
 
     # --- СТАРЫЙ БЛОК: Если это не кнопка, значит это поисковый запрос ---
     elif current_state == "parts":
