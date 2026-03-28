@@ -85,32 +85,26 @@ def get_main_keyboard():
     return keyboard.get_keyboard()
 
 def get_navigation_keyboard(index, total):
-    """Создает клавиатуру с кнопками навигации"""
+    """Создает клавиатуру с кнопками навигации и payload"""
     keyboard = VkKeyboard(one_time=False)
+    invisible_char = '\u200B'
 
-    # Создаем невидимый символ (Zero-Width Space)
-    # Он не виден пользователю, но для VK это валидный символ.
-    invisible_char = '\u200B' 
-
-    # --- Блок кнопок "Назад" и "Вперёд" ---
-    # Используем невидимый символ для заглушек
-
+    # Кнопка "Назад"
     if index > 0:
-        keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
+        keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY, payload={"action": "prev"})
     else:
-        # Кнопка-заглушка, которая выглядит как пустая
-        keyboard.add_button(invisible_char, color=VkKeyboardColor.SECONDARY)
+        keyboard.add_button(invisible_char, color=VkKeyboardColor.SECONDARY, payload={"action": "empty"})
 
-    keyboard.add_line() # Перенос на следующую строку для колонки кнопок
-
-    if index < total - 1:
-        keyboard.add_button("➡️ Вперёд", color=VkKeyboardColor.PRIMARY)
-    else:
-        keyboard.add_button(invisible_char, color=VkKeyboardColor.SECONDARY)
-
-    # --- Блок возврата в меню ---
     keyboard.add_line()
-    keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.SECONDARY)
+
+    # Кнопка "Вперёд"
+    if index < total - 1:
+        keyboard.add_button("➡️ Вперёд", color=VkKeyboardColor.PRIMARY, payload={"action": "next"})
+    else:
+        keyboard.add_button(invisible_char, color=VkKeyboardColor.SECONDARY, payload={"action": "empty"})
+
+    keyboard.add_line()
+    keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.SECONDARY, payload={"action": "home"})
     
     return keyboard.get_keyboard()
 
@@ -478,51 +472,78 @@ def show_favorites(peer_id):
 
 
 def handle(event):
+    # Получаем объект сообщения из события
     msg = event.obj.message
     peer_id = msg['peer_id']
-    text = msg.get('text', '').strip()
+
+    # --- НОВЫЙ БЛОК: Обработка Payload (кнопок) ---
+    # Извлекаем payload из сообщения. Он приходит в виде строки JSON.
+    payload_raw = msg.get('payload')
+    action = None
     
-    # --- НОВЫЙ БЛОК: Обработка кнопок навигации ---
-    current_state = user_state.get(peer_id)
-    
-    # Проверяем нажатие кнопок только если мы находимся в режиме просмотра запчастей
-    if current_state == "parts":
-        if text == "⬅️ Назад":
-            user_index[peer_id] = max(0, user_index.get(peer_id, 0) - 1)
-            show_part(peer_id)
-            return
-            
-        if text == "➡️ Вперёд":
-            total_results = len(user_results.get(peer_id, []))
+    if payload_raw:
+        try:
+            payload_data = json.loads(payload_raw)
+            action = payload_data.get('action')
+        except Exception as e:
+            logging.error(f"Ошибка декодирования payload: {e}")
+
+    # Проверяем, какое действие нужно выполнить
+    # Это будет работать и для новых сообщений, и для редактированных
+    if action == "prev":
+        user_index[peer_id] = max(0, user_index.get(peer_id, 0) - 1)
+        show_part(peer_id)
+        return
+        
+    if action == "next":
+        total_results = len(user_results.get(peer_id, []))
+        # Защита от ошибки, если список пустой
+        if total_results > 0:
             user_index[peer_id] = min(total_results - 1, user_index.get(peer_id, 0) + 1)
             show_part(peer_id)
-            return
-            
-        if text == "🏠 Главное меню":
-            user_state[peer_id] = None
-            send_message(peer_id, "Возврат в главное меню.", keyboard=get_main_keyboard())
-            return
+        return
+        
+    if action == "home":
+        user_state[peer_id] = None
+        send_message(peer_id, "Возврат в главное меню.", keyboard=get_main_keyboard())
+        return
 
-    # --- СТАРЫЙ БЛОК: Обработка ввода пользователя ---
+    # --- СТАРЫЙ БЛОК: Обработка ввода пользователя (ТЕКСТА) ---
+    # Этот блок выполнится только если payload не был распознан (т.е. пользователь просто написал текст)
+    text = msg.get('text', '').strip()
     text_lower = text.lower()
     
+    # Обработка команд и кнопок главного меню (работают по тексту)
     if text_lower in ["🚗 запчасти", "запчасти"]:
         user_state[peer_id] = "parts"
         send_message(peer_id, "Введите номер детали:", keyboard=get_main_keyboard())
         return
+        
+    elif text_lower in ["🛞 диски", "диски"]:
+        user_state[peer_id] = "wheels"
+        send_message(peer_id, "Введите размер , например R18:", keyboard=get_main_keyboard())
+        return
+        
+    elif text_lower in ["🚘 доноры", "доноры"]:
+        user_state[peer_id] = "donors"
+        send_message(peer_id, "Введите марку авто:", keyboard=get_main_keyboard())
+        return
+        
+    elif text_lower in ["❤️ избранное", "избранное"]:
+        show_favorites(peer_id)
+        return
 
-    # ... остальные кнопки (диски, доноры) остаются без изменений ...
-
-    # Блок поиска (остался почти прежним)
+    # Блок поиска (выполняется, если пользователь ввел текст в режиме поиска)
+    current_state = user_state.get(peer_id)
+    
     if current_state == "parts":
         results = cache.search_parts(text)
         if results:
             user_results[peer_id] = results
-            user_index[peer_id] = 0 # Всегда начинаем с первого элемента при новом поиске
-            show_part(peer_id) # Покажем первый результат с новой клавиатурой
+            user_index[peer_id] = 0
+            show_part(peer_id)
         else:
             send_message(peer_id, "❌ Детали не найдены. Попробуйте другой запрос.")
-        
 # Запуск бота
 # ===== ГЛАВНЫЙ ЦИКЛ =====
 def run_bot():
