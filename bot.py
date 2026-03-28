@@ -548,7 +548,6 @@ def show_wheel(peer_id):
         logging.critical(f"ФАТАЛЬНАЯ ошибка в show_wheel для {peer_id}: {e}")
         send_safe(peer_id, "Произошла критическая ошибка при отображении диска.")
 
-2026-03-28 08:55:06,365 - WARNING - Ошибка сети при загрузке фото: 404 Client Error: Not Found for url: https://3fb394a7-cdc0-4e09-a75f-727196cc50fd.selcdn.net/pub/c592/referencevalueimage/0000/06/0000_06_781.jpg,%20https://3fb394a7-cdc0-4e09-a75f-727196cc50fd.selcdn.net/pub/c592/referencevalueimage/0000/06/0000_06_782.jpg,%20https://3fb394a7-cdc0-4e09-a75f-727196cc50fd.selcdn.net/pub/c592/referencevalueimage/0000/06/0000_06_783.jpg,%20https://3fb394a7-cdc0-4e09-a75f-727196cc50fd.selcdn.net/pub/c592/referencevalueimage/0000/06/0000_06_784.jpg,%20https://3fb394a7-cdc0-4e09-a75f-727196cc50fd.selcdn.net/pub/c592/referencevalueimage/0000/06/0000_06_785.jpg,%20https://3fb394a7-cdc0-4e09-a75f-727196cc50fd.selcdn.net/pub/c592/referencevalueimage/0000/06/0000_06_786.jpg,%20https://3fb394a7-cdc0-4e09-a75f-727196cc50fd.selcdn.net/pub/c592/referencevalueimage/0000/06/0000_06_787.jpg
 # ===== ДОБАВЛЯЕМ ПОИСК ПО КРИТЕРИЯМ =====
 
 def find_part(query):
