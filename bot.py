@@ -623,15 +623,23 @@ def handle(event):
             return
         elif text_lower in ["🚘 доноры", "доноры"]:
             user_state[peer_id] = "donors"
-            send(peer_id, "Введите марку авто:", keyboard=None)
+            # При входе в раздел доноров сразу загружаем данные
+            latest_donors = cache.get_latest_donors(limit=15)
+            if latest_donors:
+                user_results[peer_id] = latest_donors
+                user_index[peer_id] = 0
+                show_donor(peer_id)
+            else:
+                send(peer_id, "🚫 Не удалось загрузить список доноров.", keyboard=get_main_keyboard())
+                user_state[peer_id] = None
             return
         elif text_lower in ["❤️ избранное", "избранное"]:
             show_favorites(peer_id)
             return
         elif text_lower in ["⬅️ назад", "назад", "сброс", "отмена"]:
             user_state[peer_id] = None
-            user_results[peer_id] = []
-            user_index[peer_id] = 0
+            user_results.pop(peer_id, None)  # Безопасное удаление без ошибки, если ключа нет
+            user_index.pop(peer_id, None)
             send(peer_id, "Меню сброшено. Чем помочь?", keyboard=get_main_keyboard())
             return
 
@@ -650,7 +658,7 @@ def handle(event):
             elif text in ["🔄 Обновить", "Обновить"]:
                 show_part(peer_id)
                 return
-            
+
             # Если это не кнопка — это поисковый запрос
             logging.info(f"Начинаем поиск деталей для запроса: '{text}'")
             results = cache.search_parts(text)
@@ -670,21 +678,16 @@ def handle(event):
             # --- 1. СНАЧАЛА ПРОВЕРЯЕМ НАВИГАЦИОННЫЕ КОМАНДЫ ---
             if text in ["⬅️ Назад", "Назад"]:
                 if results and len(results) > 1:
-                    new_index = user_index.get(peer_id, 0) - 1
-                    if new_index < 0:
-                        new_index = len(results) - 1 # Цикл в начало
+                    new_index = (user_index.get(peer_id, 0) - 1) % len(results)
                     user_index[peer_id] = new_index
                     show_wheel(peer_id)
                 else:
-                    # Если результатов нет или он один, просто игнорируем или выводим подсказку
                     send(peer_id, "Сначала нужно выполнить поиск. Введите размер диска (например, R18).")
                 return
 
             elif text in ["➡️ Вперед", "Вперед"]:
                 if results and len(results) > 1:
-                    new_index = user_index.get(peer_id, 0) + 1
-                    if new_index >= len(results):
-                        new_index = 0 # Цикл в конец
+                    new_index = (user_index.get(peer_id, 0) + 1) % len(results)
                     user_index[peer_id] = new_index
                     show_wheel(peer_id)
                 else:
@@ -694,7 +697,7 @@ def handle(event):
             elif text in ["🔄 Обновить", "Обновить"]:
                 # Если нажали обновить без поиска, просто просим ввести размер
                 if not results:
-                     send(peer_id, "Сначала нужно выполнить поиск. Введите размер диска (например, R18).")
+                    send(peer_id, "Сначала нужно выполнить поиск. Введите размер диска (например, R18).")
                 else:
                     show_wheel(peer_id)
                 return
@@ -706,70 +709,57 @@ def handle(event):
 
                 if results:
                     user_results[peer_id] = results
-                    user_index[peer_id] = 0 # Всегда начинаем с первого элемента при новом поиске
+                    user_index[peer_id] = 0  # Всегда начинаем с первого элемента при новом поиске
                     show_wheel(peer_id)
                 else:
                     send(peer_id, "❌ Диски не найдены. Проверьте введенное число (например, 17 или R18).")
 
+        # --- Блок для ДОНОРОВ (Donors) ---
         elif current_state == "donors":
-            # При первом входе в раздел или если список еще не загружен
-            if not user_results.get(peer_id):
-                logging.info(f"Пользователь {peer_id} зашел в раздел доноров. Запрашиваем базу.")
-                
+            results = user_results.get(peer_id, [])
+            index = user_index.get(peer_id, 0)
+
+            # Обработка навигационных кнопок
+            if text in ["⬅️ Назад", "Назад"]:
+                if len(results) > 1:
+                    new_index = (index - 1) % len(results)
+                    user_index[peer_id] = new_index
+                    show_donor(peer_id)
+                else:
+                    send(peer_id, "📄 Листать нечего, авто всего одно.")
+                return
+
+            elif text in ["➡️ Вперед", "Вперед"]:
+                if len(results) > 1:
+                    new_index = (index + 1) % len(results)
+                    user_index[peer_id] = new_index
+                    show_donor(peer_id)
+                else:
+                    send(peer_id, "📄 Листать нечего, авто всего одно.")
+                return
+
+            elif text in ["🔄 Обновить", "Обновить"]:
+                logging.info(f"Пользователь {peer_id} обновляет список доноров.")
                 try:
-                    # Здесь cache.get_latest_donors() - твоя функция для получения последних 15 авто
-                    latest_donors = cache.get_latest_donors(limit=15) 
-                    
+                    latest_donors = cache.get_latest_donors(limit=15)
                     if latest_donors:
                         user_results[peer_id] = latest_donors
-                        user_index[peer_id] = 0
+                        user_index[peer_id] = 0  # Сбрасываем на первое новое авто
                         show_donor(peer_id)
                     else:
-                        send(peer_id, "🚫 Не удалось загрузить список доноров.", keyboard=get_main_keyboard())
-                        user_state[peer_id] = None # Возвращаем в главное меню при ошибке
-        
+                        send(peer_id, "🚫 База доноров пуста.")
                 except Exception as e:
-                    logging.error(f"Ошибка базы данных доноров: {e}")
-                    send(peer_id, "🚫 Ошибка связи с базой доноров.", keyboard=get_main_keyboard())
-                    user_state[peer_id] = None
-        
-            # Если список уже загружен, обрабатываем кнопки навигации
-            else:
-                results = user_results.get(peer_id, [])
-                index = user_index.get(peer_id, 0)
-                
-                # --- Кнопка НАЗАД ---
-                if text in ["⬅️ Назад", "Назад"]:
-                    if len(results) > 1:
-                        new_index = index - 1 if index > 0 else len(results) - 1
-                        user_index[peer_id] = new_index
-                        show_donor(peer_id)
-                    else:
-                        send(peer_id, "📄 Листать нечего, авто всего одно.")
-                
-                # --- Кнопка ВПЕРЕД ---
-                elif text in ["➡️ Вперед", "Вперед"]:
-                    if len(results) > 1:
-                        new_index = index + 1 if index < len(results) - 1 else 0
-                        user_index[peer_id] = new_index
-                        show_donor(peer_id)
-                    else:
-                        send(peer_id, "📄 Листать нечего, авто всего одно.")
-                
-                # --- Кнопка ОБНОВИТЬ ---
-                elif text in ["🔄 Обновить", "Обновить"]:
-                    logging.info(f"Пользователь {peer_id} обновляет список доноров.")
-                    try:
-                        latest_donors = cache.get_latest_donors(limit=15)
-                        if latest_donors:
-                            user_results[peer_id] = latest_donors
-                            user_index[peer_id] = 0 # Сбрасываем на первое новое авто
-                            show_donor(peer_id)
-                        else:
-                            send(peer_id, "🚫 База доноров пуста.")
-                    except Exception as e:
-                        logging.error(f"Ошибка при обновлении доноров: {e}")
-                        send(peer_id, "🚫 Не удалось обновить данные.")
+                    logging.error(f"Ошибка при обновлении доноров: {e}")
+                    send(peer_id, "🚫 Не удалось обновить данные.")
+                return
+
+            # Если пользователь вводит текст в режиме доноров, игнорируем (или можно добавить поиск по марке)
+            elif text:
+                send(peer_id, "Используйте кнопки навигации или «Обновить» для работы со списком доноров.")
+
+    except Exception as e:
+        logging.error(f"Неожиданная ошибка в handle(): {e}")
+        send(peer_id, "Произошла ошибка. Попробуйте позже.")
 # Запуск бота
 # ===== ГЛАВНЫЙ ЦИКЛ =====
 def run_bot():
