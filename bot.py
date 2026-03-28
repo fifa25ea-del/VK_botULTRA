@@ -543,7 +543,7 @@ def show_wheel(peer_id):
 def show_donor(peer_id):
     """
     Формирует и отправляет сообщение с карточкой донора.
-    Берет текущий индекс из user_index и данные из user_results.
+    Использует VkKeyboard для совместимости с основным меню.
     """
     # Получаем список доноров и текущий индекс
     results = user_results.get(peer_id, [])
@@ -559,28 +559,44 @@ def show_donor(peer_id):
     
     # Формируем текст сообщения (карточку)
     message_text = (
-        f"🚗 Донор: {donor.get('mark')} {donor.get('model')}\n"
-        f"📅 Год: {donor.get('year')}\n"
-        f"⚙️ Двигатель: {donor.get('engine')}\n"
-        f"🆔 VIN: {donor.get('vin')}"
+        f"🚗 Донор: {donor.get('Марка', 'Не указана')} {donor.get('Модель', 'Не указана')}\n"
+        f"📅 Год: {donor.get('Год', 'Не указан')}\n"
+        f"⚙️ Двигатель: {donor.get('Двигатель', 'Не указан')}\n"
+        f"🆔 VIN: {donor.get('VIN', 'Не указан')}"
     )
     
-    # Формируем клавиатуру с навигацией
-    keyboard = {
-        "inline": True,
-        "buttons": [
-            [{"text": "⬅️ Назад", "callback_data": "back_donor"}],
-            [{"text": "🔄 Обновить", "callback_data": "refresh_donor"}],
-            [{"text": "➡️ Вперед", "callback_data": "forward_donor"}]
-        ]
-    }
+    # --- ИСПРАВЛЕННАЯ ЧАСТЬ: Создаем клавиатуру через VkKeyboard ---
+    keyboard = VkKeyboard(one_time=False)
     
-    # Отправляем сообщение с фото (если есть) и клавиатурой
-    photo_url = donor.get('photo_url')
+    # Добавляем кнопку "Главное меню" на первый ряд
+    keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.NEGATIVE)
+    keyboard.add_line() # Переходим на второй ряд
+    
+    # Добавляем кнопки навигации и обновления
+    keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
+    keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
+    keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
+    
+    # Получаем готовую JSON-строку для VK API
+    keyboard_data = keyboard.get_keyboard()
+    
+    # --- ОТПРАВКА СООБЩЕНИЯ ---
+    photo_url = donor.get('Фото') # Убедись, что колонка называется 'Фото'
+    
     if photo_url:
-        send(peer_id, message_text, keyboard=keyboard, attachment=photo_url)
+        try:
+            # Используем твою готовую функцию для отправки фото с подписью
+            send_photo_with_caption(peer_id, photo_url, message_text)
+            
+            # Отправляем второе сообщение с клавиатурой (так как фото и кнопки нельзя в одном сообщении методом messages.send)
+            send(peer_id, "Используйте кнопки ниже для навигации.", keyboard=keyboard_data)
+            
+        except Exception as e:
+            logging.error(f"Ошибка при отправке фото донора: {e}")
+            send(peer_id, message_text, keyboard=keyboard_data)
     else:
-        send(peer_id, message_text, keyboard=keyboard)
+        # Если фото нет, отправляем все одним сообщением
+        send(peer_id, message_text, keyboard=keyboard_data)
         
 # ===== ДОБАВЛЯЕМ ПОИСК ПО КРИТЕРИЯМ =====
 
