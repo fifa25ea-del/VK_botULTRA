@@ -455,7 +455,7 @@ def show_part(peer_id):
         send_safe(peer_id, "Произошла критическая ошибка при отображении детали.")
 
 def show_wheel(peer_id):
-    """Показывает карточку диска с кнопками навигации и фоновой загрузкой фото"""
+    """Показывает карточку диска: фото + текст с кнопками навигации одним сообщением"""
     try:
         index = user_index.get(peer_id, 0)
         results = user_results.get(peer_id, [])
@@ -491,12 +491,12 @@ def show_wheel(peer_id):
         if link != "Не указано" and link != "Нет ссылки":
             message += f"Ссылка: {link}"
 
-        # Добавляем нумерацию (как в Parts)
+        # Добавляем нумерацию
         total_wheels = len(results)
         current_position = index + 1
         message += f"\n📊 {current_position} из {total_wheels}"
 
-        # Создаём клавиатуру (такая же, как в Parts)
+        # Создаём клавиатуру
         keyboard = VkKeyboard(one_time=False)
 
         if len(results) > 1:
@@ -506,20 +506,56 @@ def show_wheel(peer_id):
 
         if len(results) > 1:
             keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
-
+            
         keyboard_data = keyboard.get_keyboard()
         
-        # Отправляем текст с клавиатурой
-        send_safe(peer_id, message, keyboard=keyboard_data)
-
-        # Отправляем фото в фоне (как в Parts)
+        # --- НОВОЕ: Получаем ссылку на фото ---
         photo_url = get_first_photo(wheel.get('Фото', ''))
+
         if photo_url:
-            send_photo_with_caption(peer_id, photo_url, "")
+            try:
+                # 1. Загружаем изображение на сервер VK
+                response = requests.get(photo_url, timeout=10)
+                response.raise_for_status()
+                
+                upload_url = vk.photos.getMessagesUploadServer()['upload_url']
+                files = {'photo': ('image.jpg', response.content)}
+                upload_data = requests.post(upload_url, files=files, timeout=15).json()
+
+                # 2. Сохраняем фото и получаем ID вложения
+                photo_data = vk.photos.saveMessagesPhoto(
+                    server=upload_data['server'],
+                    photo=upload_data['photo'],
+                    hash=upload_data['hash']
+                )[0]
+                
+                attachment = f"photo{photo_data['owner_id']}_{photo_data['id']}"
+                
+                # 3. Отправляем ОДНО сообщение с фото, текстом и клавиатурой
+                vk.messages.send(
+                    peer_id=peer_id,
+                    message=message,
+                    attachment=attachment,
+                    keyboard=keyboard_data,
+                    random_id=get_random_id()
+                )
+                logging.info(f"Карточка диска с фото успешно отправлена пользователю {peer_id}")
+
+            except requests.exceptions.RequestException as e:
+                logging.warning(f"Ошибка загрузки фото для диска: {e}")
+                # Если фото не загрузилось, отправляем просто текст с кнопками
+                send_safe(peer_id, message, keyboard=keyboard_data)
+            except Exception as e:
+                logging.error(f"Неизвестная ошибка при отправке фото диска: {e}")
+                send_safe(peer_id, message, keyboard=keyboard_data)
+
+        else:
+            # Если фото нет в базе, отправляем просто текст с кнопками
+            send_safe(peer_id, message, keyboard=keyboard_data)
 
     except Exception as e:
-        logging.critical(f"Ошибка в show_wheel для {peer_id}: {e}")
-        send_safe(peer_id, "Произошла ошибка при отображении диска.")
+        logging.critical(f"ФАТАЛЬНАЯ ошибка в show_wheel для {peer_id}: {e}")
+        send_safe(peer_id, "Произошла критическая ошибка при отображении диска.")
 
 def show_donor(peer_id):
     """Показывает карточку донора из результатов поиска"""
