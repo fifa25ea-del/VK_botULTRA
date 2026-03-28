@@ -1,7 +1,7 @@
 # =========================
 # VK BOT ULTRA (ТОП ВЕРСИЯ)
 # =========================
-
+import random
 import os
 import vk_api
 import requests
@@ -13,6 +13,10 @@ import json
 from vk_api.bot_longpoll import VkBotLongPoll, VkBotEventType
 import logging
 from urllib.parse import urlparse
+
+def get_random_id():
+    """Генерирует случайный ID для VK API (от 0 до 2^31−1)"""
+    return random.randint(0, 2**31 - 1)
 
 
 # Настройка логирования
@@ -34,6 +38,7 @@ STATS_FILE = "stats.json"
 user_state = {}  # Хранит текущее состояние пользователя
 user_results = {}  # Хранит результаты поиска для пользователя
 user_index = {}  # Хранит текущий индекс в результатах поиска
+
 
 # ===== ИНИЦИАЛИЗАЦИЯ ФАЙЛОВ =====
 def init_files():
@@ -121,7 +126,7 @@ def send_photo_with_caption(peer_id, photo_url, caption):
             peer_id=peer_id,
             message=caption,
             attachment=f"photo{photo_data['owner_id']}_{photo_data['id']}",
-            random_id=get_random_id()
+            random_id=get_random_id()  # Исправлено: используем функцию
         )
         logging.info(f"Фото успешно отправлено: {photo_url}")
         return True
@@ -135,6 +140,7 @@ def send_photo_with_caption(peer_id, photo_url, caption):
     except Exception as e:
         logging.error(f"Неизвестная ошибка при обработке фото: {e}")
         return False
+
 def get_first_photo(photo_field):
     """Извлекает первую валидную ссылку на фото"""
     if not photo_field:
@@ -158,7 +164,7 @@ def send_safe(peer_id, text, keyboard=None):
         vk.messages.send(
             peer_id=peer_id,
             message=text,
-            random_id=0,
+            random_id=get_random_id(),  # Исправлено
             keyboard=keyboard if keyboard else get_main_keyboard()
         )
     except Exception as e:
@@ -168,23 +174,22 @@ def send_safe(peer_id, text, keyboard=None):
             vk.messages.send(
                 peer_id=peer_id,
                 message="Произошла ошибка при отправке сообщения. Попробуйте позже.",
-                random_id=0
+                random_id=get_random_id()  # Исправлено
             )
         except:
-            pass  # Игнорируем, если даже простое сообщение не отправляется
-
+            pass
+            
 def send(peer_id, text, keyboard=None):
     try:
         vk.messages.send(
             peer_id=peer_id,
             message=text,
-            random_id=0,
+            random_id=get_random_id(),  # Исправлено
             keyboard=keyboard if keyboard else get_main_keyboard()
         )
     except Exception as e:
         logging.error(f"Ошибка отправки сообщения: {e}")
-
-
+        
 # ===== ХРАНИЛИЩЕ =====
 def load_json(file):
     try:
