@@ -87,25 +87,25 @@ def get_navigation_keyboard(index, total):
     """Создает клавиатуру с кнопками навигации"""
     keyboard = VkKeyboard(one_time=False)
 
+    # Создаем невидимый символ (Zero-Width Space)
+    # Он не виден пользователю, но для VK это валидный символ.
+    invisible_char = '\u200B' 
+
     # --- Блок кнопок "Назад" и "Вперёд" ---
-    
-    # Если мы не на первой позиции, добавляем кнопку "Назад"
+    # Используем невидимый символ для заглушек
+
     if index > 0:
         keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
     else:
-        # Если мы на первой позиции, добавляем невидимую кнопку-заглушку,
-        # чтобы интерфейс не прыгал и кнопка "Вперёд" оставалась на своем месте.
-        keyboard.add_button(" ", color=VkKeyboardColor.SECONDARY) 
+        # Кнопка-заглушка, которая выглядит как пустая
+        keyboard.add_button(invisible_char, color=VkKeyboardColor.SECONDARY)
 
-    # Добавляем перенос строки, чтобы кнопки были друг под другом
-    keyboard.add_line() 
+    keyboard.add_line() # Перенос на следующую строку для колонки кнопок
 
-    # Если есть следующий элемент, добавляем кнопку "Вперёд"
     if index < total - 1:
         keyboard.add_button("➡️ Вперёд", color=VkKeyboardColor.PRIMARY)
     else:
-        # Если мы на последней позиции, добавляем заглушку
-        keyboard.add_button(" ", color=VkKeyboardColor.SECONDARY)
+        keyboard.add_button(invisible_char, color=VkKeyboardColor.SECONDARY)
 
     # --- Блок возврата в меню ---
     keyboard.add_line()
