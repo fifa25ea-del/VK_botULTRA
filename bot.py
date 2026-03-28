@@ -591,7 +591,17 @@ def handle(event):
         if not text:
             return
 
-        # Обработка кнопок главного меню
+        # 1. САМОЕ ГЛАВНОЕ: Проверка на сброс/выход в главное меню
+        # Она должна стоять здесь, чтобы работать из ЛЮБОГО состояния
+        if text in ["🏠 Главное меню", "главное меню", "меню", "сброс", "отмена"]:
+            user_state[peer_id] = None # Сбрасываем состояние (parts, wheels...)
+            user_results[peer_id] = []  # Очищаем результаты поиска
+            user_index[peer_id] = 0     # Сбрасываем индекс
+            
+            send(peer_id, "Вы вернулись в главное меню.", keyboard=get_main_keyboard())
+            return # ВАЖНО: Останавливаем функцию здесь
+
+        # 2. Обработка кнопок главного меню (эти условия теперь сработают только если мы не сбросили состояние)
         if text_lower in ["🚗 запчасти", "запчасти"]:
             user_state[peer_id] = "parts"
             send(peer_id, "Введите номер детали:", keyboard=None)
@@ -607,85 +617,55 @@ def handle(event):
         elif text_lower in ["❤️ избранное", "избранное"]:
             show_favorites(peer_id)
             return
-        elif text_lower in ["⬅️ назад", "назад", "сброс", "отмена"]:
-            user_state[peer_id] = None
-            user_results[peer_id] = []
-            user_index[peer_id] = 0
-            send(peer_id, "Меню сброшено. Чем помочь?", keyboard=get_main_keyboard())
-            return
 
-        # --- ОСНОВНАЯ ЛОГИКА ПОИСКА И НАВИГАЦИИ ---
+        # 3. Основная логика поиска и навигации (выполняется только если мы НЕ нажали "Главное меню")
         current_state = user_state.get(peer_id)
 
-        # --- Блок для ЗАПЧАСТЕЙ (Parts) ---
         if current_state == "parts":
+            # ... ваш код для запчастей (поиск и навигация) ...
+
+        elif current_state == "wheels":
+            results = user_results.get(peer_id, [])
+            index = user_index.get(peer_id, 0)
+
             # Проверяем кнопки навигации
             if text in ["⬅️ Назад", "Назад"]:
-                _handle_navigation(peer_id, -1)
-                return
-            elif text in ["➡️ Вперед", "Вперед"]:
-                _handle_navigation(peer_id, 1)
-                return
-            elif text in ["🔄 Обновить", "Обновить"]:
-                show_part(peer_id)
-                return
-            
-            # Если это не кнопка — это поисковый запрос
-            logging.info(f"Начинаем поиск деталей для запроса: '{text}'")
-            results = cache.search_parts(text)
-
-            if results:
-                user_results[peer_id] = results
-                user_index[peer_id] = 0
-                show_part(peer_id)
-            else:
-                send(peer_id, "❌ Детали не найдены. Попробуйте другой запрос или номер.")
-
-        # --- Блок для ДИСКОВ (Wheels) ---
-        elif current_state == "wheels":
-            # Получаем текущие результаты для этого пользователя
-            results = user_results.get(peer_id, [])
-
-            # --- 1. СНАЧАЛА ПРОВЕРЯЕМ НАВИГАЦИОННЫЕ КОМАНДЫ ---
-            if text in ["⬅️ Назад", "Назад"]:
                 if results and len(results) > 1:
-                    new_index = user_index.get(peer_id, 0) - 1
+                    new_index = index - 1
                     if new_index < 0:
-                        new_index = len(results) - 1 # Цикл в начало
+                        new_index = len(results) - 1
                     user_index[peer_id] = new_index
                     show_wheel(peer_id)
                 else:
-                    # Если результатов нет или он один, просто игнорируем или выводим подсказку
-                    send(peer_id, "Сначала нужно выполнить поиск. Введите размер диска (например, R18).")
+                    send(peer_id, "Дисков для листания нет.")
                 return
 
             elif text in ["➡️ Вперед", "Вперед"]:
                 if results and len(results) > 1:
-                    new_index = user_index.get(peer_id, 0) + 1
+                    new_index = index + 1
                     if new_index >= len(results):
-                        new_index = 0 # Цикл в конец
+                        new_index = 0
                     user_index[peer_id] = new_index
                     show_wheel(peer_id)
                 else:
-                    send(peer_id, "Сначала нужно выполнить поиск. Введите размер диска (например, R18).")
+                    send(peer_id, "Дисков для листания нет.")
                 return
 
             elif text in ["🔄 Обновить", "Обновить"]:
-                # Если нажали обновить без поиска, просто просим ввести размер
-                if not results:
-                     send(peer_id, "Сначала нужно выполнить поиск. Введите размер диска (например, R18).")
-                else:
+                if results:
                     show_wheel(peer_id)
+                else:
+                    send(peer_id, "Сначала нужно выполнить поиск.")
                 return
 
-            # --- 2. ЕСЛИ ЭТО НЕ КНОПКА, ЗНАЧИТ ЭТО ПОИСКОВЫЙ ЗАПРОС ---
+            # Если это не кнопка — это поисковый запрос
             else:
                 logging.info(f"Начинаем поиск дисков для запроса: '{text}'")
                 results = cache.search_wheels(text)
 
                 if results:
                     user_results[peer_id] = results
-                    user_index[peer_id] = 0 # Всегда начинаем с первого элемента при новом поиске
+                    user_index[peer_id] = 0
                     show_wheel(peer_id)
                 else:
                     send(peer_id, "❌ Диски не найдены. Проверьте введенное число (например, 17 или R18).")
