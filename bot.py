@@ -139,20 +139,28 @@ def send_photo_with_caption(peer_id, photo_url, caption):
     thread.start()
 
 def get_first_photo(photo_field):
-    """Извлекает первую валидную ссылку на фото"""
+    """Извлекает первую валидную ссылку на фото из строки с несколькими ссылками"""
     if not photo_field:
         return None
 
-    # Убираем лишние пробелы и разбиваем по запятым
-    photo_urls = [url.strip() for url in str(photo_field).split(',') if url.strip()]
+    # Иногда ссылки разделены не просто запятой, а запятой с пробелом или спецсимволами
+    # Разбиваем строку по запятым
+    potential_urls = [url.strip() for url in str(photo_field).split(',')]
     
-    # Проверяем наличие http/https
-    for url in photo_urls:
+    # Проверяем каждую найденную ссылку
+    for url in potential_urls:
+        # Пропускаем пустые строки
+        if not url:
+            continue
+            
+        # Проверяем, что ссылка начинается на http или https
         if url.startswith('http://') or url.startswith('https://'):
-            return url
+            # Иногда ссылки могут содержать закодированные символы (например, %20 вместо пробела)
+            # или быть повреждены. Проверим минимальную длину и наличие точки (домен)
+            if len(url) > 10 and '.' in urlparse(url).netloc:
+                return url
             
     return None
-
 
 # ===== ОТПРАВКА СООБЩЕНИЙ =====
 def send_safe(peer_id, text, keyboard=None):
