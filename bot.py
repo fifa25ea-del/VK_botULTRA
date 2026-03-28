@@ -346,7 +346,7 @@ def show_wheel_info(peer_id, wheel):
         send(peer_id, "Произошла ошибка при получении информации о диске")
 
 def show_part(peer_id):
-    """Показывает карточку детали: фото + текст с кнопками навигации"""
+    """Показывает карточку детали с быстрой отправкой текста и фоновой загрузкой фото"""
     try:
         index = user_index.get(peer_id, 0)
         results = user_results.get(peer_id, [])
@@ -355,10 +355,9 @@ def show_part(peer_id):
             send_safe(peer_id, "Нет результатов поиска для отображения")
             return
 
-        # Проверка, что индекс в пределах списка
-        if index >= len(results):
-            user_index[peer_id] = 0
-            index = 0
+        if index >= len(results) or index < 0:
+            send_safe(peer_id, "Нет данных для отображения (некорректный индекс)")
+            return
 
         part = results[index]
 
@@ -366,6 +365,9 @@ def show_part(peer_id):
         if not part or not any(str(v).strip() for v in part.values()):
             send_safe(peer_id, "Данные о детали повреждены. Попробуйте поиск заново.")
             return
+
+        # Извлекаем первую фотографию
+        photo_url = get_first_photo(part.get('Фото', ''))
 
         # Формируем текст карточки
         message = "🚗 Карточка детали:\n"
@@ -380,41 +382,16 @@ def show_part(peer_id):
         if link != "Не указано" and link != "Нет ссылки":
             message += f"Ссылка: {link}"
 
-        # Создаём клавиатуру
-        keyboard = VkKeyboard(one_time=False)
+        # Отправляем текст сразу
+        send_safe(peer_id, message)
 
-        # Кнопка "Назад" (доступна, если есть что листать назад)
-        if len(results) > 1:
-            keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
-
-        # Кнопка "Обновить фото/текст"
-        keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
-
-        # Кнопка "Вперед" (доступна, если есть что листать вперед)
-        if len(results) > 1:
-            keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
-
-        keyboard_data = keyboard.get_keyboard()
-        photo_url = get_first_photo(part.get('Фото', ''))
-
-        # Сначала отправляем фото (без подписи)
+        # Если есть фото, запускаем его загрузку в фоне
         if photo_url:
-            send_photo_with_caption(
-                peer_id=peer_id,
-                photo_url=photo_url,
-                caption=""  # Пустая подпись — фото без текста
-            )
-
-        # Затем отправляем текстовое сообщение С КЛАВИАТУРОЙ
-        send_safe(
-            peer_id=peer_id,
-            message=message,
-            keyboard=keyboard_data
-        )
+            send_photo_with_caption(peer_id, photo_url, message)
 
     except Exception as e:
         logging.critical(f"ФАТАЛЬНАЯ ошибка в show_part для {peer_id}: {e}")
-        send_safe(peer_id, "Произошла критическая ошибка при отображении детали.")
+        send_safe(peer_id, "Произошла критическая ошибка при отображении детали. Обратитесь к администратору.")
 
 def show_donor(peer_id):
     """Показывает карточку донора из результатов поиска"""
