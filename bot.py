@@ -505,7 +505,7 @@ def handle(event):
 
         # Поиск
         current_state = user_state.get(peer_id)
-         if current_state == "parts":
+        if current_state == "parts":
         results = user_results.get(peer_id, [])
         
         # Проверяем, нажал ли пользователь кнопку навигации
