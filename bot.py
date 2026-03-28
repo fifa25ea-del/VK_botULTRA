@@ -346,7 +346,7 @@ def show_wheel_info(peer_id, wheel):
         send(peer_id, "Произошла ошибка при получении информации о диске")
 
 def show_part(peer_id):
-    """Показывает карточку детали с кнопками навигации"""
+    """Показывает карточку детали: фото + текст с кнопками навигации"""
     try:
         index = user_index.get(peer_id, 0)
         results = user_results.get(peer_id, [])
@@ -394,25 +394,23 @@ def show_part(peer_id):
         if len(results) > 1:
             keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
 
-        # Получаем URL фото
+        keyboard_data = keyboard.get_keyboard()
         photo_url = get_first_photo(part.get('Фото', ''))
 
-        # Отправляем либо фото с подписью и клавиатурой, либо только текст с клавиатурой
+        # Сначала отправляем фото (без подписи)
         if photo_url:
-            # Отправляем фото с текстом и клавиатурой
             send_photo_with_caption(
                 peer_id=peer_id,
                 photo_url=photo_url,
-                caption=message,
-                keyboard=keyboard.get_keyboard()
+                caption=""  # Пустая подпись — фото без текста
             )
-        else:
-            # Если фото нет, отправляем только текст с клавиатурой
-            send_safe(
-                peer_id=peer_id,
-                message=message,
-                keyboard=keyboard.get_keyboard()
-            )
+
+        # Затем отправляем текстовое сообщение С КЛАВИАТУРОЙ
+        send_safe(
+            peer_id=peer_id,
+            message=message,
+            keyboard=keyboard_data
+        )
 
     except Exception as e:
         logging.critical(f"ФАТАЛЬНАЯ ошибка в show_part для {peer_id}: {e}")
