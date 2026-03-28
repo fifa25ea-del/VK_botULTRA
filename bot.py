@@ -371,7 +371,7 @@ def show_part(peer_id):
         message = "🚗 Карточка детали:\n"
         message += f"Название: {safe_get(part, 'Наименование')}\n"
         message += f"Артикул: {safe_get(part, 'Артикул')}\n"
-        
+
         price = safe_get(part, 'Цена')
         if price != "Не указано":
             message += f"Цена: {price}\n"
@@ -380,27 +380,39 @@ def show_part(peer_id):
         if link != "Не указано" and link != "Нет ссылки":
             message += f"Ссылка: {link}"
 
-        # --- НОВАЯ ЧАСТЬ: Создание клавиатуры ---
+        # Создаём клавиатуру
         keyboard = VkKeyboard(one_time=False)
-        
+
         # Кнопка "Назад" (доступна, если есть что листать назад)
         if len(results) > 1:
             keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
-        
+
         # Кнопка "Обновить фото/текст"
         keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
-        
+
         # Кнопка "Вперед" (доступна, если есть что листать вперед)
         if len(results) > 1:
             keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
 
-        # Отправляем сообщение с клавиатурой
-        send_safe(peer_id, message, keyboard.get_keyboard())
-
-        # Отправка фото в фоне (как и раньше)
+        # Получаем URL фото
         photo_url = get_first_photo(part.get('Фото', ''))
+
+        # Отправляем либо фото с подписью и клавиатурой, либо только текст с клавиатурой
         if photo_url:
-            send_photo_with_caption(peer_id, photo_url, message)
+            # Отправляем фото с текстом и клавиатурой
+            send_photo_with_caption(
+                peer_id=peer_id,
+                photo_url=photo_url,
+                caption=message,
+                keyboard=keyboard.get_keyboard()
+            )
+        else:
+            # Если фото нет, отправляем только текст с клавиатурой
+            send_safe(
+                peer_id=peer_id,
+                message=message,
+                keyboard=keyboard.get_keyboard()
+            )
 
     except Exception as e:
         logging.critical(f"ФАТАЛЬНАЯ ошибка в show_part для {peer_id}: {e}")
