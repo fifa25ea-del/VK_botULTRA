@@ -1,7 +1,7 @@
 # =========================
 # VK BOT ULTRA (ТОП ВЕРСИЯ)
 # =========================
-import random
+
 import os
 import vk_api
 import requests
@@ -13,11 +13,6 @@ import json
 from vk_api.bot_longpoll import VkBotLongPoll, VkBotEventType
 import logging
 from urllib.parse import urlparse
-from vk_api.keyboard import VkKeyboard, VkKeyboardColor
-
-def get_random_id():
-    """Генерирует случайный ID для VK API (от 0 до 2^31−1)"""
-    return random.randint(0, 2**31 - 1)
 
 
 # Настройка логирования
@@ -36,10 +31,9 @@ FAV_FILE = "favorites.json"
 STATS_FILE = "stats.json"
 
 # ===== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ СОСТОЯНИЯ =====
-user_state = {}      # Хранит текущее состояние пользователя (parts, wheels...)
-user_results = {}    # Хранит результаты поиска для пользователя
-user_page = {}       # Новая переменная: номер текущей страницы (начинаем с 0)
-
+user_state = {}  # Хранит текущее состояние пользователя
+user_results = {}  # Хранит результаты поиска для пользователя
+user_index = {}  # Хранит текущий индекс в результатах поиска
 
 # ===== ИНИЦИАЛИЗАЦИЯ ФАЙЛОВ =====
 def init_files():
@@ -91,56 +85,53 @@ def get_main_keyboard():
     return keyboard.get_keyboard()
 
 def send_photo_with_caption(peer_id, photo_url, caption):
-    """Отправляет фото с подписью. Возвращает True при успехе, False при ошибке."""
-    try:
-        if not photo_url or not isinstance(photo_url, str):
-            logging.warning("Некорректный URL фото, пропуск отправки")
-            return False
+    """Отправляет фото с подписью"""
+    def upload_and_send():
+        try:
+            # Загружаем изображение
+            response = requests.get(photo_url, timeout=10, stream=True)
+            response.raise_for_status() # Проверка статуса 200 OK
 
-        # Загружаем изображение
-        response = requests.get(photo_url, timeout=10, stream=True)
-        response.raise_for_status()
+            # Проверяем, что сервер вернул картинку (а не HTML-страницу с ошибкой 404)
+            content_type = response.headers.get('Content-Type', '')
+            if 'image' not in content_type:
+                logging.warning(f"URL не содержит изображение (Content-Type: {content_type}): {photo_url}")
+                return # Просто выходим, если это не картинка
 
-        # Проверяем, что сервер вернул картинку
-        content_type = response.headers.get('Content-Type', '')
-        if 'image' not in content_type:
-            logging.warning(f"URL не содержит изображение (Content-Type: {content_type}): {photo_url}")
-            return False
+            # Загрузка во временное хранилище VK
+            upload_response = vk.photos.getMessagesUploadServer()
+            upload_url = upload_response['upload_url']
+            
+            # Используем content из ответа
+            files = {'photo': ('image.jpg', response.content)}
+            upload_result = requests.post(upload_url, files=files, timeout=15)
+            upload_data = upload_result.json()
 
-        # Загрузка во временное хранилище VK
-        upload_response = vk.photos.getMessagesUploadServer()
-        upload_url = upload_response['upload_url']
+            # Сохранение и отправка
+            photo_data = vk.photos.saveMessagesPhoto(
+                server=upload_data['server'],
+                photo=upload_data['photo'],
+                hash=upload_data['hash']
+            )[0]
 
-        # Используем content из ответа
-        files = {'photo': ('image.jpg', response.content)}
-        upload_result = requests.post(upload_url, files=files, timeout=15)
-        upload_data = upload_result.json()
+            vk.messages.send(
+                peer_id=peer_id,
+                message=caption,
+                attachment=f"photo{photo_data['owner_id']}_{photo_data['id']}",
+                random_id=0
+            )
+            logging.info(f"Фото успешно отправлено: {photo_url}")
 
-        # Сохранение и отправка
-        photo_data = vk.photos.saveMessagesPhoto(
-            server=upload_data['server'],
-            photo=upload_data['photo'],
-            hash=upload_data['hash']
-        )[0]
+        except requests.exceptions.Timeout:
+            logging.warning(f"Таймаут при загрузке фото: {photo_url}")
+        except requests.exceptions.RequestException as e:
+            logging.warning(f"Ошибка сети при загрузке фото: {e}")
+        except Exception as e:
+            logging.error(f"Неизвестная ошибка при обработке фото: {e}")
 
-        vk.messages.send(
-            peer_id=peer_id,
-            message=caption,
-            attachment=f"photo{photo_data['owner_id']}_{photo_data['id']}",
-            random_id=get_random_id()  # Исправлено: используем функцию
-        )
-        logging.info(f"Фото успешно отправлено: {photo_url}")
-        return True
-
-    except requests.exceptions.Timeout:
-        logging.warning(f"Таймаут при загрузке фото: {photo_url}")
-        return False
-    except requests.exceptions.RequestException as e:
-        logging.warning(f"Ошибка сети при загрузке фото: {e}")
-        return False
-    except Exception as e:
-        logging.error(f"Неизвестная ошибка при обработке фото: {e}")
-        return False
+    thread = threading.Thread(target=upload_and_send)
+    thread.daemon = True
+    thread.start()
 
 def get_first_photo(photo_field):
     """Извлекает первую валидную ссылку на фото"""
@@ -165,7 +156,7 @@ def send_safe(peer_id, text, keyboard=None):
         vk.messages.send(
             peer_id=peer_id,
             message=text,
-            random_id=get_random_id(),  # Исправлено
+            random_id=0,
             keyboard=keyboard if keyboard else get_main_keyboard()
         )
     except Exception as e:
@@ -175,22 +166,23 @@ def send_safe(peer_id, text, keyboard=None):
             vk.messages.send(
                 peer_id=peer_id,
                 message="Произошла ошибка при отправке сообщения. Попробуйте позже.",
-                random_id=get_random_id()  # Исправлено
+                random_id=0
             )
         except:
-            pass
-            
+            pass  # Игнорируем, если даже простое сообщение не отправляется
+
 def send(peer_id, text, keyboard=None):
     try:
         vk.messages.send(
             peer_id=peer_id,
             message=text,
-            random_id=get_random_id(),  # Исправлено
+            random_id=0,
             keyboard=keyboard if keyboard else get_main_keyboard()
         )
     except Exception as e:
         logging.error(f"Ошибка отправки сообщения: {e}")
-        
+
+
 # ===== ХРАНИЛИЩЕ =====
 def load_json(file):
     try:
@@ -251,32 +243,12 @@ class DataCache:
         return results
 
     def search_wheels(self, query):
-        """
-        Поиск дисков строго по полю 'Диаметр диска'.
-        Игнорирует бренд и модель.
-        Понимает форматы: 18, R18, r18.
-        """
-        # Нормализуем ввод: убираем пробелы, 'R', переводим в нижний регистр
-        user_input = query.strip().lower().replace('r', '').replace(' ', '')
-        
-        # Если пользователь ввел не число, возвращаем пустой список (поиск только по размеру)
-        if not user_input.isdigit():
-            return []
-    
+        """Поиск дисков по производителю"""
+        query = query.lower()
         results = []
-        target_diameter = user_input # Например, "18"
-    
         for wheel in self.wheels:
-            # Берем значение из поля 'Диаметр диска'
-            db_diameter = safe_get(wheel, 'Диаметр диска', '').lower()
-            
-            # Извлекаем только цифры из базы (на случай, если там есть доп. символы)
-            db_digits = ''.join(filter(str.isdigit, db_diameter))
-    
-            # Сравниваем только цифры
-            if target_diameter == db_digits:
+            if query in wheel.get('Диаметр диска', '').lower():
                 results.append(wheel)
-                
         return results
 
     def search_donors(self, query):
@@ -373,9 +345,8 @@ def show_wheel_info(peer_id, wheel):
         logging.error(f"Ошибка при отображении информации о диске: {e}")
         send(peer_id, "Произошла ошибка при получении информации о диске")
 
-
 def show_part(peer_id):
-    """Показывает карточку детали с кнопками навигации"""
+    """Показывает карточку детали с быстрой отправкой текста и фоновой загрузкой фото"""
     try:
         index = user_index.get(peer_id, 0)
         results = user_results.get(peer_id, [])
@@ -384,28 +355,25 @@ def show_part(peer_id):
             send_safe(peer_id, "Нет результатов поиска для отображения")
             return
 
-        # --- НОВОЕ: РЕВЕРСИВНЫЙ ПОРЯДОК ---
-        # Создаем перевернутую копию списка, чтобы не ломать исходные данные
-        reversed_results = list(results)  # Создаем копию
-        reversed_results.reverse()        # Переворачиваем (свежие будут первыми)
-
-        # Обновляем индекс, так как список перевернулся
-        # Если был индекс 0 (первый в старом списке), он станет последним в новом
-        total_items = len(reversed_results)
-        reversed_index = total_items - 1 - index
-
-        # Проверяем границы нового индекса
-        if reversed_index >= total_items or reversed_index < 0:
-            send_safe(peer_id, "Нет данных для отображения")
+        if index >= len(results) or index < 0:
+            send_safe(peer_id, "Нет данных для отображения (некорректный индекс)")
             return
 
-        part = reversed_results[reversed_index]
+        part = results[index]
 
-        # Формируем текст карточки (остальной код без изменений)
+        # Проверка целостности данных
+        if not part or not any(str(v).strip() for v in part.values()):
+            send_safe(peer_id, "Данные о детали повреждены. Попробуйте поиск заново.")
+            return
+
+        # Извлекаем первую фотографию
+        photo_url = get_first_photo(part.get('Фото', ''))
+
+        # Формируем текст карточки
         message = "🚗 Карточка детали:\n"
         message += f"Название: {safe_get(part, 'Наименование')}\n"
         message += f"Артикул: {safe_get(part, 'Артикул')}\n"
-        
+
         price = safe_get(part, 'Цена')
         if price != "Не указано":
             message += f"Цена: {price}\n"
@@ -414,160 +382,16 @@ def show_part(peer_id):
         if link != "Не указано" and link != "Нет ссылки":
             message += f"Ссылка: {link}"
 
-        # Добавляем нумерацию с учетом перевернутого списка
-        current_position = reversed_index + 1
-        message += f"\n📊 {current_position} из {total_items}"
+        # Отправляем текст сразу
+        send_safe(peer_id, message)
 
-        # Создаём клавиатуру
-        keyboard = VkKeyboard(one_time=False)
-
-        if total_items > 1:
-            keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
-
-        keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
-
-        if total_items > 1:
-            keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
-            
-        keyboard_data = keyboard.get_keyboard()
-        
-        # Отправляем фото и текст (как мы исправили ранее)
-        photo_url = get_first_photo(part.get('Фото', ''))
-        
+        # Если есть фото, запускаем его загрузку в фоне
         if photo_url:
-            try:
-                # Загрузка фото и отправка ОДНИМ сообщением
-                response = requests.get(photo_url, timeout=10)
-                response.raise_for_status()
-                
-                upload_url = vk.photos.getMessagesUploadServer()['upload_url']
-                files = {'photo': ('image.jpg', response.content)}
-                upload_data = requests.post(upload_url, files=files, timeout=15).json()
-
-                photo_data = vk.photos.saveMessagesPhoto(
-                    server=upload_data['server'],
-                    photo=upload_data['photo'],
-                    hash=upload_data['hash']
-                )[0]
-                
-                attachment = f"photo{photo_data['owner_id']}_{photo_data['id']}"
-                
-                vk.messages.send(
-                    peer_id=peer_id,
-                    message=message,
-                    attachment=attachment,
-                    keyboard=keyboard_data,
-                    random_id=get_random_id()
-                )
-            except Exception as e:
-                logging.warning(f"Ошибка отправки фото: {e}. Отправляем только текст.")
-                send_safe(peer_id, message, keyboard=keyboard_data)
-        else:
-            send_safe(peer_id, message, keyboard=keyboard_data)
+            send_photo_with_caption(peer_id, photo_url, message)
 
     except Exception as e:
-        logging.critical(f"Ошибка в show_part для {peer_id}: {e}")
-        send_safe(peer_id, "Произошла ошибка при отображении детали.")
-        
-def show_wheel(peer_id):
-    """Показывает результаты поиска: галерея фото из разных карточек, затем первая карточка."""
-    try:
-        index = user_index.get(peer_id, 0)
-        results = user_results.get(peer_id, [])
-
-        if not results:
-            send_safe(peer_id, "Нет результатов поиска для отображения")
-            return
-
-        # Реверсивный порядок (свежие объявления первыми)
-        reversed_results = list(results)
-        reversed_results.reverse()
-        user_results[peer_id] = reversed_results # Сохраняем новый порядок для навигации
-        
-        total_items = len(reversed_results)
-        if total_items == 0:
-            send_safe(peer_id, "Ничего не найдено.")
-            return
-
-        # --- НОВЫЙ БЛОК: ОТПРАВКА ГАЛЕРЕИ ФОТО (каждое фото - отдельным сообщением) ---
-        # Собираем первые валидные фото из первых 8 карточек
-        photos_to_send = []
-        for wheel in reversed_results[:8]:
-            photos_field = str(wheel.get('Фото', ''))
-            photo_urls = [url.strip() for url in photos_field.split(',') if url.strip()]
-            
-            for url in photo_urls:
-                if url.startswith('http'):
-                    photos_to_send.append(url)
-                    break # Берем только одно фото с карточки
-            
-            if len(photos_to_send) >= 8:
-                break
-
-        # Функция для отправки одного фото (вложением)
-        def send_single_photo(url):
-            try:
-                response = requests.get(url, timeout=10)
-                response.raise_for_status()
-
-                upload_url = vk.photos.getMessagesUploadServer()['upload_url']
-                files = {'photo': ('image.jpg', response.content)}
-                upload_data = requests.post(upload_url, files=files, timeout=15).json()
-
-                photo_data = vk.photos.saveMessagesPhoto(
-                    server=upload_data['server'],
-                    photo=upload_data['photo'],
-                    hash=upload_data['hash']
-                )[0]
-
-                vk.messages.send(
-                    peer_id=peer_id,
-                    attachment=f"photo{photo_data['owner_id']}_{photo_data['id']}",
-                    random_id=get_random_id()
-                )
-            except Exception as e:
-                logging.warning(f"Не удалось отправить фото {url}: {e}")
-
-        # Отправляем галерею (в том же потоке, чтобы фото пришли до текста)
-        for photo_url in photos_to_send:
-            send_single_photo(photo_url)
-
-
-        # --- СТАРЫЙ БЛОК: ОТПРАВКА КАРТОЧКИ С КНОПКАМИ ---
-        wheel = reversed_results[index]
-
-        message = "🛞 Карточка диска:\n"
-        message += f"Производитель: {safe_get(wheel, 'Производитель диска')}\n"
-        message += f"Артикул: {safe_get(wheel, 'Артикул')}\n"
-        message += f"Модель: {safe_get(wheel, 'Модель диска')}\n"
-        message += f"Размер: {safe_get(wheel, 'Размер')}\n"
-        
-        price = safe_get(wheel, 'Цена')
-        if price != "Не указано":
-            message += f"Цена: {price}\n"
-
-        link = safe_get(wheel, 'Ссылка')
-        if link != "Не указано" and link != "Нет ссылки":
-            message += f"Ссылка: {link}"
-
-        current_position = index + 1
-        message += f"\n📊 {current_position} из {total_items}"
-
-        keyboard = VkKeyboard(one_time=False)
-
-        if total_items > 1:
-            keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
-
-        keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
-
-        if total_items > 1:
-            keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
-            
-        send_safe(peer_id, message, keyboard=keyboard.get_keyboard())
-
-    except Exception as e:
-        logging.critical(f"Ошибка в show_wheel для {peer_id}: {e}")
-        send_safe(peer_id, "Произошла критическая ошибка при отображении дисков.")
+        logging.critical(f"ФАТАЛЬНАЯ ошибка в show_part для {peer_id}: {e}")
+        send_safe(peer_id, "Произошла критическая ошибка при отображении детали. Обратитесь к администратору.")
 
 def show_donor(peer_id):
     """Показывает карточку донора из результатов поиска"""
@@ -600,27 +424,6 @@ def find_part(query):
             results.append(part)
     return results
 
-def find_wheels(query, db):
-    query = query.lower().replace(" ", "").replace("-", "")
-    results = []
-
-    for part in db:
-        radius = str(part.get("Диаметр диска", "")).lower().replace(" ", "")
-        brand = str(part.get("Производитель диска", "")).lower()
-        model = str(part.get("Модель диска", "")).lower()
-
-        # Поиск по радиусу
-        if query in radius or query in f"r{radius}":
-            results.append(part)
-        # Поиск по бренду/модели
-        elif query in brand or query in model:
-            results.append(part)
-
-        if len(results) >= 20:
-            break
-
-    return results
-
 def find_donor(query):
     query = query.lower()
     results = []
@@ -651,63 +454,6 @@ def show_favorites(peer_id):
     else:
         send(peer_id, "Избранное пустое")
 
-def show_wheel_page(peer_id):
-    """Показывает страницу с несколькими карточками дисков (по 3 шт)."""
-    try:
-        results = user_results.get(peer_id, [])
-        if not results:
-            send_safe(peer_id, "Нет результатов для отображения.")
-            return
-
-        # Реверсивный порядок (свежие первыми)
-        reversed_results = list(results)
-        reversed_results.reverse()
-        user_results[peer_id] = reversed_results # Сохраняем новый порядок
-
-        total_items = len(reversed_results)
-        current_page = user_page.get(peer_id, 0)
-        items_per_page = 3
-
-        start_index = current_page * items_per_page
-        end_index = start_index + items_per_page
-
-        # Проверяем, есть ли данные для этой страницы
-        if start_index >= total_items:
-            send_safe(peer_id, "Данных на этой странице нет.")
-            return
-
-        message = "🛞 **Результаты поиска дисков:**\n\n"
-        keyboard = VkKeyboard(inline=False) # Обычная клавиатура внизу
-
-        # Добавляем карточки для текущей страницы
-        for i in range(start_index, min(end_index, total_items)):
-            wheel = reversed_results[i]
-            
-            # Берем первую ссылку на фото для превью в списке
-            photo_url = get_first_photo(wheel.get('Фото', ''))
-            
-            brand = safe_get(wheel, 'Производитель диска')
-            model = safe_get(wheel, 'Модель диска')
-            price = safe_get(wheel, 'Цена')
-            
-            # Формируем строку для списка
-            card_text = f"🛞 {brand} {model}\n💰 {price} ₽"
-            
-            if photo_url:
-                message += f"[Фото]({photo_url}) {card_text}\n\n"
-            else:
-                message += f"{card_text} (Фото нет)\n\n"
-        
-        # Добавляем кнопку "Показать еще", если есть еще карточки
-        if end_index < total_items:
-            keyboard.add_button("Показать еще", color=VkKeyboardColor.PRIMARY)
-        
-        send_safe(peer_id, message, keyboard=keyboard.get_keyboard())
-
-    except Exception as e:
-        logging.critical(f"Ошибка в show_wheel_page для {peer_id}: {e}")
-        send_safe(peer_id, "Произошла ошибка при отображении списка дисков.")
-
 
 def handle(event):
     msg = event.obj.message
@@ -722,163 +468,58 @@ def handle(event):
         if not text:
             return
 
-        # Обработка кнопок главного меню
+        # Обработка кнопок
         if text_lower in ["🚗 запчасти", "запчасти"]:
             user_state[peer_id] = "parts"
-            send(peer_id, "Введите номер детали:", keyboard=None)
+            send(peer_id, "Введите номер детали:")
             return
         elif text_lower in ["🛞 диски", "диски"]:
             user_state[peer_id] = "wheels"
-            send(peer_id, "Введите размер, например R18:", keyboard=None)
+            send(peer_id, "Введите размер , например R18:")
             return
         elif text_lower in ["🚘 доноры", "доноры"]:
             user_state[peer_id] = "donors"
-            send(peer_id, "Введите марку авто:", keyboard=None)
+            send(peer_id, "Введите марку авто:")
             return
         elif text_lower in ["❤️ избранное", "избранное"]:
             show_favorites(peer_id)
             return
         elif text_lower in ["⬅️ назад", "назад", "сброс", "отмена"]:
-            user_state[peer_id] = None
-            user_results[peer_id] = []
+            user_state[peer_id] = None # Сбрасываем состояние
+            user_results[peer_id] = [] # Очищаем результаты
             user_index[peer_id] = 0
             send(peer_id, "Меню сброшено. Чем помочь?", keyboard=get_main_keyboard())
-            return
 
-        # --- ОСНОВНАЯ ЛОГИКА ПОИСКА И НАВИГАЦИИ ---
+        # Поиск
         current_state = user_state.get(peer_id)
-
-        # --- Блок для ЗАПЧАСТЕЙ (Parts) ---
         if current_state == "parts":
-            # Проверяем кнопки навигации
-            if text in ["⬅️ Назад", "Назад"]:
-                _handle_navigation(peer_id, -1)
-                return
-            elif text in ["➡️ Вперед", "Вперед"]:
-                _handle_navigation(peer_id, 1)
-                return
-            elif text in ["🔄 Обновить", "Обновить"]:
-                show_part(peer_id)
-                return
-            
-            # Если это не кнопка — это поисковый запрос
             logging.info(f"Начинаем поиск деталей для запроса: '{text}'")
             results = cache.search_parts(text)
-
+            logging.info(f"Найдено деталей: {len(results)}")
             if results:
                 user_results[peer_id] = results
                 user_index[peer_id] = 0
                 show_part(peer_id)
             else:
-                send(peer_id, "❌ Детали не найдены. Попробуйте другой запрос или номер.")
-
-        # --- Блок для ДИСКОВ (Wheels) ---
+                send(peer_id, "❌ Детали не найдены. Попробуйте другой запрос.")
         elif current_state == "wheels":
-            results = user_results.get(peer_id, [])
-            current_page = user_page.get(peer_id, 0)
-            items_per_page = 3 # Сколько карточек показывать за раз
-
-            # Проверяем, не нажал ли пользователь "Показать еще"
-            if text in ["Показать еще", "показать еще"]:
-                if results:
-                    user_page[peer_id] = current_page + 1
-                    show_wheel_page(peer_id)
-                return
-
-            # Проверяем кнопки навигации (Вперед/Назад) внутри текущей тройки
-            # Эти кнопки теперь будут листать только внутри видимых 3-х карточек
-            elif text in ["⬅️ Назад", "Назад"]:
-                # Логика "Назад" остается похожей, но работает в рамках страницы
-                # Для простоты в этом примере мы просто переходим на предыдущую страницу
-                if current_page > 0 and results:
-                    user_page[peer_id] = current_page - 1
-                    show_wheel_page(peer_id)
-                return
-
-            elif text in ["➡️ Вперед", "Вперед"]:
-                # Логика "Вперед" - переходим на следующую страницу
-                max_page = (len(results) - 1) // items_per_page
-                if current_page < max_page and results:
-                    user_page[peer_id] = current_page + 1
-                    show_wheel_page(peer_id)
-                return
-
-            # Если это новый поисковый запрос
+            results = cache.search_wheels(text)
+            if results:
+                show_wheel_info(peer_id, results[0])
             else:
-                logging.info(f"Начинаем поиск дисков для запроса: '{text}'")
-                search_results = cache.search_wheels(text)
-
-                if search_results:
-                    user_results[peer_id] = search_results 
-                    user_page[peer_id] = 0 # Всегда начинаем с первой страницы при новом поиске
-                    show_wheel_page(peer_id)
-                else:
-                    send(peer_id, "❌ Диски не найдены.")
-
-        # --- Блок для ДОНОРОВ (Donors) ---
+                send(peer_id, "❌ Диски не найдены")
         elif current_state == "donors":
-             # Проверяем кнопки навигации
-            if text in ["⬅️ Назад", "Назад"]:
-                results = user_results.get(peer_id, [])
-                if results and len(results) > 1:
-                    new_index = user_index.get(peer_id, 0) - 1
-                    if new_index < 0:
-                        new_index = len(results) - 1
-                    user_index[peer_id] = new_index
-                    show_donor(peer_id)
-                return
-
-            elif text in ["➡️ Вперед", "Вперед"]:
-                results = user_results.get(peer_id, [])
-                if results and len(results) > 1:
-                    new_index = user_index.get(peer_id, 0) + 1
-                    if new_index >= len(results):
-                        new_index = 0
-                    user_index[peer_id] = new_index
-                    show_donor(peer_id)
-                return
-
-            # Если это не кнопка — это поисковый запрос
+            results = cache.search_donors(text)
+            if results:
+                user_results[peer_id] = results
+                user_index[peer_id] = 0
+                show_donor(peer_id)
             else:
-                logging.info(f"Начинаем поиск доноров для запроса: '{text}'")
-                results = cache.search_donors(text)
-                
-                if results:
-                    user_results[peer_id] = results
-                    user_index[peer_id] = 0 
-                    show_donor(peer_id)
-                else:
-                    send(peer_id, "❌ Доноры не найдены.")
-
+                send(peer_id, "❌ Доноры не найдены")
     except Exception as e:
-        # Этот блок поймает любые ошибки в логике выше (например, проблемы с сетью при поиске)
-        logging.error(f"Ошибка при обработке сообщения от {peer_id}: {e}")
-        send(peer_id, "Произошла внутренняя ошибка. Попробуйте еще раз или нажмите 'Назад'.")
-
-
-def _handle_navigation(peer_id: int, direction: int) -> None:
-    """
-    Обрабатывает навигацию по результатам (вперёд/назад).
-
-    Args:
-        peer_id: ID пользователя.
-        direction: направление (-1 — назад, 1 — вперёд).
-    """
-    results = user_results.get(peer_id, [])
-    if not results or len(results) <= 1:
-        return  # Навигация не нужна для 0–1 результата
-
-    current_index = user_index.get(peer_id, 0)
-    new_index = current_index + direction
-
-    # Циклическая навигация
-    if new_index < 0:
-        new_index = len(results) - 1
-    elif new_index >= len(results):
-        new_index = 0
-
-    user_index[peer_id] = new_index
-    show_part(peer_id)
+        logging.error(f"Ошибка в handle для {peer_id}: {e}")
+        send(peer_id, "Произошла ошибка. Попробуйте позже.")
+        
 # Запуск бота
 # ===== ГЛАВНЫЙ ЦИКЛ =====
 def run_bot():
