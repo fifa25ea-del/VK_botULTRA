@@ -250,14 +250,18 @@ class DataCache:
                 results.append(part)
         return results
 
-    def search_wheels(self, query):
-        """Поиск дисков по производителю"""
-        query = query.lower()
-        results = []
-        for wheel in self.wheels:
-            if query in wheel.get('Диаметр диска', '').lower():
-                results.append(wheel)
-        return results
+   def search_wheels(self, query):
+    """Поиск дисков по различным параметрам"""
+    query = query.lower()
+    results = []
+
+    for wheel in self.wheels:
+        # Поиск по размеру (R15, R16, R17 и т. д.)
+        if f"R{query}" in safe_get(wheel, 'Размер').upper():
+            results.append(wheel)
+            continue
+
+    return results
 
     def search_donors(self, query):
         """Поиск доноров по марке или модели"""
