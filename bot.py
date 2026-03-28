@@ -1,5 +1,5 @@
 # =========================
-# VK BOT ULTRA (ИСПРАВЛЕННАЯ ВЕРСИЯ)
+# VK BOT ULTRA (ОКОНЧАТЕЛЬНАЯ ВЕРСИЯ)
 # =========================
 
 import os
@@ -280,21 +280,18 @@ def show_wheel_info(peer_id, wheel):
         pcd = safe_get(wheel, 'PCD диска')
         
         if size != "Не указано":
-            message += f"Размер: {size}\n"
-            
-        if pcd != "Не указано":
-            message += f"PCD: {pcd}\n"
-        
-        # --- ИСПРАВЛЕННЫЙ ОТСТУП ---
-        message += f"Тип: {safe_get(wheel, 'Тип диска')}\n"
-        # --- ИСПРАВЛЕННЫЙ ОТСТУП ---
-        
-        message += f"Цена: {safe_get(wheel, 'Цена')}"
-        
-        send_safe(peer_id, message)
-    except Exception as e:
-        logging.error(f"Ошибка диска: {e}")
-        send_safe(peer_id, "Ошибка при получении информации о диске.")
+             message += f"Размер: {size}\n"
+             
+         if pcd != "Не указано":
+             message += f"PCD: {pcd}\n"
+             
+         message += f"Тип: {safe_get(wheel, 'Тип диска')}\n"
+         message += f"Цена: {safe_get(wheel, 'Цена')}"
+         
+         send_safe(peer_id, message)
+     except Exception as e:
+         logging.error(f"Ошибка диска: {e}")
+         send_safe(peer_id, "Ошибка при получении информации о диске.")
 
 # ===== ИЗБРАННОЕ =====
 def add_to_favorites(peer_id, item):
@@ -318,22 +315,32 @@ def show_favorites(peer_id):
      else:
          send_safe(peer_id, "Избранное пустое.")
 
-# ===== ГЛАВНЫЙ ОБРАБОТЧИК СОБЫТИЙ =====
+# ===== ГЛАВНЫЙ ОБРАБОТЧИК СОБЫТИЙ ===== (ЕДИНСТВЕННАЯ ВЕРСИЯ!)
 def handle(event):
      msg = event.obj.message
      peer_id = msg['peer_id']
      
+     text_raw = msg.get('text', '')
+     text_lower = text_raw.strip().lower()
+     
+     # --- НОВОЕ: Обработка команды /start ---
+     if text_lower == "/start":
+          send_safe(peer_id,
+                    "👋 Привет! Я бот для поиска автозапчастей и доноров.\n\n"
+                    "Что будем искать?",
+                    keyboard=get_main_keyboard())
+          return
+
      # --- ОБРАБОТКА НАЖАТИЙ НА КНОПКИ ---
      payload_raw = msg.get('payload')
      action = None
-     if payload_raw:
+     if payload_raw and isinstance(payload_raw, str):
          try:
-             action = json.loads(payload_raw).get('action')
+             action_payload = json.loads(payload_raw)
+             action = action_payload.get('action')
          except Exception as e:
-             logging.error(f"Плохой payload: {e}")
+             logging.error(f"Плохой payload JSON: {e}")
              
-     text = msg.get('text', '').strip().lower()
-     
      # Логика для кнопок (имеет приоритет над текстом)
      if action == "prev":
          user_index[peer_id] = max(0, user_index.get(peer_id, 0) - 1)
@@ -348,55 +355,69 @@ def handle(event):
          return
          
      if action == "home":
-         user_state[peer_id] = None # Сброс состояния
-         send_safe(peer_id, "🏠 Главное меню", keyboard=get_main_keyboard())
+         user_state[peer_id] = None # Сброс состояния поиска
+         send_safe(peer_id,
+                   "🏠 Вы вернулись в главное меню.",
+                   keyboard=get_main_keyboard())
          return
 
      # --- ОБРАБОТКА ТЕКСТА ПОЛЬЗОВАТЕЛЯ ---
      current_state = user_state.get(peer_id)
      
      # Кнопки главного меню (работают по тексту или эмодзи)
-     if text in ["🚗 запчасти", "запчасти"]:
-         user_state[peer_id] = "parts"
-         send_safe(peer_id, "🔎 Введите номер детали или артикул:", keyboard=get_main_keyboard())
-         
-     elif text in ["🛞 диски", "диски"]:
-         user_state[peer_id] = "wheels"
-         send_safe(peer_id, "🔎 Введите размер диска (например R18):", keyboard=get_main_keyboard())
-         
-     elif text in ["🚘 доноры", "доноры"]:
-         user_state[peer_id] = "donors"
-         send_safe(peer_id, "🔎 Введите марку или модель авто:", keyboard=get_main_keyboard())
-         
-     elif text in ["❤️ избранное", "избранное"]:
-          show_favorites(peer_id)
+     if text_lower in ["🚗 запчасти", "запчасти"]:
+          user_state[peer_id] = "parts"
+          send_safe(peer_id,
+                    "🔎 Введите номер детали или артикул:",
+                    keyboard=get_main_keyboard())
           
-     # Логика поиска по состоянию
-     elif current_state == "parts":
-          results = cache.search_parts(text)
-          if results:
-              user_results[peer_id] = results
-              user_index[peer_id] = 0
-              show_item(peer_id) # Покажет первую деталь с кнопками навигации
-          else:
-              send_safe(peer_id, "❌ Детали не найдены. Попробуйте другой запрос.")
-              
-     elif current_state == "wheels":
-          results = cache.search_wheels(text)
-          if results:
-              show_wheel_info(peer_id, results[0]) # Для дисков показываем только первый результат без навигации
-          else:
-              send_safe(peer_id, "❌ Диски не найдены.")
-              
-     elif current_state == "donors":
-          results = cache.search_donors(text)
-          if results:
-              user_results[peer_id] = results
-              user_index[peer_id] = 0
-              show_item(peer_id) # Покажет первого донора с кнопками навигации
-          else:
-              send_safe(peer_id, "❌ Доноры не найдены.")
-              
+     elif text_lower in ["🛞 диски", "диски"]:
+          user_state[peer_id] = "wheels"
+          send_safe(peer_id,
+                    "🔎 Введите размер диска (например R18):",
+                    keyboard=get_main_keyboard())
+          
+     elif text_lower in ["🚘 доноры", "доноры"]:
+          user_state[peer_id] = "donors"
+          send_safe(peer_id,
+                    "🔎 Введите марку или модель авто:",
+                    keyboard=get_main_keyboard())
+          
+     elif text_lower in ["❤️ избранное", "избранное"]:
+           show_favorites(peer_id)
+           
+      # Логика поиска по состоянию (только если пользователь уже выбрал категорию)
+      elif current_state == "parts":
+           results = cache.search_parts(text_raw) # Поиск по исходному тексту (не lower!)
+           if results:
+               user_results[peer_id] = results
+               user_index[peer_id] = 0
+               show_item(peer_id) # Покажет первую деталь с кнопками навигации
+           else:
+               send_safe(peer_id,
+                         "❌ Детали не найдены. Попробуйте другой запрос или номер.",
+                         keyboard=get_main_keyboard())
+               
+      elif current_state == "wheels":
+           results = cache.search_wheels(text_raw)
+           if results:
+               show_wheel_info(peer_id, results[0]) # Для дисков показываем только первый результат без навигации
+           else:
+               send_safe(peer_id,
+                         "❌ Диски не найдены. Проверьте размер.",
+                         keyboard=get_main_keyboard())
+               
+      elif current_state == "donors":
+           results = cache.search_donors(text_raw)
+           if results:
+               user_results[peer_id] = results
+               user_index[peer_id] = 0
+               show_item(peer_id) # Покажет первого донора с кнопками навигации
+           else:
+               send_safe(peer_id,
+                         f"❌ Доноры с маркой/моделью '{text_raw}' не найдены.",
+                         keyboard=get_main_keyboard())
+               
 # ===== ГЛАВНЫЙ ЦИКЛ БОТА =====
 def run_bot():
      logging.basicConfig(level=logging.INFO,
@@ -404,14 +425,3 @@ def run_bot():
      print("🔥 VK BOT ULTRA ЗАПУЩЕН")
      try:
           for event in longpoll.listen():
-               if event.type == VkBotEventType.MESSAGE_NEW:
-                    handle(event)
-     except KeyboardInterrupt:
-          logging.info("Бот остановлен вручную.")
-     except Exception as e:
-          logging.critical(f"Критическая ошибка цикла: {e}")
-          time.sleep(5)
-          run_bot() # Перезапуск
-
-if __name__ == "__main__":
-     run_bot()
