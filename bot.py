@@ -34,7 +34,6 @@ STATS_FILE = "stats.json"
 user_state = {}  # Хранит текущее состояние пользователя
 user_results = {}  # Хранит результаты поиска для пользователя
 user_index = {}  # Хранит текущий индекс в результатах поиска
-current_message_id = {} # ID последнего отправленного сообщения
 
 # ===== ИНИЦИАЛИЗАЦИЯ ФАЙЛОВ =====
 def init_files():
@@ -82,30 +81,6 @@ def get_main_keyboard():
     keyboard.add_button("🚘 Доноры", color=VkKeyboardColor.SECONDARY)
     keyboard.add_button("❤️ Избранное", color=VkKeyboardColor.POSITIVE)
 
-    return keyboard.get_keyboard()
-
-def get_navigation_keyboard(index, total):
-    """Создает клавиатуру с кнопками навигации и payload"""
-    keyboard = VkKeyboard(one_time=False)
-    invisible_char = '\u200B'
-
-    # Кнопка "Назад"
-    if index > 0:
-        keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY, payload={"action": "prev"})
-    else:
-        keyboard.add_button(invisible_char, color=VkKeyboardColor.SECONDARY, payload={"action": "empty"})
-
-    keyboard.add_line()
-
-    # Кнопка "Вперёд"
-    if index < total - 1:
-        keyboard.add_button("➡️ Вперёд", color=VkKeyboardColor.PRIMARY, payload={"action": "next"})
-    else:
-        keyboard.add_button(invisible_char, color=VkKeyboardColor.SECONDARY, payload={"action": "empty"})
-
-    keyboard.add_line()
-    keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.SECONDARY, payload={"action": "home"})
-    
     return keyboard.get_keyboard()
 
 def send_photo_with_caption(peer_id, photo_url, caption):
@@ -174,26 +149,18 @@ def get_first_photo(photo_field):
 
 
 # ===== ОТПРАВКА СООБЩЕНИЙ =====
-def send_message(peer_id, text, keyboard=None, save_id=True):
-    """Отправляет сообщение и сохраняет его ID для последующего редактирования"""
+def send_safe(peer_id, text, keyboard=None):
+    """Безопасная отправка сообщения с обработкой ошибок"""
     try:
-        # Используем метод send, чтобы получить ID
-        sent_message = vk.messages.send(
+        vk.messages.send(
             peer_id=peer_id,
             message=text,
-            random_id=0, # Для метода send random_id обязателен
+            random_id=0,
             keyboard=keyboard if keyboard else get_main_keyboard()
         )
-        
-        # Если флаг save_id включен, сохраняем ID в наш словарь
-        if save_id:
-            current_message_id[peer_id] = sent_message
-
-        logging.info(f"Сообщение успешно отправлено (ID: {sent_message})")
-        
     except Exception as e:
-        logging.error(f"Ошибка отправки/редактирования сообщения: {e}")
-        # Попытка отправить простое сообщение без клавиатуры в случае сбоя
+        logging.error(f"Критическая ошибка отправки VK API для {peer_id}: {e}")
+        # Попытка отправить простое сообщение без клавиатуры
         try:
             vk.messages.send(
                 peer_id=peer_id,
@@ -201,7 +168,7 @@ def send_message(peer_id, text, keyboard=None, save_id=True):
                 random_id=0
             )
         except:
-            pass
+            pass  # Игнорируем, если даже простое сообщение не отправляется
 
 def send(peer_id, text, keyboard=None):
     try:
@@ -265,15 +232,12 @@ class DataCache:
             logging.error(f"Критическая ошибка при обновлении базы: {e}")
 
     def search_parts(self, query):
-        """Поиск всех деталей с точным совпадением номера или артикула"""
-        query = query.strip().lower()
+        """Поиск деталей по названию или артикулу"""
+        query = query.lower()
         results = []
         for part in self.parts:
-            # Проверяем и номер, и артикул (на случай, если пользователь ввел артикул)
-            part_number = safe_get(part, 'Номер', '').lower()
-            part_article = safe_get(part, 'Артикул', '').lower()
-            
-            if query == part_number or query == part_article:
+            if query in part.get('Номер', '').lower() or \
+               query in part.get('Артикул', '').lower():
                 results.append(part)
         return results
 
@@ -345,10 +309,10 @@ def show_part_info(peer_id, part):
         comment = safe_get(part, 'Комментарий')
         if comment != "Не указано":
             message += f"Комментарий: {comment}"
-        send_message(peer_id, message)
+        send(peer_id, message)
     except Exception as e:
         logging.error(f"Критическая ошибка в show_part_info: {e}")
-        send_message(peer_id, "Произошла ошибка при получении информации о детали")
+        send(peer_id, "Произошла ошибка при получении информации о детали")
 
 def show_donor_info(peer_id, donor):
     """Показывает подробную информацию о доноре"""
@@ -359,10 +323,10 @@ def show_donor_info(peer_id, donor):
         message += f"Год выпуска: {donor.get('Год', 'Не указан')}\n"
         message += f"Цена: {donor.get('Цена', 'Не указана')}\n"
         message += f"Пробег: {donor.get('Пробег', 'Не указан')}"
-        send_message(peer_id, message)
+        send(peer_id, message)
     except Exception as e:
         logging.error(f"Ошибка при отображении информации о доноре: {e}")
-        send_message(peer_id, "Произошла ошибка при получении информации о доноре")
+        send(peer_id, "Произошла ошибка при получении информации о доноре")
 
 def show_wheel_info(peer_id, wheel):
     """Показывает подробную информацию о диске"""
@@ -375,39 +339,58 @@ def show_wheel_info(peer_id, wheel):
         message += f"PCD диска: {wheel.get('PCD диска', 'Не указан')}\n"
         message += f"Тип диска: {wheel.get('Тип диска', 'Не указан')}\n"
         message += f"Цена: {wheel.get('Цена', 'Не указана')}"
-        send_message(peer_id, message)
+        send(peer_id, message)
     except Exception as e:
         logging.error(f"Ошибка при отображении информации о диске: {e}")
-        send_message(peer_id, "Произошла ошибка при получении информации о диске")
+        send(peer_id, "Произошла ошибка при получении информации о диске")
 
-def send_message(peer_id, text, keyboard=None, save_id=True):
-    """Отправляет сообщение и сохраняет его ID для последующего редактирования"""
+def show_part(peer_id):
+    """Показывает карточку детали с быстрой отправкой текста и фоновой загрузкой фото"""
     try:
-        # Используем метод send, чтобы получить ID
-        sent_message = vk.messages.send(
-            peer_id=peer_id,
-            message=text,
-            random_id=0, # Для метода send random_id обязателен
-            keyboard=keyboard if keyboard else get_main_keyboard()
-        )
-        
-        # Если флаг save_id включен, сохраняем ID в наш словарь
-        if save_id:
-            current_message_id[peer_id] = sent_message
+        index = user_index.get(peer_id, 0)
+        results = user_results.get(peer_id, [])
 
-        logging.info(f"Сообщение успешно отправлено (ID: {sent_message})")
-        
+        if not results:
+            send_safe(peer_id, "Нет результатов поиска для отображения")
+            return
+
+        if index >= len(results) or index < 0:
+            send_safe(peer_id, "Нет данных для отображения (некорректный индекс)")
+            return
+
+        part = results[index]
+
+        # Проверка целостности данных
+        if not part or not any(str(v).strip() for v in part.values()):
+            send_safe(peer_id, "Данные о детали повреждены. Попробуйте поиск заново.")
+            return
+
+        # Извлекаем первую фотографию
+        photo_url = get_first_photo(part.get('Фото', ''))
+
+        # Формируем текст карточки
+        message = "🚗 Карточка детали:\n"
+        message += f"Название: {safe_get(part, 'Наименование')}\n"
+        message += f"Артикул: {safe_get(part, 'Артикул')}\n"
+
+        price = safe_get(part, 'Цена')
+        if price != "Не указано":
+            message += f"Цена: {price}\n"
+
+        link = safe_get(part, 'Ссылка')
+        if link != "Не указано" and link != "Нет ссылки":
+            message += f"Ссылка: {link}"
+
+        # Отправляем текст сразу
+        send_safe(peer_id, message)
+
+        # Если есть фото, запускаем его загрузку в фоне
+        if photo_url:
+            send_photo_with_caption(peer_id, photo_url, message)
+
     except Exception as e:
-        logging.error(f"Ошибка отправки/редактирования сообщения: {e}")
-        # Попытка отправить простое сообщение без клавиатуры в случае сбоя
-        try:
-            vk.messages.send(
-                peer_id=peer_id,
-                message="Произошла ошибка при отправке сообщения. Попробуйте позже.",
-                random_id=0
-            )
-        except:
-            pass
+        logging.critical(f"ФАТАЛЬНАЯ ошибка в show_part для {peer_id}: {e}")
+        send_safe(peer_id, "Произошла критическая ошибка при отображении детали. Обратитесь к администратору.")
 
 def show_donor(peer_id):
     """Показывает карточку донора из результатов поиска"""
@@ -423,12 +406,12 @@ def show_donor(peer_id):
             message += f"Год: {donor.get('Год', 'Не указан')}\n"
             message += f"Цена: {donor.get('Цена', 'Не указана')}\n"
             message += f"Ссылка: {donor.get('Ссылка', 'Нет ссылки')}"
-            send_message(peer_id, message)
+            send(peer_id, message)
         else:
-            send_message(peer_id, "Нет данных для отображения")
+            send(peer_id, "Нет данных для отображения")
     except Exception as e:
         logging.error(f"Ошибка при показе донора: {e}")
-        send_message(peer_id, "Произошла ошибка при отображении донора")
+        send(peer_id, "Произошла ошибка при отображении донора")
 
 # ===== ДОБАВЛЯЕМ ПОИСК ПО КРИТЕРИЯМ =====
 
@@ -456,9 +439,9 @@ def add_to_favorites(peer_id, item):
     if item not in favorites[peer_id]:
         favorites[peer_id].append(item)
         save_json(FAV_FILE, favorites)
-        send_message(peer_id, "Добавлено в избранное!")
+        send(peer_id, "Добавлено в избранное!")
     else:
-        send_message(peer_id, "Уже в избранном!")
+        send(peer_id, "Уже в избранном!")
 
 def show_favorites(peer_id):
     fav_items = favorites.get(peer_id, [])
@@ -466,84 +449,71 @@ def show_favorites(peer_id):
         message = "❤️ Избранное:\n"
         for i, item in enumerate(fav_items, 1):
             message += f"{i}. {item.get('Название', 'Не указано')}\n"
-        send_message(peer_id, message)
+        send(peer_id, message)
     else:
-        send_message(peer_id, "Избранное пустое")
+        send(peer_id, "Избранное пустое")
 
 
 def handle(event):
-    # Получаем объект сообщения из события
     msg = event.obj.message
     peer_id = msg['peer_id']
-
-    # --- НОВЫЙ БЛОК: Обработка Payload (кнопок) ---
-    # Извлекаем payload из сообщения. Он приходит в виде строки JSON.
-    payload_raw = msg.get('payload')
-    action = None
-    
-    if payload_raw:
-        try:
-            payload_data = json.loads(payload_raw)
-            action = payload_data.get('action')
-        except Exception as e:
-            logging.error(f"Ошибка декодирования payload: {e}")
-
-    # Проверяем, какое действие нужно выполнить
-    # Это будет работать и для новых сообщений, и для редактированных
-    if action == "prev":
-        user_index[peer_id] = max(0, user_index.get(peer_id, 0) - 1)
-        show_part(peer_id)
-        return
-        
-    if action == "next":
-        total_results = len(user_results.get(peer_id, []))
-        # Защита от ошибки, если список пустой
-        if total_results > 0:
-            user_index[peer_id] = min(total_results - 1, user_index.get(peer_id, 0) + 1)
-            show_part(peer_id)
-        return
-        
-    if action == "home":
-        user_state[peer_id] = None
-        send_message(peer_id, "Возврат в главное меню.", keyboard=get_main_keyboard())
-        return
-
-    # --- СТАРЫЙ БЛОК: Обработка ввода пользователя (ТЕКСТА) ---
-    # Этот блок выполнится только если payload не был распознан (т.е. пользователь просто написал текст)
     text = msg.get('text', '').strip()
     text_lower = text.lower()
-    
-    # Обработка команд и кнопок главного меню (работают по тексту)
-    if text_lower in ["🚗 запчасти", "запчасти"]:
-        user_state[peer_id] = "parts"
-        send_message(peer_id, "Введите номер детали:", keyboard=get_main_keyboard())
-        return
-        
-    elif text_lower in ["🛞 диски", "диски"]:
-        user_state[peer_id] = "wheels"
-        send_message(peer_id, "Введите размер , например R18:", keyboard=get_main_keyboard())
-        return
-        
-    elif text_lower in ["🚘 доноры", "доноры"]:
-        user_state[peer_id] = "donors"
-        send_message(peer_id, "Введите марку авто:", keyboard=get_main_keyboard())
-        return
-        
-    elif text_lower in ["❤️ избранное", "избранное"]:
-        show_favorites(peer_id)
-        return
 
-    # Блок поиска (выполняется, если пользователь ввел текст в режиме поиска)
-    current_state = user_state.get(peer_id)
-    
-    if current_state == "parts":
-        results = cache.search_parts(text)
-        if results:
-            user_results[peer_id] = results
-            user_index[peer_id] = 0
-            show_part(peer_id)
-        else:
-            send_message(peer_id, "❌ Детали не найдены. Попробуйте другой запрос.")
+    logging.info(f"Получено сообщение от {peer_id}: '{text}'")
+    logging.info(f"Текущее состояние пользователя: {user_state.get(peer_id)}")
+
+    try:
+        if not text:
+            return
+
+        # Обработка кнопок
+        if text_lower in ["🚗 запчасти", "запчасти"]:
+            user_state[peer_id] = "parts"
+            send(peer_id, "Введите номер детали:")
+            return
+        elif text_lower in ["🛞 диски", "диски"]:
+            user_state[peer_id] = "wheels"
+            send(peer_id, "Введите размер , например R18:")
+            return
+        elif text_lower in ["🚘 доноры", "доноры"]:
+            user_state[peer_id] = "donors"
+            send(peer_id, "Введите марку авто:")
+            return
+        elif text_lower in ["❤️ избранное", "избранное"]:
+            show_favorites(peer_id)
+            return
+
+        # Поиск
+        current_state = user_state.get(peer_id)
+        if current_state == "parts":
+            logging.info(f"Начинаем поиск деталей для запроса: '{text}'")
+            results = cache.search_parts(text)
+            logging.info(f"Найдено деталей: {len(results)}")
+            if results:
+                user_results[peer_id] = results
+                user_index[peer_id] = 0
+                show_part(peer_id)
+            else:
+                send(peer_id, "❌ Детали не найдены. Попробуйте другой запрос.")
+        elif current_state == "wheels":
+            results = cache.search_wheels(text)
+            if results:
+                show_wheel_info(peer_id, results[0])
+            else:
+                send(peer_id, "❌ Диски не найдены")
+        elif current_state == "donors":
+            results = cache.search_donors(text)
+            if results:
+                user_results[peer_id] = results
+                user_index[peer_id] = 0
+                show_donor(peer_id)
+            else:
+                send(peer_id, "❌ Доноры не найдены")
+    except Exception as e:
+        logging.error(f"Ошибка в handle для {peer_id}: {e}")
+        send(peer_id, "Произошла ошибка. Попробуйте позже.")
+        
 # Запуск бота
 # ===== ГЛАВНЫЙ ЦИКЛ =====
 def run_bot():
