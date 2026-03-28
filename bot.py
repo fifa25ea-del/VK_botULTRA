@@ -251,16 +251,32 @@ class DataCache:
         return results
 
     def search_wheels(self, query):
-        """Поиск дисков по различным параметрам"""
-        query = query.lower()
-        results = []
-
-        for wheel in self.wheels:
-            # Поиск по размеру (R15, R16, R17 и т. д.)
-            if f"R{query}" in safe_get(wheel, 'Размер').upper():
-                results.append(wheel)
-                continue
+        """
+        Поиск дисков строго по полю 'Диаметр диска'.
+        Игнорирует бренд и модель.
+        Понимает форматы: 18, R18, r18.
+        """
+        # Нормализуем ввод: убираем пробелы, 'R', переводим в нижний регистр
+        user_input = query.strip().lower().replace('r', '').replace(' ', '')
+        
+        # Если пользователь ввел не число, возвращаем пустой список (поиск только по размеру)
+        if not user_input.isdigit():
+            return []
     
+        results = []
+        target_diameter = user_input # Например, "18"
+    
+        for wheel in self.wheels:
+            # Берем значение из поля 'Диаметр диска'
+            db_diameter = safe_get(wheel, 'Диаметр диска', '').lower()
+            
+            # Извлекаем только цифры из базы (на случай, если там есть доп. символы)
+            db_digits = ''.join(filter(str.isdigit, db_diameter))
+    
+            # Сравниваем только цифры
+            if target_diameter == db_digits:
+                results.append(wheel)
+                
         return results
 
     def search_donors(self, query):
