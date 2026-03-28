@@ -412,8 +412,10 @@ def show_part(peer_id):
         logging.critical(f"ФАТАЛЬНАЯ ошибка в show_part для {peer_id}: {e}")
         send_safe(peer_id, "Произошла критическая ошибка при отображении детали. Обратитесь к администратору.")
 
+python
+Копировать
 def show_wheel(peer_id):
-    """Показывает карточку диска: фото + текст с кнопками навигации одним сообщением"""
+    """Показывает карточку диска: фото + текст с кнопками одним сообщением."""
     try:
         index = user_index.get(peer_id, 0)
         results = user_results.get(peer_id, [])
@@ -422,17 +424,18 @@ def show_wheel(peer_id):
             send_safe(peer_id, "Нет результатов поиска для отображения")
             return
 
-        # Проверка, что индекс в пределах списка
-        if index >= len(results) or index < 0:
-            send_safe(peer_id, "Нет данных для отображения (некорректный индекс)")
+        # Реверсивный порядок (свежие объявления первыми)
+        reversed_results = list(results)
+        reversed_results.reverse()
+        
+        total_items = len(reversed_results)
+        reversed_index = total_items - 1 - index
+
+        if reversed_index >= total_items or reversed_index < 0:
+            send_safe(peer_id, "Нет данных для отображения")
             return
 
-        wheel = results[index]
-
-        # Проверка целостности данных
-        if not wheel or not any(str(v).strip() for v in wheel.values()):
-            send_safe(peer_id, "Данные о диске повреждены. Попробуйте поиск заново.")
-            return
+        wheel = reversed_results[reversed_index]
 
         # Формируем текст карточки
         message = "🛞 Карточка диска:\n"
@@ -450,37 +453,36 @@ def show_wheel(peer_id):
             message += f"Ссылка: {link}"
 
         # Добавляем нумерацию
-        total_wheels = len(results)
-        current_position = index + 1
-        message += f"\n📊 {current_position} из {total_wheels}"
+        current_position = reversed_index + 1
+        message += f"\n📊 {current_position} из {total_items}"
 
-        # Создаём клавиатуру
+        # Создаём клавиатуру (с кнопкой "Главное меню")
         keyboard = VkKeyboard(one_time=False)
-
-        if len(results) > 1:
+        keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.NEGATIVE)
+        keyboard.add_line()
+        
+        if total_items > 1:
             keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
-
+            
         keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
-
-        if len(results) > 1:
+        
+        if total_items > 1:
             keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
             
         keyboard_data = keyboard.get_keyboard()
         
-        # --- НОВОЕ: Получаем ссылку на фото ---
+        # ОТПРАВКА ОДНОГО СООБЩЕНИЯ С ФОТО И ТЕКСТОМ
         photo_url = get_first_photo(wheel.get('Фото', ''))
-
+        
         if photo_url:
             try:
-                # 1. Загружаем изображение на сервер VK
                 response = requests.get(photo_url, timeout=10)
                 response.raise_for_status()
-                
+
                 upload_url = vk.photos.getMessagesUploadServer()['upload_url']
                 files = {'photo': ('image.jpg', response.content)}
                 upload_data = requests.post(upload_url, files=files, timeout=15).json()
 
-                # 2. Сохраняем фото и получаем ID вложения
                 photo_data = vk.photos.saveMessagesPhoto(
                     server=upload_data['server'],
                     photo=upload_data['photo'],
@@ -489,7 +491,6 @@ def show_wheel(peer_id):
                 
                 attachment = f"photo{photo_data['owner_id']}_{photo_data['id']}"
                 
-                # 3. Отправляем ОДНО сообщение с фото, текстом и клавиатурой
                 vk.messages.send(
                     peer_id=peer_id,
                     message=message,
@@ -497,23 +498,15 @@ def show_wheel(peer_id):
                     keyboard=keyboard_data,
                     random_id=get_random_id()
                 )
-                logging.info(f"Карточка диска с фото успешно отправлена пользователю {peer_id}")
-
-            except requests.exceptions.RequestException as e:
-                logging.warning(f"Ошибка загрузки фото для диска: {e}")
-                # Если фото не загрузилось, отправляем просто текст с кнопками
-                send_safe(peer_id, message, keyboard=keyboard_data)
             except Exception as e:
-                logging.error(f"Неизвестная ошибка при отправке фото диска: {e}")
+                logging.warning(f"Ошибка отправки фото: {e}. Отправляем только текст.")
                 send_safe(peer_id, message, keyboard=keyboard_data)
-
         else:
-            # Если фото нет в базе, отправляем просто текст с кнопками
             send_safe(peer_id, message, keyboard=keyboard_data)
 
     except Exception as e:
-        logging.critical(f"ФАТАЛЬНАЯ ошибка в show_wheel для {peer_id}: {e}")
-        send_safe(peer_id, "Произошла критическая ошибка при отображении диска.")
+        logging.critical(f"Ошибка в show_wheel для {peer_id}: {e}")
+        send_safe(peer_id, "Произошла ошибка при отображении диска.")
 
 def show_donor(peer_id):
     """Показывает карточку донора из результатов поиска"""
