@@ -705,24 +705,52 @@ def handle(event):
 
         # --- Блок для ДИСКОВ (Wheels) ---
         elif current_state == "wheels":
-             # Проверяем кнопки навигации (если они были нажаты в карточке)
-            if text in ["⬅️ Назад", "Назад", "➡️ Вперед", "Вперед", "🔄 Обновить", "Обновить"]:
-                # Если пользователь нажал кнопку навигации, но мы находимся в состоянии 'wheels',
-                # это значит, что он либо ошибся, либо перезапустил бота.
-                # Сбрасываем состояние и предлагаем начать заново.
-                send(peer_id, "Сначала нужно выполнить поиск. Введите размер диска (например, R18).")
+            # Получаем текущие результаты для этого пользователя
+            results = user_results.get(peer_id, [])
+
+            # --- 1. СНАЧАЛА ПРОВЕРЯЕМ НАВИГАЦИОННЫЕ КОМАНДЫ ---
+            if text in ["⬅️ Назад", "Назад"]:
+                if results and len(results) > 1:
+                    new_index = user_index.get(peer_id, 0) - 1
+                    if new_index < 0:
+                        new_index = len(results) - 1 # Цикл в начало
+                    user_index[peer_id] = new_index
+                    show_wheel(peer_id)
+                else:
+                    # Если результатов нет или он один, просто игнорируем или выводим подсказку
+                    send(peer_id, "Сначала нужно выполнить поиск. Введите размер диска (например, R18).")
                 return
 
-            # Если это не кнопка — это поисковый запрос
-            logging.info(f"Начинаем поиск дисков для запроса: '{text}'")
-            results = cache.search_wheels(text)
+            elif text in ["➡️ Вперед", "Вперед"]:
+                if results and len(results) > 1:
+                    new_index = user_index.get(peer_id, 0) + 1
+                    if new_index >= len(results):
+                        new_index = 0 # Цикл в конец
+                    user_index[peer_id] = new_index
+                    show_wheel(peer_id)
+                else:
+                    send(peer_id, "Сначала нужно выполнить поиск. Введите размер диска (например, R18).")
+                return
 
-            if results:
-                user_results[peer_id] = results
-                user_index[peer_id] = 0
-                show_wheel(peer_id)
+            elif text in ["🔄 Обновить", "Обновить"]:
+                # Если нажали обновить без поиска, просто просим ввести размер
+                if not results:
+                     send(peer_id, "Сначала нужно выполнить поиск. Введите размер диска (например, R18).")
+                else:
+                    show_wheel(peer_id)
+                return
+
+            # --- 2. ЕСЛИ ЭТО НЕ КНОПКА, ЗНАЧИТ ЭТО ПОИСКОВЫЙ ЗАПРОС ---
             else:
-                send(peer_id, "❌ Диски не найдены.")
+                logging.info(f"Начинаем поиск дисков для запроса: '{text}'")
+                results = cache.search_wheels(text)
+
+                if results:
+                    user_results[peer_id] = results
+                    user_index[peer_id] = 0 # Всегда начинаем с первого элемента при новом поиске
+                    show_wheel(peer_id)
+                else:
+                    send(peer_id, "❌ Диски не найдены. Проверьте введенное число (например, 17 или R18).")
 
         # --- Блок для ДОНОРОВ (Donors) ---
         elif current_state == "donors":
