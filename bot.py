@@ -438,57 +438,72 @@ def show_part(peer_id):
         logging.critical(f"ФАТАЛЬНАЯ ошибка в show_part для {peer_id}: {e}")
         send_safe(peer_id, "Произошла критическая ошибка при отображении детали.")
 
-def show_wheel_card(peer_id, index):
-        track(peer_id, "views")
+def show_wheel(peer_id):
+    """Показывает карточку диска с кнопками навигации и фоновой загрузкой фото"""
+    try:
+        index = user_index.get(peer_id, 0)
         results = user_results.get(peer_id, [])
-        if not results or index >= len(results):
+
+        if not results:
+            send_safe(peer_id, "Нет результатов поиска для отображения")
             return
-    
-        part = results[index]
-        photos = str(part.get("Фото", ""))
-        photo_list = [x.strip() for x in photos.split(",") if x.strip().startswith("http")]
-        main_photo = photo_list[0] if photo_list else None
-    
-        brand = part.get("Производитель диска", "")
-        model = part.get("Модель диска", "")
-        article = part.get("Артикул", "")
-        price = part.get("Цена", "")
-    
-        radius = part.get("Диаметр диска", "")
-        width = part.get("Ширина диска", "")
-        et = part.get("Вылет диска", "")
-        pcd = part.get("PCD диска", "")
-        dia = part.get("Диаметр осевого отверстия диска", "")
-    
-        text = (
-            f"🛞 {brand} {model}\n\n"
-            f"Артикул: {article}\n"
-            f"💰 {price} ₽\n\n"
-            f"📏 R{radius or '-'} | {width or '-'}J | ET{et or '-'}\n"
-            f"🔩 PCD: {pcd or '-'}\n"
-            f"🕳 DIA: {dia or '-'}\n\n"
-            f"({index+1}/{len(results)})"
-        )
-    
-        # Клавиатура VK
+
+        # Проверка, что индекс в пределах списка
+        if index >= len(results) or index < 0:
+            send_safe(peer_id, "Нет данных для отображения (некорректный индекс)")
+            return
+
+        wheel = results[index]
+
+        # Проверка целостности данных
+        if not wheel or not any(str(v).strip() for v in wheel.values()):
+            send_safe(peer_id, "Данные о диске повреждены. Попробуйте поиск заново.")
+            return
+
+        # Формируем текст карточки
+        message = "🛞 Карточка диска:\n"
+        message += f"Производитель: {safe_get(wheel, 'Производитель диска')}\n"
+        message += f"Артикул: {safe_get(wheel, 'Артикул')}\n"
+        message += f"Модель: {safe_get(wheel, 'Модель диска')}\n"
+        message += f"Размер: {safe_get(wheel, 'Размер')}\n"
+        
+        price = safe_get(wheel, 'Цена')
+        if price != "Не указано":
+            message += f"Цена: {price}\n"
+
+        link = safe_get(wheel, 'Ссылка')
+        if link != "Не указано" and link != "Нет ссылки":
+            message += f"Ссылка: {link}"
+
+        # Добавляем нумерацию (как в Parts)
+        total_wheels = len(results)
+        current_position = index + 1
+        message += f"\n📊 {current_position} из {total_wheels}"
+
+        # Создаём клавиатуру (такая же, как в Parts)
         keyboard = VkKeyboard(one_time=False)
-        keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
-        keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
-        keyboard.add_line()
-        keyboard.add_button("❤️ Сохранить", color=VkKeyboardColor.POSITIVE)
-        keyboard.add_button("💬 Связаться", color=VkKeyboardColor.SECONDARY)
-    
+
+        if len(results) > 1:
+            keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
+
+        keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
+
+        if len(results) > 1:
+            keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
+
         keyboard_data = keyboard.get_keyboard()
-    
-        if main_photo:
-            send_photo_with_caption(
-                peer_id=peer_id,
-                photo_url=main_photo,
-                caption=text,
-                keyboard=keyboard_data
-            )
-        else:
-            send_safe(peer_id, text, keyboard=keyboard_data)
+        
+        # Отправляем текст с клавиатурой
+        send_safe(peer_id, message, keyboard=keyboard_data)
+
+        # Отправляем фото в фоне (как в Parts)
+        photo_url = get_first_photo(wheel.get('Фото', ''))
+        if photo_url:
+            send_photo_with_caption(peer_id, photo_url, "")
+
+    except Exception as e:
+        logging.critical(f"Ошибка в show_wheel для {peer_id}: {e}")
+        send_safe(peer_id, "Произошла ошибка при отображении диска.")
 
 def show_donor(peer_id):
     """Показывает карточку донора из результатов поиска"""
@@ -609,25 +624,23 @@ def handle(event):
             send(peer_id, "Меню сброшено. Чем помочь?", keyboard=get_main_keyboard())
             return
 
-        # Основная логика поиска и навигации
+        # --- ОСНОВНАЯ ЛОГИКА ПОИСКА И НАВИГАЦИИ ---
         current_state = user_state.get(peer_id)
 
+        # --- Блок для ЗАПЧАСТЕЙ (Parts) ---
         if current_state == "parts":
-            # Нормализуем текст для проверки навигационных команд
-            normalized_text = text.strip().lower()
-
-            # Обрабатываем навигационные команды
-            if normalized_text in ["⬅️ назад", "назад"]:
+            # Проверяем кнопки навигации
+            if text in ["⬅️ Назад", "Назад"]:
                 _handle_navigation(peer_id, -1)
                 return
-            elif normalized_text in ["➡️ вперед", "вперед"]:
+            elif text in ["➡️ Вперед", "Вперед"]:
                 _handle_navigation(peer_id, 1)
                 return
-            elif normalized_text in ["🔄 обновить", "обновить"]:
+            elif text in ["🔄 Обновить", "Обновить"]:
                 show_part(peer_id)
                 return
-
-            # Если это не кнопка навигации — выполняем поиск
+            
+            # Если это не кнопка — это поисковый запрос
             logging.info(f"Начинаем поиск деталей для запроса: '{text}'")
             results = cache.search_parts(text)
 
@@ -638,10 +651,66 @@ def handle(event):
             else:
                 send(peer_id, "❌ Детали не найдены. Попробуйте другой запрос или номер.")
 
-    except Exception as e:
-        logging.error(f"Ошибка при обработке сообщения от {peer_id}: {e}")
-        send(peer_id, "Произошла ошибка. Попробуйте позже.")
+        # --- Блок для ДИСКОВ (Wheels) ---
+        elif current_state == "wheels":
+             # Проверяем кнопки навигации (если они были нажаты в карточке)
+            if text in ["⬅️ Назад", "Назад", "➡️ Вперед", "Вперед", "🔄 Обновить", "Обновить"]:
+                # Если пользователь нажал кнопку навигации, но мы находимся в состоянии 'wheels',
+                # это значит, что он либо ошибся, либо перезапустил бота.
+                # Сбрасываем состояние и предлагаем начать заново.
+                send(peer_id, "Сначала нужно выполнить поиск. Введите размер диска (например, R18).")
+                return
 
+            # Если это не кнопка — это поисковый запрос
+            logging.info(f"Начинаем поиск дисков для запроса: '{text}'")
+            results = cache.search_wheels(text)
+
+            if results:
+                user_results[peer_id] = results
+                user_index[peer_id] = 0
+                show_wheel(peer_id)
+            else:
+                send(peer_id, "❌ Диски не найдены.")
+
+        # --- Блок для ДОНОРОВ (Donors) ---
+        elif current_state == "donors":
+             # Проверяем кнопки навигации
+            if text in ["⬅️ Назад", "Назад"]:
+                results = user_results.get(peer_id, [])
+                if results and len(results) > 1:
+                    new_index = user_index.get(peer_id, 0) - 1
+                    if new_index < 0:
+                        new_index = len(results) - 1
+                    user_index[peer_id] = new_index
+                    show_donor(peer_id)
+                return
+
+            elif text in ["➡️ Вперед", "Вперед"]:
+                results = user_results.get(peer_id, [])
+                if results and len(results) > 1:
+                    new_index = user_index.get(peer_id, 0) + 1
+                    if new_index >= len(results):
+                        new_index = 0
+                    user_index[peer_id] = new_index
+                    show_donor(peer_id)
+                return
+
+            # Если это не кнопка — это поисковый запрос
+            else:
+                logging.info(f"Начинаем поиск доноров для запроса: '{text}'")
+                results = cache.search_donors(text)
+                
+                if results:
+                    user_results[peer_id] = results
+                    user_index[peer_id] = 0 
+                    show_donor(peer_id)
+                else:
+                    send(peer_id, "❌ Доноры не найдены.")
+
+    except Exception as e:
+        # Этот блок поймает любые ошибки в логике выше (например, проблемы с сетью при поиске)
+        logging.error(f"Ошибка при обработке сообщения от {peer_id}: {e}")
+        send(peer_id, "Произошла внутренняя ошибка. Попробуйте еще раз или нажмите 'Назад'.")
 
 
 def _handle_navigation(peer_id: int, direction: int) -> None:
