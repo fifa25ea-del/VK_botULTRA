@@ -80,7 +80,8 @@ def get_main_keyboard():
     keyboard.add_line()
     keyboard.add_button("🚘 Доноры", color=VkKeyboardColor.SECONDARY)
     keyboard.add_button("❤️ Избранное", color=VkKeyboardColor.POSITIVE)
-
+    keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.NEGATIVE)
+    
     return keyboard.get_keyboard()
 
 def send_photo_with_caption(peer_id, photo_url, caption):
@@ -483,6 +484,11 @@ def handle(event):
         elif text_lower in ["❤️ избранное", "избранное"]:
             show_favorites(peer_id)
             return
+        elif text_lower in ["⬅️ назад", "назад", "сброс", "отмена"]:
+            user_state[peer_id] = None # Сбрасываем состояние
+            user_results[peer_id] = [] # Очищаем результаты
+            user_index[peer_id] = 0
+            send(peer_id, "Меню сброшено. Чем помочь?", keyboard=get_main_keyboard())
 
         # Поиск
         current_state = user_state.get(peer_id)
