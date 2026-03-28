@@ -85,11 +85,8 @@ def get_main_keyboard():
     return keyboard.get_keyboard()
 
 def send_photo_with_caption(peer_id, photo_url, caption):
-    """
-    Отправляет фото с подписью. Возвращает True при успешной отправке, False — при ошибке.
-    """
+    """Отправляет фото с подписью. Возвращает True при успехе, False при ошибке."""
     try:
-        # Проверяем входные данные
         if not photo_url or not isinstance(photo_url, str):
             logging.warning("Некорректный URL фото, пропуск отправки")
             return False
@@ -124,7 +121,7 @@ def send_photo_with_caption(peer_id, photo_url, caption):
             peer_id=peer_id,
             message=caption,
             attachment=f"photo{photo_data['owner_id']}_{photo_data['id']}",
-            random_id=get_random_id()  # Используйте функцию для генерации random_id
+            random_id=get_random_id()
         )
         logging.info(f"Фото успешно отправлено: {photo_url}")
         return True
@@ -138,7 +135,6 @@ def send_photo_with_caption(peer_id, photo_url, caption):
     except Exception as e:
         logging.error(f"Неизвестная ошибка при обработке фото: {e}")
         return False
-
 def get_first_photo(photo_field):
     """Извлекает первую валидную ссылку на фото"""
     if not photo_field:
@@ -351,6 +347,7 @@ def show_wheel_info(peer_id, wheel):
         logging.error(f"Ошибка при отображении информации о диске: {e}")
         send(peer_id, "Произошла ошибка при получении информации о диске")
 
+
 def show_part(peer_id):
     """Показывает карточку детали: фото + текст с кнопками навигации"""
     try:
@@ -403,25 +400,29 @@ def show_part(peer_id):
         keyboard_data = keyboard.get_keyboard()
         photo_url = get_first_photo(part.get('Фото', ''))
 
-        # Отправляем фото (если URL корректен)
-        photo_sent = False
+        # Сначала отправляем фото (без подписи), если URL корректен
         if photo_url and isinstance(photo_url, str) and photo_url.strip():
-            photo_sent = send_photo_with_caption(
-                peer_id=peer_id,
-                photo_url=photo_url,
-                caption=""  # Пустая подпись — фото без текста
-            )
+            try:
+                send_photo_with_caption(
+                    peer_id=peer_id,
+            photo_url=photo_url,
+            caption=""  # Пустая подпись — фото без текста
+                )
+                logging.info(f"Фото отправлено для {peer_id}: {photo_url}")
+            except Exception as photo_error:
+                logging.warning(f"Не удалось отправить фото для {peer_id}: {photo_error}")
 
-        # Всегда отправляем текстовое сообщение с клавиатурой
+        # Затем отправляем текстовое сообщение с клавиатурой (всегда)
         send_safe(
             peer_id=peer_id,
-            message=message,
+            text=message,
             keyboard=keyboard_data
         )
 
     except Exception as e:
         logging.critical(f"ФАТАЛЬНАЯ ошибка в show_part для {peer_id}: {e}")
         send_safe(peer_id, "Произошла критическая ошибка при отображении детали.")
+
 def show_donor(peer_id):
     """Показывает карточку донора из результатов поиска"""
     try:
