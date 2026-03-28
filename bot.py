@@ -517,26 +517,47 @@ def show_wheel(peer_id):
         send_safe(peer_id, "Произошла критическая ошибка при отображении диска.")
 
 def show_donor(peer_id):
-    """Показывает карточку донора из результатов поиска"""
-    try:
-        index = user_index.get(peer_id, 0)
-        results = user_results.get(peer_id, [])
+    """
+    Формирует и отправляет сообщение с карточкой донора.
+    Берет текущий индекс из user_index и данные из user_results.
+    """
+    # Получаем список доноров и текущий индекс
+    results = user_results.get(peer_id, [])
+    index = user_index.get(peer_id, 0)
+    
+    # Защита от пустого списка
+    if not results:
+        send(peer_id, "🚫 Список доноров пуст. Попробуйте позже.")
+        return
 
-        if index < len(results):
-            donor = results[index]
-            message = "🚘 Карточка донора:\n"
-            message += f"Марка: {donor.get('Марка', 'Не указана')}\n"
-            message += f"Модель: {donor.get('Модель', 'Не указана')}\n"
-            message += f"Год: {donor.get('Год', 'Не указан')}\n"
-            message += f"Цена: {donor.get('Цена', 'Не указана')}\n"
-            message += f"Ссылка: {donor.get('Ссылка', 'Нет ссылки')}"
-            send(peer_id, message)
-        else:
-            send(peer_id, "Нет данных для отображения")
-    except Exception as e:
-        logging.error(f"Ошибка при показе донора: {e}")
-        send(peer_id, "Произошла ошибка при отображении донора")
-
+    # Берем текущее авто по индексу
+    donor = results[index]
+    
+    # Формируем текст сообщения (карточку)
+    message_text = (
+        f"🚗 Донор: {donor.get('mark')} {donor.get('model')}\n"
+        f"📅 Год: {donor.get('year')}\n"
+        f"⚙️ Двигатель: {donor.get('engine')}\n"
+        f"🆔 VIN: {donor.get('vin')}"
+    )
+    
+    # Формируем клавиатуру с навигацией
+    keyboard = {
+        "inline": True,
+        "buttons": [
+            [{"text": "⬅️ Назад", "callback_data": "back_donor"}],
+            [{"text": "🔄 Обновить", "callback_data": "refresh_donor"}],
+            [{"text": "➡️ Вперед", "callback_data": "forward_donor"}]
+        ]
+    }
+    
+    # Отправляем сообщение с фото (если есть) и клавиатурой
+    photo_url = donor.get('photo_url')
+    if photo_url:
+        send(peer_id, message_text, keyboard=keyboard, attachment=photo_url)
+    else:
+        send(peer_id, message_text, keyboard=keyboard)
+        
 # ===== ДОБАВЛЯЕМ ПОИСК ПО КРИТЕРИЯМ =====
 
 def find_part(query):
@@ -692,43 +713,65 @@ def handle(event):
 
         # --- Блок для ДОНОРОВ (Donors) ---
         elif current_state == "donors":
-             # Проверяем кнопки навигации
-            if text in ["⬅️ Назад", "Назад"]:
-                results = user_results.get(peer_id, [])
-                if results and len(results) > 1:
-                    new_index = user_index.get(peer_id, 0) - 1
-                    if new_index < 0:
-                        new_index = len(results) - 1
-                    user_index[peer_id] = new_index
-                    show_donor(peer_id)
-                return
-
-            elif text in ["➡️ Вперед", "Вперед"]:
-                results = user_results.get(peer_id, [])
-                if results and len(results) > 1:
-                    new_index = user_index.get(peer_id, 0) + 1
-                    if new_index >= len(results):
-                        new_index = 0
-                    user_index[peer_id] = new_index
-                    show_donor(peer_id)
-                return
-
-            # Если это не кнопка — это поисковый запрос
+    # При первом входе в раздел или если список еще не загружен
+    if not user_results.get(peer_id):
+        logging.info(f"Пользователь {peer_id} зашел в раздел доноров. Запрашиваем базу.")
+        
+        try:
+            # Здесь cache.get_latest_donors() - твоя функция для получения последних 15 авто
+            latest_donors = cache.get_latest_donors(limit=15) 
+            
+            if latest_donors:
+                user_results[peer_id] = latest_donors
+                user_index[peer_id] = 0
+                show_donor(peer_id)
             else:
-                logging.info(f"Начинаем поиск доноров для запроса: '{text}'")
-                results = cache.search_donors(text)
-                
-                if results:
-                    user_results[peer_id] = results
-                    user_index[peer_id] = 0 
+                send(peer_id, "🚫 Не удалось загрузить список доноров.", keyboard=get_main_keyboard())
+                user_state[peer_id] = None # Возвращаем в главное меню при ошибке
+
+        except Exception as e:
+            logging.error(f"Ошибка базы данных доноров: {e}")
+            send(peer_id, "🚫 Ошибка связи с базой доноров.", keyboard=get_main_keyboard())
+            user_state[peer_id] = None
+
+    # Если список уже загружен, обрабатываем кнопки навигации
+    else:
+        results = user_results.get(peer_id, [])
+        index = user_index.get(peer_id, 0)
+        
+        # --- Кнопка НАЗАД ---
+        if text in ["⬅️ Назад", "Назад"]:
+            if len(results) > 1:
+                new_index = index - 1 if index > 0 else len(results) - 1
+                user_index[peer_id] = new_index
+                show_donor(peer_id)
+            else:
+                send(peer_id, "📄 Листать нечего, авто всего одно.")
+        
+        # --- Кнопка ВПЕРЕД ---
+        elif text in ["➡️ Вперед", "Вперед"]:
+            if len(results) > 1:
+                new_index = index + 1 if index < len(results) - 1 else 0
+                user_index[peer_id] = new_index
+                show_donor(peer_id)
+            else:
+                send(peer_id, "📄 Листать нечего, авто всего одно.")
+        
+        # --- Кнопка ОБНОВИТЬ ---
+        elif text in ["🔄 Обновить", "Обновить"]:
+            logging.info(f"Пользователь {peer_id} обновляет список доноров.")
+            try:
+                latest_donors = cache.get_latest_donors(limit=15)
+                if latest_donors:
+                    user_results[peer_id] = latest_donors
+                    user_index[peer_id] = 0 # Сбрасываем на первое новое авто
                     show_donor(peer_id)
                 else:
-                    send(peer_id, "❌ Доноры не найдены.")
-
-    except Exception as e:
-        # Этот блок поймает любые ошибки в логике выше (например, проблемы с сетью при поиске)
-        logging.error(f"Ошибка при обработке сообщения от {peer_id}: {e}")
-        send(peer_id, "Произошла внутренняя ошибка. Попробуйте еще раз или нажмите 'Назад'.")
+                    send(peer_id, "🚫 База доноров пуста.")
+            except Exception as e:
+                logging.error(f"Ошибка при обновлении доноров: {e}")
+                send(peer_id, "🚫 Не удалось обновить данные.")
+                
 # Запуск бота
 # ===== ГЛАВНЫЙ ЦИКЛ =====
 def run_bot():
