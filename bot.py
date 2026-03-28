@@ -438,6 +438,58 @@ def show_part(peer_id):
         logging.critical(f"ФАТАЛЬНАЯ ошибка в show_part для {peer_id}: {e}")
         send_safe(peer_id, "Произошла критическая ошибка при отображении детали.")
 
+def show_wheel_card(peer_id, index):
+        track(peer_id, "views")
+        results = user_results.get(peer_id, [])
+        if not results or index >= len(results):
+            return
+    
+        part = results[index]
+        photos = str(part.get("Фото", ""))
+        photo_list = [x.strip() for x in photos.split(",") if x.strip().startswith("http")]
+        main_photo = photo_list[0] if photo_list else None
+    
+        brand = part.get("Производитель диска", "")
+        model = part.get("Модель диска", "")
+        article = part.get("Артикул", "")
+        price = part.get("Цена", "")
+    
+        radius = part.get("Диаметр диска", "")
+        width = part.get("Ширина диска", "")
+        et = part.get("Вылет диска", "")
+        pcd = part.get("PCD диска", "")
+        dia = part.get("Диаметр осевого отверстия диска", "")
+    
+        text = (
+            f"🛞 {brand} {model}\n\n"
+            f"Артикул: {article}\n"
+            f"💰 {price} ₽\n\n"
+            f"📏 R{radius or '-'} | {width or '-'}J | ET{et or '-'}\n"
+            f"🔩 PCD: {pcd or '-'}\n"
+            f"🕳 DIA: {dia or '-'}\n\n"
+            f"({index+1}/{len(results)})"
+        )
+    
+        # Клавиатура VK
+        keyboard = VkKeyboard(one_time=False)
+        keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
+        keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
+        keyboard.add_line()
+        keyboard.add_button("❤️ Сохранить", color=VkKeyboardColor.POSITIVE)
+        keyboard.add_button("💬 Связаться", color=VkKeyboardColor.SECONDARY)
+    
+        keyboard_data = keyboard.get_keyboard()
+    
+        if main_photo:
+            send_photo_with_caption(
+                peer_id=peer_id,
+                photo_url=main_photo,
+                caption=text,
+                keyboard=keyboard_data
+            )
+        else:
+            send_safe(peer_id, text, keyboard=keyboard_data)
+
 def show_donor(peer_id):
     """Показывает карточку донора из результатов поиска"""
     try:
@@ -467,6 +519,27 @@ def find_part(query):
     for part in cache.parts:
         if query in part.get('Номер', '').lower() or query in part.get('Артикул', '').lower():
             results.append(part)
+    return results
+
+def find_wheels(query, db):
+    query = query.lower().replace(" ", "").replace("-", "")
+    results = []
+
+    for part in db:
+        radius = str(part.get("Диаметр диска", "")).lower().replace(" ", "")
+        brand = str(part.get("Производитель диска", "")).lower()
+        model = str(part.get("Модель диска", "")).lower()
+
+        # Поиск по радиусу
+        if query in radius or query in f"r{radius}":
+            results.append(part)
+        # Поиск по бренду/модели
+        elif query in brand or query in model:
+            results.append(part)
+
+        if len(results) >= 20:
+            break
+
     return results
 
 def find_donor(query):
