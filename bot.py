@@ -85,53 +85,59 @@ def get_main_keyboard():
     return keyboard.get_keyboard()
 
 def send_photo_with_caption(peer_id, photo_url, caption):
-    """Отправляет фото с подписью"""
-    def upload_and_send():
-        try:
-            # Загружаем изображение
-            response = requests.get(photo_url, timeout=10, stream=True)
-            response.raise_for_status() # Проверка статуса 200 OK
+    """
+    Отправляет фото с подписью. Возвращает True при успешной отправке, False — при ошибке.
+    """
+    try:
+        # Проверяем входные данные
+        if not photo_url or not isinstance(photo_url, str):
+            logging.warning("Некорректный URL фото, пропуск отправки")
+            return False
 
-            # Проверяем, что сервер вернул картинку (а не HTML-страницу с ошибкой 404)
-            content_type = response.headers.get('Content-Type', '')
-            if 'image' not in content_type:
-                logging.warning(f"URL не содержит изображение (Content-Type: {content_type}): {photo_url}")
-                return # Просто выходим, если это не картинка
+        # Загружаем изображение
+        response = requests.get(photo_url, timeout=10, stream=True)
+        response.raise_for_status()
 
-            # Загрузка во временное хранилище VK
-            upload_response = vk.photos.getMessagesUploadServer()
-            upload_url = upload_response['upload_url']
-            
-            # Используем content из ответа
-            files = {'photo': ('image.jpg', response.content)}
-            upload_result = requests.post(upload_url, files=files, timeout=15)
-            upload_data = upload_result.json()
+        # Проверяем, что сервер вернул картинку
+        content_type = response.headers.get('Content-Type', '')
+        if 'image' not in content_type:
+            logging.warning(f"URL не содержит изображение (Content-Type: {content_type}): {photo_url}")
+            return False
 
-            # Сохранение и отправка
-            photo_data = vk.photos.saveMessagesPhoto(
-                server=upload_data['server'],
-                photo=upload_data['photo'],
-                hash=upload_data['hash']
-            )[0]
+        # Загрузка во временное хранилище VK
+        upload_response = vk.photos.getMessagesUploadServer()
+        upload_url = upload_response['upload_url']
 
-            vk.messages.send(
-                peer_id=peer_id,
-                message=caption,
-                attachment=f"photo{photo_data['owner_id']}_{photo_data['id']}",
-                random_id=0
-            )
-            logging.info(f"Фото успешно отправлено: {photo_url}")
+        # Используем content из ответа
+        files = {'photo': ('image.jpg', response.content)}
+        upload_result = requests.post(upload_url, files=files, timeout=15)
+        upload_data = upload_result.json()
 
-        except requests.exceptions.Timeout:
-            logging.warning(f"Таймаут при загрузке фото: {photo_url}")
-        except requests.exceptions.RequestException as e:
-            logging.warning(f"Ошибка сети при загрузке фото: {e}")
-        except Exception as e:
-            logging.error(f"Неизвестная ошибка при обработке фото: {e}")
+        # Сохранение и отправка
+        photo_data = vk.photos.saveMessagesPhoto(
+            server=upload_data['server'],
+            photo=upload_data['photo'],
+            hash=upload_data['hash']
+        )[0]
 
-    thread = threading.Thread(target=upload_and_send)
-    thread.daemon = True
-    thread.start()
+        vk.messages.send(
+            peer_id=peer_id,
+            message=caption,
+            attachment=f"photo{photo_data['owner_id']}_{photo_data['id']}",
+            random_id=get_random_id()  # Используйте функцию для генерации random_id
+        )
+        logging.info(f"Фото успешно отправлено: {photo_url}")
+        return True
+
+    except requests.exceptions.Timeout:
+        logging.warning(f"Таймаут при загрузке фото: {photo_url}")
+        return False
+    except requests.exceptions.RequestException as e:
+        logging.warning(f"Ошибка сети при загрузке фото: {e}")
+        return False
+    except Exception as e:
+        logging.error(f"Неизвестная ошибка при обработке фото: {e}")
+        return False
 
 def get_first_photo(photo_field):
     """Извлекает первую валидную ссылку на фото"""
@@ -346,7 +352,7 @@ def show_wheel_info(peer_id, wheel):
         send(peer_id, "Произошла ошибка при получении информации о диске")
 
 def show_part(peer_id):
-    """Показывает карточку детали с быстрой отправкой текста и фоновой загрузкой фото"""
+    """Показывает карточку детали: фото + текст с кнопками навигации"""
     try:
         index = user_index.get(peer_id, 0)
         results = user_results.get(peer_id, [])
@@ -355,9 +361,10 @@ def show_part(peer_id):
             send_safe(peer_id, "Нет результатов поиска для отображения")
             return
 
-        if index >= len(results) or index < 0:
-            send_safe(peer_id, "Нет данных для отображения (некорректный индекс)")
-            return
+        # Проверка, что индекс в пределах списка
+        if index >= len(results):
+            user_index[peer_id] = 0
+            index = 0
 
         part = results[index]
 
@@ -365,9 +372,6 @@ def show_part(peer_id):
         if not part or not any(str(v).strip() for v in part.values()):
             send_safe(peer_id, "Данные о детали повреждены. Попробуйте поиск заново.")
             return
-
-        # Извлекаем первую фотографию
-        photo_url = get_first_photo(part.get('Фото', ''))
 
         # Формируем текст карточки
         message = "🚗 Карточка детали:\n"
@@ -382,17 +386,42 @@ def show_part(peer_id):
         if link != "Не указано" and link != "Нет ссылки":
             message += f"Ссылка: {link}"
 
-        # Отправляем текст сразу
-        send_safe(peer_id, message)
+        # Создаём клавиатуру
+        keyboard = VkKeyboard(one_time=False)
 
-        # Если есть фото, запускаем его загрузку в фоне
-        if photo_url:
-            send_photo_with_caption(peer_id, photo_url, message)
+        # Кнопка "Назад" (доступна, если есть что листать назад)
+        if len(results) > 1:
+            keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
+
+        # Кнопка "Обновить фото/текст"
+        keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
+
+        # Кнопка "Вперед" (доступна, если есть что листать вперед)
+        if len(results) > 1:
+            keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
+
+        keyboard_data = keyboard.get_keyboard()
+        photo_url = get_first_photo(part.get('Фото', ''))
+
+        # Отправляем фото (если URL корректен)
+        photo_sent = False
+        if photo_url and isinstance(photo_url, str) and photo_url.strip():
+            photo_sent = send_photo_with_caption(
+                peer_id=peer_id,
+                photo_url=photo_url,
+                caption=""  # Пустая подпись — фото без текста
+            )
+
+        # Всегда отправляем текстовое сообщение с клавиатурой
+        send_safe(
+            peer_id=peer_id,
+            message=message,
+            keyboard=keyboard_data
+        )
 
     except Exception as e:
         logging.critical(f"ФАТАЛЬНАЯ ошибка в show_part для {peer_id}: {e}")
-        send_safe(peer_id, "Произошла критическая ошибка при отображении детали. Обратитесь к администратору.")
-
+        send_safe(peer_id, "Произошла критическая ошибка при отображении детали.")
 def show_donor(peer_id):
     """Показывает карточку донора из результатов поиска"""
     try:
