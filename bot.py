@@ -84,7 +84,7 @@ def get_main_keyboard():
     keyboard.add_button("🛞 Диски", color=VkKeyboardColor.PRIMARY)
     keyboard.add_line()
     keyboard.add_button("🚘 Доноры", color=VkKeyboardColor.SECONDARY)
-    keyboard.add_button("❤️ Избранное", color=VkKeyboardColor.POSITIVE)
+    keyboard.add_button("👨‍💻 Менеджер", color=VkKeyboardColor.POSITIVE)
     keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.NEGATIVE)
     
     return keyboard.get_keyboard()
@@ -715,8 +715,11 @@ def handle(event):
                 send(peer_id, "🚫 Не удалось загрузить список доноров.", keyboard=get_main_keyboard())
                 user_state[peer_id] = None
             return
-        elif text_lower in ["❤️ избранное", "избранное"]:
-            show_favorites(peer_id)
+        elif text_lower in ["👨‍💻 менеджер", "менеджер"]: # НОВОЕ УСЛОВИЕ
+            user_state[peer_id] = "manager"
+            
+            # Отправляем сообщение и убираем клавиатуру, чтобы пользователь написал свой вопрос
+            send(peer_id, "👨‍💻 Вас приветствует менеджер!\n\nОпишите ваш вопрос или задачу. Сообщение будет перенаправлено специалисту.", keyboard=None)
             return
         elif text_lower in ["⬅️ назад", "назад", "сброс", "отмена"]:
             user_state[peer_id] = None
