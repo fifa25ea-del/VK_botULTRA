@@ -548,6 +548,100 @@ def show_wheel(peer_id):
         logging.critical(f"ФАТАЛЬНАЯ ошибка в show_wheel для {peer_id}: {e}")
         send_safe(peer_id, "Произошла критическая ошибка при отображении диска.")
 
+def show_donor(peer_id):
+    """
+    Показывает карточку донора: текст + клавиатура одним сообщением,
+    с фоновой отправкой фотографии.
+    """
+    try:
+        # Получаем данные для текущего пользователя
+        results = user_results.get(peer_id, [])
+        index = user_index.get(peer_id, 0)
+
+        # Защита от пустого списка или неверного индекса
+        if not results or index >= len(results) or index < 0:
+            send(peer_id, "🚫 Данные о доноре недоступны. Попробуйте начать сначала.")
+            return
+
+        donor = results[index]
+
+        # --- 1. ФОРМИРУЕМ ТЕКСТ КАРТОЧКИ ---
+        message_text = "🚘 Карточка авто-донора:\n"
+        message_text += f"Марка: {safe_get(donor, 'Марка')}\n"
+        message_text += f"Модель: {safe_get(donor, 'Модель')}\n"
+        message_text += f"Год: {safe_get(donor, 'Год')}\n"
+        message_text += f"Двигатель: {safe_get(donor, 'Двигатель')}\n"
+        message_text += f"VIN: {safe_get(donor, 'VIN')}\n"
+        
+        # Добавляем цену и ссылку, если они есть
+        price = safe_get(donor, 'Цена')
+        if price != "Не указано":
+            message_text += f"Цена: {price}\n"
+            
+        link = safe_get(donor, 'Ссылка')
+        if link != "Не указано" and link != "Нет ссылки":
+            message_text += f"Ссылка: {link}"
+
+        # --- 2. ФОРМИРУЕМ КЛАВИАТУРУ ---
+        keyboard = VkKeyboard(one_time=False)
+        
+        # Кнопка возврата в главное меню
+        keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.NEGATIVE)
+        keyboard.add_line()
+        
+        # Кнопки навигации (если элементов больше одного)
+        total_items = len(results)
+        if total_items > 1:
+            keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
+            keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
+            keyboard.add_line()
+        
+        # Кнопка обновления
+        keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
+        
+        keyboard_data = keyboard.get_keyboard()
+
+        # --- 3. ОТПРАВЛЯЕМ ТЕКСТ С КЛАВИАТУРОЙ ---
+        send(peer_id, message_text, keyboard=keyboard_data)
+
+        # --- 4. ЗАПУСКАЕМ ФОНОВУЮ ЗАГРУЗКУ ФОТО ---
+        photo_url = get_first_photo(donor.get('Фото', ''))
+        
+        if photo_url:
+            def upload_and_send():
+                try:
+                    response = requests.get(photo_url, timeout=10)
+                    response.raise_for_status()
+
+                    upload_url = vk.photos.getMessagesUploadServer()['upload_url']
+                    files = {'photo': ('image.jpg', response.content)}
+                    upload_data = requests.post(upload_url, files=files, timeout=15).json()
+
+                    photo_data = vk.photos.saveMessagesPhoto(
+                        server=upload_data['server'],
+                        photo=upload_data['photo'],
+                        hash=upload_data['hash']
+                    )[0]
+                    
+                    attachment = f"photo{photo_data['owner_id']}_{photo_data['id']}"
+                    
+                    vk.messages.send(
+                        peer_id=peer_id,
+                        attachment=attachment,
+                        random_id=get_random_id()
+                    )
+                except Exception as e:
+                    logging.warning(f"Ошибка загрузки фото (доноры): {e}")
+            
+            thread = threading.Thread(target=upload_and_send)
+            thread.daemon = True
+            thread.start()
+            
+    except Exception as e:
+        logging.critical(f"ФАТАЛЬНАЯ ошибка в show_donor для {peer_id}: {e}")
+        send(peer_id, "Произошла критическая ошибка при отображении донора.")
+        
+
 # ===== ДОБАВЛЯЕМ ПОИСК ПО КРИТЕРИЯМ =====
 
 def find_part(query):
