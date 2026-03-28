@@ -470,8 +470,8 @@ def show_wheel(peer_id):
             
         keyboard_data = keyboard.get_keyboard()
         
-        # ОТПРАВКА ОДНОГО СООБЩЕНИЯ С ФОТО И ТЕКСТОМ
-        photo_url = get_first_photo(wheel.get('Фото', ''))
+        # --- ОТПРАВКА ОДНОГО СООБЩЕНИЯ С ФОТО И ТЕКСТОМ ---
+        photo_url = get_first_photo(wheel.get('Фото', '')) # Убедитесь, что колонка называется 'Фото'
         
         if photo_url:
             try:
@@ -497,15 +497,19 @@ def show_wheel(peer_id):
                     keyboard=keyboard_data,
                     random_id=get_random_id()
                 )
+            except requests.exceptions.RequestException as e:
+                logging.warning(f"Ошибка загрузки фото (диски): {e}. Отправляем только текст.")
+                send_safe(peer_id, message, keyboard=keyboard_data)
             except Exception as e:
-                logging.warning(f"Ошибка отправки фото: {e}. Отправляем только текст.")
+                logging.error(f"Неизвестная ошибка при отправке фото диска: {e}")
                 send_safe(peer_id, message, keyboard=keyboard_data)
         else:
+            # Если фото нет в базе, отправляем просто текст с кнопками
             send_safe(peer_id, message, keyboard=keyboard_data)
 
     except Exception as e:
-        logging.critical(f"Ошибка в show_wheel для {peer_id}: {e}")
-        send_safe(peer_id, "Произошла ошибка при отображении диска.")
+        logging.critical(f"ФАТАЛЬНАЯ ошибка в show_wheel для {peer_id}: {e}")
+        send_safe(peer_id, "Произошла критическая ошибка при отображении диска.")
 
 def show_donor(peer_id):
     """Показывает карточку донора из результатов поиска"""
