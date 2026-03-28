@@ -470,7 +470,7 @@ def show_part(peer_id):
         send_safe(peer_id, "Произошла ошибка при отображении детали.")
         
 def show_wheel(peer_id):
-    """Показывает результаты поиска по дискам: сначала галерея превью из ВСЕХ карточек, затем первая карточка."""
+    """Показывает результаты поиска: галерея фото из разных карточек, затем первая карточка."""
     try:
         index = user_index.get(peer_id, 0)
         results = user_results.get(peer_id, [])
@@ -482,47 +482,65 @@ def show_wheel(peer_id):
         # Реверсивный порядок (свежие объявления первыми)
         reversed_results = list(results)
         reversed_results.reverse()
-        
-        # Сохраняем перевернутый список в глобальную переменную для навигации
-        user_results[peer_id] = reversed_results
+        user_results[peer_id] = reversed_results # Сохраняем новый порядок для навигации
         
         total_items = len(reversed_results)
-        current_position = index + 1 # Индекс для показа пользователю (1 из N)
+        if total_items == 0:
+            send_safe(peer_id, "Ничего не найдено.")
+            return
 
-        # --- НОВЫЙ БЛОК: СОЗДАНИЕ ГАЛЕРЕИ ПРЕВЬЮ ИЗ ВСЕХ КАРТОЧЕК ---
-        gallery_photos = []
-        
-        # Проходим по всем результатам поиска (максимум 8 фото)
-        for wheel in reversed_results[:8]: 
+        # --- НОВЫЙ БЛОК: ОТПРАВКА ГАЛЕРЕИ ФОТО (каждое фото - отдельным сообщением) ---
+        # Собираем первые валидные фото из первых 8 карточек
+        photos_to_send = []
+        for wheel in reversed_results[:8]:
             photos_field = str(wheel.get('Фото', ''))
             photo_urls = [url.strip() for url in photos_field.split(',') if url.strip()]
             
-            # Берем только первую валидную ссылку из каждой карточки
             for url in photo_urls:
                 if url.startswith('http'):
-                    gallery_photos.append(url)
-                    break # Берем только одно фото из этой карточки и идем к следующей
+                    photos_to_send.append(url)
+                    break # Берем только одно фото с карточки
             
-            if len(gallery_photos) >= 8: # Лимит 8 фото в галерее
+            if len(photos_to_send) >= 8:
                 break
 
-        # --- ОТПРАВКА ГАЛЕРЕИ (если есть фото) ---
-        if gallery_photos:
-            gallery_text = "📸 **Витрина дисков:**\n"
-            for i, url in enumerate(gallery_photos, 1):
-                gallery_text += f"[Фото {i}]({url})\n" # Ссылка в формате Markdown
+        # Функция для отправки одного фото (вложением)
+        def send_single_photo(url):
+            try:
+                response = requests.get(url, timeout=10)
+                response.raise_for_status()
 
-            send_safe(peer_id, gallery_text)
+                upload_url = vk.photos.getMessagesUploadServer()['upload_url']
+                files = {'photo': ('image.jpg', response.content)}
+                upload_data = requests.post(upload_url, files=files, timeout=15).json()
 
-        # --- СТАРЫЙ БЛОК: ПОКАЗ ПЕРВОЙ КАРТОЧКИ С КНОПКАМИ ---
-        # Берем первую карточку из перевернутого списка (index = 0)
+                photo_data = vk.photos.saveMessagesPhoto(
+                    server=upload_data['server'],
+                    photo=upload_data['photo'],
+                    hash=upload_data['hash']
+                )[0]
+
+                vk.messages.send(
+                    peer_id=peer_id,
+                    attachment=f"photo{photo_data['owner_id']}_{photo_data['id']}",
+                    random_id=get_random_id()
+                )
+            except Exception as e:
+                logging.warning(f"Не удалось отправить фото {url}: {e}")
+
+        # Отправляем галерею (в том же потоке, чтобы фото пришли до текста)
+        for photo_url in photos_to_send:
+            send_single_photo(photo_url)
+
+
+        # --- СТАРЫЙ БЛОК: ОТПРАВКА КАРТОЧКИ С КНОПКАМИ ---
         wheel = reversed_results[index]
 
         message = "🛞 Карточка диска:\n"
         message += f"Производитель: {safe_get(wheel, 'Производитель диска')}\n"
         message += f"Артикул: {safe_get(wheel, 'Артикул')}\n"
         message += f"Модель: {safe_get(wheel, 'Модель диска')}\n"
-        message += f"Размер: {safe_get(wheel, 'Диаметр диска')}\n"
+        message += f"Размер: {safe_get(wheel, 'Размер')}\n"
         
         price = safe_get(wheel, 'Цена')
         if price != "Не указано":
@@ -532,6 +550,7 @@ def show_wheel(peer_id):
         if link != "Не указано" and link != "Нет ссылки":
             message += f"Ссылка: {link}"
 
+        current_position = index + 1
         message += f"\n📊 {current_position} из {total_items}"
 
         keyboard = VkKeyboard(one_time=False)
