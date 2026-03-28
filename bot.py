@@ -210,6 +210,29 @@ stats = load_json(STATS_FILE)
 
 # ===== КЭШ =====
 class DataCache:
+    
+    def get_latest_donors(self, limit=15):
+        """
+        Возвращает список последних 'limit' доноров из локального кэша.
+        Сортировка: от НОВЫХ к СТАРЫМ.
+        """
+        # Создаем копию списка, чтобы не сломать исходный порядок в кэше
+        donors_copy = self.donors.copy()
+        
+        # Если доноров меньше, чем лимит, просто возвращаем все что есть
+        if len(donors_copy) <= limit:
+            return donors_copy
+        
+        # Берем последние 'limit' элементов из списка.
+        # Предполагается, что в CSV-файле самые свежие авто находятся в конце.
+        latest_donors = donors_copy[-limit:]
+        
+        # Так как мы взяли срез с конца, порядок будет [Старый_в_выборке, ..., Новый_в_выборке].
+        # Нам нужно перевернуть его, чтобы [Новый_в_выборке, ..., Старый_в_выборке].
+        latest_donors.reverse()
+        
+        return latest_donors
+        
     def __init__(self):
         self.parts = []
         self.wheels = []
@@ -246,6 +269,7 @@ class DataCache:
                query in part.get('Артикул', '').lower():
                 results.append(part)
         return results
+    
     def search_wheels(self, query):
         """
         Поиск дисков строго по полю 'Диаметр диска'.
