@@ -579,37 +579,19 @@ def show_favorites(peer_id):
 
 
 def handle(event):
-    # Получаем объект сообщения
     msg = event.obj.message
-
-    # Используем .get() для безопасного извлечения данных
-    peer_id = msg.get('peer_id')
+    peer_id = msg['peer_id']
     text = msg.get('text', '').strip()
-    
-    # Если peer_id отсутствует, выходим из функции
-    if not peer_id:
-        logging.warning("Получено сообщение без peer_id")
-        return
-
     text_lower = text.lower()
 
     logging.info(f"Получено сообщение от {peer_id}: '{text}'")
-    logging.debug(f"Текущее состояние пользователя: {user_state.get(peer_id)}")
+    logging.info(f"Текущее состояние пользователя: {user_state.get(peer_id)}")
 
     try:
         if not text:
             return
 
-        # 1. Сброс состояния (работает из любого состояния)
-        if text in ["🏠 Главное меню", "главное меню", "меню", "сброс", "отмена"]:
-            user_state[peer_id] = None
-            user_results[peer_id] = []
-            user_index[peer_id] = 0
-            
-            send(peer_id, "Вы вернулись в главное меню.", keyboard=get_main_keyboard())
-            return
-
-        # 2. Обработка кнопок главного меню
+        # Обработка кнопок главного меню
         if text_lower in ["🚗 запчасти", "запчасти"]:
             user_state[peer_id] = "parts"
             send(peer_id, "Введите номер детали:", keyboard=None)
@@ -625,65 +607,112 @@ def handle(event):
         elif text_lower in ["❤️ избранное", "избранное"]:
             show_favorites(peer_id)
             return
+        elif text_lower in ["⬅️ назад", "назад", "сброс", "отмена"]:
+            user_state[peer_id] = None
+            user_results[peer_id] = []
+            user_index[peer_id] = 0
+            send(peer_id, "Меню сброшено. Чем помочь?", keyboard=get_main_keyboard())
+            return
 
-        # 3. Основная логика (выполняется только если мы НЕ нажали "Главное меню")
+        # --- ОСНОВНАЯ ЛОГИКА ПОИСКА И НАВИГАЦИИ ---
         current_state = user_state.get(peer_id)
-
-        # --- Вспомогательная функция для навигации ---
-        def handle_navigation(peer_id, results_key, show_func):
-            """Обрабатывает кнопки навигации для любого типа поиска."""
-            results = user_results.get(peer_id, [])
-            index = user_index.get(peer_id, 0)
-            
-            if not results or len(results) <= 1:
-                send(peer_id, "Элементов для листания нет.")
-                return
-
-            if text in ["⬅️ Назад", "Назад"]:
-                new_index = index - 1 if index > 0 else len(results) - 1
-                user_index[peer_id] = new_index
-                show_func(peer_id)
-                return
-
-            elif text in ["➡️ Вперед", "Вперед"]:
-                new_index = index + 1 if index < len(results) - 1 else 0
-                user_index[peer_id] = new_index
-                show_func(peer_id)
-                return
 
         # --- Блок для ЗАПЧАСТЕЙ (Parts) ---
         if current_state == "parts":
-            # Здесь должна быть ваша логика поиска запчастей
-            pass
+            # Проверяем кнопки навигации
+            if text in ["⬅️ Назад", "Назад"]:
+                _handle_navigation(peer_id, -1)
+                return
+            elif text in ["➡️ Вперед", "Вперед"]:
+                _handle_navigation(peer_id, 1)
+                return
+            elif text in ["🔄 Обновить", "Обновить"]:
+                show_part(peer_id)
+                return
+            
+            # Если это не кнопка — это поисковый запрос
+            logging.info(f"Начинаем поиск деталей для запроса: '{text}'")
+            results = cache.search_parts(text)
+
+            if results:
+                user_results[peer_id] = results
+                user_index[peer_id] = 0
+                show_part(peer_id)
+            else:
+                send(peer_id, "❌ Детали не найдены. Попробуйте другой запрос или номер.")
 
         # --- Блок для ДИСКОВ (Wheels) ---
         elif current_state == "wheels":
-             # Проверяем кнопки навигации через общую функцию
-            handle_navigation(peer_id, 'wheels', show_wheel)
-            
-            if text in ["🔄 Обновить", "Обновить"]:
-                if user_results.get(peer_id):
+            # Получаем текущие результаты для этого пользователя
+            results = user_results.get(peer_id, [])
+
+            # --- 1. СНАЧАЛА ПРОВЕРЯЕМ НАВИГАЦИОННЫЕ КОМАНДЫ ---
+            if text in ["⬅️ Назад", "Назад"]:
+                if results and len(results) > 1:
+                    new_index = user_index.get(peer_id, 0) - 1
+                    if new_index < 0:
+                        new_index = len(results) - 1 # Цикл в начало
+                    user_index[peer_id] = new_index
                     show_wheel(peer_id)
                 else:
-                    send(peer_id, "Сначала нужно выполнить поиск.")
+                    # Если результатов нет или он один, просто игнорируем или выводим подсказку
+                    send(peer_id, "Сначала нужно выполнить поиск. Введите размер диска (например, R18).")
                 return
 
-            # Если это не кнопка — это поисковый запрос
+            elif text in ["➡️ Вперед", "Вперед"]:
+                if results and len(results) > 1:
+                    new_index = user_index.get(peer_id, 0) + 1
+                    if new_index >= len(results):
+                        new_index = 0 # Цикл в конец
+                    user_index[peer_id] = new_index
+                    show_wheel(peer_id)
+                else:
+                    send(peer_id, "Сначала нужно выполнить поиск. Введите размер диска (например, R18).")
+                return
+
+            elif text in ["🔄 Обновить", "Обновить"]:
+                # Если нажали обновить без поиска, просто просим ввести размер
+                if not results:
+                     send(peer_id, "Сначала нужно выполнить поиск. Введите размер диска (например, R18).")
+                else:
+                    show_wheel(peer_id)
+                return
+
+            # --- 2. ЕСЛИ ЭТО НЕ КНОПКА, ЗНАЧИТ ЭТО ПОИСКОВЫЙ ЗАПРОС ---
             else:
                 logging.info(f"Начинаем поиск дисков для запроса: '{text}'")
                 results = cache.search_wheels(text)
+
                 if results:
                     user_results[peer_id] = results
-                    user_index[peer_id] = 0
+                    user_index[peer_id] = 0 # Всегда начинаем с первого элемента при новом поиске
                     show_wheel(peer_id)
                 else:
                     send(peer_id, "❌ Диски не найдены. Проверьте введенное число (например, 17 или R18).")
-        
+
         # --- Блок для ДОНОРОВ (Donors) ---
         elif current_state == "donors":
-             # Проверяем кнопки навигации через общую функцию
-            handle_navigation(peer_id, 'donors', show_donor)
-            
+             # Проверяем кнопки навигации
+            if text in ["⬅️ Назад", "Назад"]:
+                results = user_results.get(peer_id, [])
+                if results and len(results) > 1:
+                    new_index = user_index.get(peer_id, 0) - 1
+                    if new_index < 0:
+                        new_index = len(results) - 1
+                    user_index[peer_id] = new_index
+                    show_donor(peer_id)
+                return
+
+            elif text in ["➡️ Вперед", "Вперед"]:
+                results = user_results.get(peer_id, [])
+                if results and len(results) > 1:
+                    new_index = user_index.get(peer_id, 0) + 1
+                    if new_index >= len(results):
+                        new_index = 0
+                    user_index[peer_id] = new_index
+                    show_donor(peer_id)
+                return
+
             # Если это не кнопка — это поисковый запрос
             else:
                 logging.info(f"Начинаем поиск доноров для запроса: '{text}'")
@@ -697,9 +726,9 @@ def handle(event):
                     send(peer_id, "❌ Доноры не найдены.")
 
     except Exception as e:
-        logging.error(f"Необработанная ошибка при обработке сообщения от {peer_id}: {e}")
+        # Этот блок поймает любые ошибки в логике выше (например, проблемы с сетью при поиске)
+        logging.error(f"Ошибка при обработке сообщения от {peer_id}: {e}")
         send(peer_id, "Произошла внутренняя ошибка. Попробуйте еще раз или нажмите 'Назад'.")
-        
 # Запуск бота
 # ===== ГЛАВНЫЙ ЦИКЛ =====
 def run_bot():
