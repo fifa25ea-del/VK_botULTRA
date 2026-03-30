@@ -427,6 +427,7 @@ def show_part(peer_id):
         # --- 1. ФОРМИРУЕМ ТЕКСТ КАРТОЧКИ ---
         message = "🚗 Карточка детали:\n"
         message += f"Название: {safe_get(part, 'Наименование')}\n"
+        message += f"Кузов: {safe_get(part, 'Кузов')}\n"
         message += f"Артикул: {safe_get(part, 'Артикул')}\n"
 
         price = safe_get(part, 'Цена')
@@ -449,7 +450,7 @@ def show_part(peer_id):
         if total_items > 1:
             keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
             keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
-            // Если добавить еще одну кнопку сюда, будет 3 в ряду, что допустимо, но лучше держать запас.
+            # Если добавить еще одну кнопку сюда, будет 3 в ряду, что допустимо, но лучше держать запас.
 
         keyboard_data = keyboard.get_keyboard()
 
