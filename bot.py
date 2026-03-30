@@ -765,35 +765,34 @@ def show_favorite_card(peer_id):
 
         if photo_url:
             try:
-    if photo_url:
-        try:
-            response = requests.get(photo_url, timeout=10)
-            response.raise_for_status()
+                response = requests.get(photo_url, timeout=10)
+                response.raise_for_status()
 
-            upload_url = vk.photos.getMessagesUploadServer()['upload_url']
-            files = {'photo': ('image.jpg', response.content)}
-            upload_data = requests.post(upload_url, files=files, timeout=15).json()
+                upload_url = vk.photos.getMessagesUploadServer()['upload_url']
+                files = {'photo': ('image.jpg', response.content)}
+                upload_data = requests.post(upload_url, files=files, timeout=15).json()
 
-            photo_data = vk.photos.saveMessagesPhoto(
-                server=upload_data['server'],
-                photo=upload_data['photo'],
-                hash=upload_data['hash']
-            )[0]
-            
-            attachment = f"photo{photo_data['owner_id']}_{photo_data['id']}"
-            
-            vk.messages.send(
-                peer_id=peer_id,
-                message=message,
-                attachment=attachment,
-                keyboard=keyboard_data,
-                random_id=get_random_id()
-            )
-        except Exception as e:
-            logging.warning(f"Ошибка фото в избранном: {e}. Отправляем текст.")
+                photo_data = vk.photos.saveMessagesPhoto(
+                    server=upload_data['server'],
+                    photo=upload_data['photo'],
+                    hash=upload_data['hash']
+                )[0]
+                
+                attachment = f"photo{photo_data['owner_id']}_{photo_data['id']}"
+                
+                vk.messages.send(
+                    peer_id=peer_id,
+                    message=message,
+                    attachment=attachment,
+                    keyboard=keyboard_data,
+                    random_id=get_random_id()
+                )
+            except Exception as e:
+                logging.warning(f"Ошибка фото в избранном: {e}. Отправляем текст.")
+                send_safe(peer_id, message, keyboard=keyboard_data)
+        else:
             send_safe(peer_id, message, keyboard=keyboard_data)
-    else:
-        send_safe(peer_id, message, keyboard=keyboard_data)
+            
     except Exception as e:
         logging.error(f"Критическая ошибка в show_favorite_card: {e}")
         send(peer_id, "Произошла ошибка при отображении избранного.")
