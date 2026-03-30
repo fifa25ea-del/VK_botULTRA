@@ -464,29 +464,30 @@ def show_part(peer_id):
 
         # --- 2. СОЗДАЕМ КЛАВИАТУРУ ---
         keyboard = VkKeyboard(one_time=False)
-        
-        # Логика кнопок зависит от того, где мы находимся: в поиске или в избранном
+
+        # Логика кнопок зависит от того, где мы находимся
         if current_state == "favorites_view":
-            # Если мы в режиме просмотра избранного
+            # Режим просмотра избранного
             keyboard.add_button("🗑 Удалить", color=VkKeyboardColor.NEGATIVE)
             keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.NEGATIVE)
             keyboard.add_line()
         else: 
-            # Если мы в обычном поиске запчастей
+            # Обычный поиск запчастей
             keyboard.add_button("❤️ Добавить в избранное", color=VkKeyboardColor.POSITIVE)
             keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.NEGATIVE)
             keyboard.add_line()
-
+        
         # Кнопки навигации (всегда добавляем)
         keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
+        keyboard.add_line()  # Добавляем новую строку
         keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
+        keyboard.add_line()  # Новая строка для кнопки обновления
         
-        # Кнопка обновления (на отдельной строке)
-        keyboard.add_line() 
+        # Кнопка обновления
         keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
-
+        
         keyboard_data = keyboard.get_keyboard()
-
+        
 
         # --- 3. ОТПРАВЛЯЕМ СООБЩЕНИЕ (С ФОТО ИЛИ БЕЗ) ---
         photo_url = get_first_photo(part.get('Фото', ''))
@@ -580,20 +581,25 @@ def show_wheel(peer_id):
         current_position = reversed_index + 1
         message += f"\n📊 {current_position} из {total_items}"
 
-        # Создаём клавиатуру
         keyboard = VkKeyboard(one_time=False)
+
+        # Первая строка
         keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.NEGATIVE)
         keyboard.add_line()
+        
+        # Вторая строка
         keyboard.add_button("❤️ Добавить в избранное", color=VkKeyboardColor.POSITIVE)
-
+        
         if total_items > 1:
             keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
-
-        keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
-
-        if total_items > 1:
+            keyboard.add_line()  # Добавляем новую строку
             keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
-
+        else:
+            keyboard.add_line()  # Если нет навигации, переходим на новую строку
+        
+        # Третья строка
+        keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
+        
         keyboard_data = keyboard.get_keyboard()
 
         # Отправка сообщения с фото и текстом
@@ -675,17 +681,22 @@ def show_donor(peer_id):
 
         # Создаем клавиатуру
         keyboard = VkKeyboard(one_time=False)
+        
+        # Строка 1
         keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.NEGATIVE)
         keyboard.add_line()
+        
+        # Строка 2
         keyboard.add_button("❤️ Добавить в избранное", color=VkKeyboardColor.POSITIVE)
         keyboard.add_line()
         
-        total_items = len(results)
+        # Строка 3 (если есть навигация)
         if total_items > 1:
             keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
             keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
             keyboard.add_line()
         
+        # Строка 4
         keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
         
         keyboard_data = keyboard.get_keyboard()
@@ -764,18 +775,25 @@ def show_favorite_card(peer_id):
             
         message += f"\n📊 {current_position} из {total_items}"
 
+        # Создаём клавиатуру
         keyboard = VkKeyboard(one_time=False)
-        
+                
         # Первая строка: только 2 кнопки
         keyboard.add_button("🗑 Удалить", color=VkKeyboardColor.NEGATIVE)
         keyboard.add_button("🏠 Меню", color=VkKeyboardColor.NEGATIVE)
         keyboard.add_line()  # Переход на новую строку
-
+        
         # Вторая строка для навигации
         if total_items > 1:
             keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
             keyboard.add_line()  # Новая строка
             keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
+            keyboard.add_line()  # Добавляем новую строку после навигации
+        else:
+            keyboard.add_line()  # Если нет навигации, добавляем пустую строку
+        
+        # Третья строка (если есть место)
+        keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
         
         keyboard_data = keyboard.get_keyboard()
 
