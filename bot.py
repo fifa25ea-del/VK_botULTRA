@@ -953,15 +953,6 @@ def handle(event):
                      send(peer_id, "Сначала нужно выполнить поиск. Введите размер диска (например, R18).")
                  return
 
-             elif text in ["➡️ Вперед", "Вперед"]:
-                 if len(user_results.get(peer_id, [])) > 1:
-                     new_index = (user_index.get(peer_id, 0) + 1) % len(user_results[peer_id])
-                     user_index[peer_id] = new_index
-                     show_wheel(peer_id)
-                 else:
-                     send(peer_id, "Сначала нужно выполнить поиск. Введите размер диска (например, R18).")
-                 return
-
              elif text in ["🔄 Обновить", "Обновить"]:
                  # Если есть результаты, обновляем фото/текст. Если нет — просим ввести запрос.
                  if user_results.get(peer_id):
