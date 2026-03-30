@@ -755,9 +755,9 @@ def handle(event):
         elif text_lower in ["❤️ избранное", "избранное"]:
             show_favorites(peer_id)
             return    
-        elif text_lower in ["👨‍💻 менеджер", "менеджер"]: # НОВОЕ УСЛОВИЕ
+        elif text_lower in ["👨‍💻 менеджер", "менеджер"]:  # НОВОЕ УСЛОВИЕ
             user_state[peer_id] = "manager"
-            
+
             # Отправляем сообщение и убираем клавиатуру, чтобы пользователь написал свой вопрос
             send(peer_id, "👨‍💻 Вас приветствует менеджер!\n\nОпишите ваш вопрос или задачу. Сообщение будет перенаправлено специалисту.", keyboard=None)
             return
@@ -771,100 +771,100 @@ def handle(event):
         # --- ОСНОВНАЯ ЛОГИКА ПОИСКА И НАВИГАЦИИ ---
         current_state = user_state.get(peer_id)
 
-       # --- Блок для ЗАПЧАСТЕЙ (Parts) ---
-if current_state == "parts":
-    # Сначала проверяем кнопки навигации и действия
-    if text in ["⬅️ Назад", "Назад"]:
-        _handle_navigation(peer_id, -1)
-        return
-    elif text in ["➡️ Вперед", "Вперед"]:
-        _handle_navigation(peer_id, 1)
-        return
-    elif text in ["🔄 Обновить", "Обновить"]:
-        show_part(peer_id)
-        return
-    elif text == "❤️ Добавить в избранное":
-        # Получаем текущий элемент из результатов поиска пользователя
-        index = user_index.get(peer_id, 0)
-        results = user_results.get(peer_id, [])
+        # --- Блок для ЗАПЧАСТЕЙ (Parts) ---
+        if current_state == "parts":
+            # Сначала проверяем кнопки навигации и действия
+            if text in ["⬅️ Назад", "Назад"]:
+                _handle_navigation(peer_id, -1)
+                return
+            elif text in ["➡️ Вперед", "Вперед"]:
+                _handle_navigation(peer_id, 1)
+                return
+            elif text in ["🔄 Обновить", "Обновить"]:
+                show_part(peer_id)
+                return
+            elif text == "❤️ Добавить в избранное":
+                # Получаем текущий элемент из результатов поиска пользователя
+                index = user_index.get(peer_id, 0)
+                results = user_results.get(peer_id, [])
 
-        if results and index < len(results):
-            current_item = results[index]
-            # Вызываем функцию добавления в избранное
-            add_to_favorites(peer_id, current_item)
-            # Бот ответит сообщением внутри функции add_to_favorites
-        else:
-            send(peer_id, "Ошибка: не удалось найти элемент для добавления.")
-        return  # Выходим из обработчика
+                if results and index < len(results):
+                    current_item = results[index]
+                    # Вызываем функцию добавления в избранное
+                    add_to_favorites(peer_id, current_item)
+                    # Бот ответит сообщением внутри функции add_to_favorites
+                else:
+                    send(peer_id, "Ошибка: не удалось найти элемент для добавления.")
+                return  # Выходим из обработчика
 
-    # Если это не кнопка — это поисковый запрос
-    logging.info(f"Начинаем поиск деталей для запроса: '{text}'")
-    results = cache.search_parts(text)
+            # Если это не кнопка — это поисковый запрос
+            logging.info(f"Начинаем поиск деталей для запроса: '{text}'")
+            results = cache.search_parts(text)
 
-    if results:
-        user_results[peer_id] = results
-        user_index[peer_id] = 0
-        show_part(peer_id)
-    else:
-        send(peer_id, "❌ Детали не найдены. Попробуйте другой запрос или номер.")
+            if results:
+                user_results[peer_id] = results
+                user_index[peer_id] = 0
+                show_part(peer_id)
+            else:
+                send(peer_id, "❌ Детали не найдены. Попробуйте другой запрос или номер.")
 
-# --- Блок для ДИСКОВ (Wheels) ---
-elif current_state == "wheels":
-    # Получаем текущие результаты для этого пользователя
-    results = user_results.get(peer_id, [])
+        # --- Блок для ДИСКОВ (Wheels) ---
+        elif current_state == "wheels":
+            # Получаем текущие результаты для этого пользователя
+            results = user_results.get(peer_id, [])
 
-    # --- 1. СНАЧАЛА ПРОВЕРЯЕМ НАВИГАЦИОННЫЕ КОМАНДЫ ---
-    if text in ["⬅️ Назад", "Назад"]:
-        if results and len(results) > 1:
-            new_index = (user_index.get(peer_id, 0) - 1) % len(results)
-            user_index[peer_id] = new_index
+            # --- 1. СНАЧАЛА ПРОВЕРЯЕМ НАВИГАЦИОННЫЕ КОМАНДЫ ---
+            if text in ["⬅️ Назад", "Назад"]:
+                if results and len(results) > 1:
+                    new_index = (user_index.get(peer_id, 0) - 1) % len(results)
+                    user_index[peer_id] = new_index
+                    show_wheel(peer_id)
+                else:
+                    send(peer_id, "Сначала нужно выполнить поиск. Введите размер диска (например, R18).")
+                return
+
+            elif text in ["➡️ Вперед", "Вперед"]:
+                if results and len(results) > 1:
+                    new_index = (user_index.get(peer_id, 0) + 1) % len(results)
+                    user_index[peer_id] = new_index
             show_wheel(peer_id)
         else:
             send(peer_id, "Сначала нужно выполнить поиск. Введите размер диска (например, R18).")
         return
 
-    elif text in ["➡️ Вперед", "Вперед"]:
-        if results and len(results) > 1:
-            new_index = (user_index.get(peer_id, 0) + 1) % len(results)
-            user_index[peer_id] = new_index
-            show_wheel(peer_id)
+        elif text in ["🔄 Обновить", "Обновить"]:
+            # Если нажали обновить без поиска, просто просим ввести размер
+            if not results:
+                send(peer_id, "Сначала нужно выполнить поиск. Введите размер диска (например, R18).")
+            else:
+                show_wheel(peer_id)
+            return
+
+        elif text == "❤️ Добавить в избранное":
+            # Получаем текущий элемент из результатов поиска пользователя
+            index = user_index.get(peer_id, 0)
+            results = user_results.get(peer_id, [])
+
+            if results and index < len(results):
+                current_item = results[index]
+                # Вызываем функцию добавления в избранное
+                add_to_favorites(peer_id, current_item)
+                # Бот ответит сообщением внутри функции add_to_favorites
+            else:
+                send(peer_id, "Ошибка: не удалось найти элемент для добавления.")
+            return  # Выходим из обработчика
+
+        # --- 2. ЕСЛИ ЭТО НЕ КНОПКА, ЗНАЧИТ ЭТО ПОИСКОВЫЙ ЗАПРОС ---
         else:
-            send(peer_id, "Сначала нужно выполнить поиск. Введите размер диска (например, R18).")
-        return
+            logging.info(f"Начинаем поиск дисков для запроса: '{text}'")
+            results = cache.search_wheels(text)
 
-    elif text in ["🔄 Обновить", "Обновить"]:
-        # Если нажали обновить без поиска, просто просим ввести размер
-        if not results:
-            send(peer_id, "Сначала нужно выполнить поиск. Введите размер диска (например, R18).")
-        else:
-            show_wheel(peer_id)
-        return
-
-    elif text == "❤️ Добавить в избранное":
-        # Получаем текущий элемент из результатов поиска пользователя
-        index = user_index.get(peer_id, 0)
-        results = user_results.get(peer_id, [])
-
-        if results and index < len(results):
-            current_item = results[index]
-            # Вызываем функцию добавления в избранное
-            add_to_favorites(peer_id, current_item)
-            # Бот ответит сообщением внутри функции add_to_favorites
-        else:
-            send(peer_id, "Ошибка: не удалось найти элемент для добавления.")
-        return  # Выходим из обработчика
-
-    # --- 2. ЕСЛИ ЭТО НЕ КНОПКА, ЗНАЧИТ ЭТО ПОИСКОВЫЙ ЗАПРОС ---
-    else:
-        logging.info(f"Начинаем поиск дисков для запроса: '{text}'")
-        results = cache.search_wheels(text)
-
-        if results:
-            user_results[peer_id] = results
-            user_index[peer_id] = 0  # Всегда начинаем с первого элемента при новом поиске
-            show_wheel(peer_id)
-        else:
-            send(peer_id, "❌ Диски не найдены. Проверьте введенное число (например, 17 или R18).")
+            if results:
+                user_results[peer_id] = results
+                user_index[peer_id] = 0  # Всегда начинаем с первого элемента при новом поиске
+                show_wheel(peer_id)
+            else:
+                send(peer_id, "❌ Диски не найдены. Проверьте введенное число (например, 17 или R18).")
 
         # --- Блок для ДОНОРОВ (Donors) ---
         elif current_state == "donors":
