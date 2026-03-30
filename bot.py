@@ -469,7 +469,6 @@ def show_part(peer_id):
             keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
 
         keyboard_data = keyboard.get_keyboard()
-        send_keyboard(peer_id, keyboard_data)  # Отправляем клавиатуру пользователю
 
     except Exception as e:
         logging.critical(f"ФАТАЛЬНАЯ ошибка в show_part для {peer_id}: {e}")
