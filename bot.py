@@ -1094,6 +1094,7 @@ def handle(event):
                 user_index.pop(peer_id, None)
                 send(peer_id, "Меню сброшено. Чем помочь?", keyboard=get_main_keyboard())
                 return
+            return
                 
 # Запуск бота
 def run_bot():
