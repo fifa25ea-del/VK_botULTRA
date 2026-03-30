@@ -1087,14 +1087,19 @@ def handle(event):
                     send(peer_id, "В избранном только один товар.")
                 return
 
-            # --- КНОПКА ВЫХОДА ---
             elif text in ["🏠 Меню", "🏠 Главное меню", "⬅️ назад", "назад"]:
                 user_state[peer_id] = None
                 user_results.pop(peer_id, None)
                 user_index.pop(peer_id, None)
                 send(peer_id, "Меню сброшено. Чем помочь?", keyboard=get_main_keyboard())
                 return
-            return
+
+        return  # Явно завершаем обработку в handle()
+
+    else:
+        # Обработка всех остальных случаев
+        user_state[peer_id] = None
+        send(peer_id, "Неизвестная команда. Вернулись в главное меню.", keyboard=get_main_keyboard())
                 
 # Запуск бота
 def run_bot():
