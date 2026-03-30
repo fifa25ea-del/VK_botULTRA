@@ -793,12 +793,25 @@ def show_favorite_card(peer_id):
                 )[0]
                 
                 attachment = f"photo{photo_data['owner_id']}_{photo_data['id']}"
+
+                # --- ИСПРАВЛЕНИЕ: Создаем клавиатуру ВНУТРИ блока отправки ---
+                # Это гарантирует, что VK API получит клавиатуру в правильном контексте.
+                keyboard = VkKeyboard(one_time=False)
                 
+                keyboard.add_button("🗑 Удалить", color=VkKeyboardColor.NEGATIVE)
+                keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.NEGATIVE)
+                keyboard.add_line()
+                
+                if total_items > 1:
+                    keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
+                    keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
+
+                # Теперь вызываем send с объектом клавиатуры
                 vk.messages.send(
                     peer_id=peer_id,
                     message=message,
                     attachment=attachment,
-                    keyboard=keyboard_data,
+                    keyboard=keyboard.get_keyboard(), // Клавиатура создается прямо здесь
                     random_id=get_random_id()
                 )
             except Exception as e:
