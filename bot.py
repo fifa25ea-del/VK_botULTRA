@@ -440,18 +440,17 @@ def show_part(peer_id):
         # --- 2. СОЗДАЕМ КЛАВИАТУРУ С КНОПКОЙ ИЗБРАННОГО ---
         keyboard = VkKeyboard(one_time=False)
         
-        # Кнопка "Добавить в избранное"
-        keyboard.add_button("❤️ Добавить в избранное", color=VkKeyboardColor.POSITIVE)
-        keyboard.add_line()
-        
-        # Кнопки навигации
-        keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
-        keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
-        keyboard.add_line()
-        
-        # Кнопка обновления
-        keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
-        
+        # Ряд 1: Управление (Удалить и Выход)
+        keyboard.add_button("🗑 Удалить", color=VkKeyboardColor.NEGATIVE)
+        keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.NEGATIVE)
+        keyboard.add_line() // Переходим на второй ряд
+
+        # Ряд 2: Навигация (Вперед/Назад)
+        if total_items > 1:
+            keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
+            keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
+            // Если добавить еще одну кнопку сюда, будет 3 в ряду, что допустимо, но лучше держать запас.
+
         keyboard_data = keyboard.get_keyboard()
 
         # --- 3. ОТПРАВЛЯЕМ СООБЩЕНИЕ (С ФОТО ИЛИ БЕЗ) ---
