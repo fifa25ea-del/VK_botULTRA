@@ -79,13 +79,18 @@ from vk_api.keyboard import VkKeyboard, VkKeyboardColor
 
 def get_main_keyboard():
     keyboard = VkKeyboard(one_time=False)
-
+    
+    # Первая строка
     keyboard.add_button("🚗 Запчасти", color=VkKeyboardColor.PRIMARY)
     keyboard.add_button("🛞 Диски", color=VkKeyboardColor.PRIMARY)
     keyboard.add_line()
+    
+    # Вторая строка
     keyboard.add_button("🚘 Доноры", color=VkKeyboardColor.SECONDARY)
     keyboard.add_button("❤️ Избранное", color=VkKeyboardColor.POSITIVE)
     keyboard.add_line()
+    
+    # Третья строка
     keyboard.add_button("👨‍💻 Менеджер", color=VkKeyboardColor.POSITIVE)
     keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.NEGATIVE)
     
@@ -168,31 +173,43 @@ def get_first_photo(photo_field):
 def send_safe(peer_id, text, keyboard=None):
     """Безопасная отправка сообщения с обработкой ошибок"""
     try:
+        # Проверяем, что клавиатура корректна
+        if keyboard:
+            # Проверяем структуру клавиатуры
+            if isinstance(keyboard, dict):
+                keyboard = VkKeyboard(keyboard=keyboard)
+            elif not isinstance(keyboard, VkKeyboard):
+                keyboard = get_main_keyboard()
+        
         vk.messages.send(
             peer_id=peer_id,
             message=text,
-            random_id=0,
-            keyboard=keyboard if keyboard else get_main_keyboard()
+            random_id=get_random_id(),  # Используем генератор случайных ID
+            keyboard=keyboard.get_keyboard() if isinstance(keyboard, VkKeyboard) else get_main_keyboard()
         )
     except Exception as e:
         logging.error(f"Критическая ошибка отправки VK API для {peer_id}: {e}")
-        # Попытка отправить простое сообщение без клавиатуры
         try:
+            # Попытка отправить простое сообщение без клавиатуры
             vk.messages.send(
                 peer_id=peer_id,
                 message="Произошла ошибка при отправке сообщения. Попробуйте позже.",
-                random_id=0
+                random_id=get_random_id()
             )
         except:
             pass  # Игнорируем, если даже простое сообщение не отправляется
 
 def send(peer_id, text, keyboard=None):
     try:
+        # Проверяем клавиатуру
+        if keyboard and not isinstance(keyboard, VkKeyboard):
+            keyboard = get_main_keyboard()
+        
         vk.messages.send(
             peer_id=peer_id,
             message=text,
-            random_id=0,
-            keyboard=keyboard if keyboard else get_main_keyboard()
+            random_id=get_random_id(),
+            keyboard=keyboard.get_keyboard() if isinstance(keyboard, VkKeyboard) else get_main_keyboard()
         )
     except Exception as e:
         logging.error(f"Ошибка отправки сообщения: {e}")
