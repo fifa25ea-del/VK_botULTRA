@@ -107,7 +107,8 @@ def get_main_keyboard():
     # Третья строка
     keyboard.add_button("👨‍💻 Менеджер", color=VkKeyboardColor.POSITIVE)
     keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.NEGATIVE)
-    
+
+    validate_keyboard(keyboard)
     return keyboard.get_keyboard()
 
 def send_photo_with_caption(peer_id, photo_url, caption):
@@ -185,33 +186,27 @@ def get_first_photo(photo_field):
 
 # ===== ОТПРАВКА СООБЩЕНИЙ =====
 def send_safe(peer_id, text, keyboard=None):
-    """Безопасная отправка сообщения с обработкой ошибок"""
     try:
-        # Проверяем, что клавиатура корректна
         if keyboard:
-            # Проверяем структуру клавиатуры
-            if isinstance(keyboard, dict):
-                keyboard = VkKeyboard(keyboard=keyboard)
-            elif not isinstance(keyboard, VkKeyboard):
-                keyboard = get_main_keyboard()
-        
+            validate_keyboard(keyboard)
+            
         vk.messages.send(
             peer_id=peer_id,
             message=text,
-            random_id=get_random_id(),  # Используем генератор случайных ID
-            keyboard=keyboard.get_keyboard() if isinstance(keyboard, VkKeyboard) else get_main_keyboard()
+            random_id=get_random_id(),
+            keyboard=keyboard.get_keyboard() if keyboard else get_main_keyboard()
         )
     except Exception as e:
         logging.error(f"Критическая ошибка отправки VK API для {peer_id}: {e}")
+        # Попытка отправить простое сообщение без клавиатуры
         try:
-            # Попытка отправить простое сообщение без клавиатуры
             vk.messages.send(
                 peer_id=peer_id,
                 message="Произошла ошибка при отправке сообщения. Попробуйте позже.",
                 random_id=get_random_id()
             )
         except:
-            pass  # Игнорируем, если даже простое сообщение не отправляется
+            pass
 
 def send(peer_id, text, keyboard=None):
     try:
@@ -499,7 +494,8 @@ def show_part(peer_id):
         
         # Кнопка обновления
         keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
-        
+
+        validate_keyboard(keyboard)
         keyboard_data = keyboard.get_keyboard()
         
 
@@ -613,7 +609,8 @@ def show_wheel(peer_id):
         
         # Третья строка
         keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
-        
+
+        validate_keyboard(keyboard)
         keyboard_data = keyboard.get_keyboard()
 
         # Отправка сообщения с фото и текстом
@@ -712,7 +709,8 @@ def show_donor(peer_id):
         
         # Строка 4
         keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
-        
+
+        validate_keyboard(keyboard)
         keyboard_data = keyboard.get_keyboard()
 
         # --- 2. ОТПРАВЛЯЕМ ФОТО (ЕСЛИ ЕСТЬ) ---
@@ -808,7 +806,8 @@ def show_favorite_card(peer_id):
         
         # Третья строка (если есть место)
         keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
-        
+
+        validate_keyboard(keyboard)
         keyboard_data = keyboard.get_keyboard()
 
         # Пробуем отправить фото с текстом и клавиатурой одним сообщением
