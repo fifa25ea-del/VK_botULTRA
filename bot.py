@@ -19,21 +19,6 @@ def get_random_id():
     """Генерирует случайный ID для VK API (от 0 до 2^31−1)"""
     return random.randint(0, 2**31 - 1)
 
-def validate_keyboard(keyboard):
-    rows = keyboard.keyboard['buttons']
-    for row in rows:
-        if len(row) > 2:
-            raise ValueError("В строке клавиатуры больше 2 кнопок")
-    if len(rows) > 4:
-        raise ValueError("Превышено максимальное количество строк в клавиатуре")
-
-try:
-    validate_keyboard(keyboard)
-    keyboard_data = keyboard.get_keyboard()
-except ValueError as e:
-    logging.error(f"Ошибка в структуре клавиатуры: {e}")
-    keyboard_data = get_main_keyboard()  # Используем основную клавиатуру при ошибке
-
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -108,7 +93,6 @@ def get_main_keyboard():
     keyboard.add_button("👨‍💻 Менеджер", color=VkKeyboardColor.POSITIVE)
     keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.NEGATIVE)
 
-    validate_keyboard(keyboard)
     return keyboard.get_keyboard()
 
 def send_photo_with_caption(peer_id, photo_url, caption):
@@ -495,7 +479,6 @@ def show_part(peer_id):
         # Кнопка обновления
         keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
 
-        validate_keyboard(keyboard)
         keyboard_data = keyboard.get_keyboard()
         
 
@@ -610,7 +593,6 @@ def show_wheel(peer_id):
         # Третья строка
         keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
 
-        validate_keyboard(keyboard)
         keyboard_data = keyboard.get_keyboard()
 
         # Отправка сообщения с фото и текстом
@@ -710,7 +692,6 @@ def show_donor(peer_id):
         # Строка 4
         keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
 
-        validate_keyboard(keyboard)
         keyboard_data = keyboard.get_keyboard()
 
         # --- 2. ОТПРАВЛЯЕМ ФОТО (ЕСЛИ ЕСТЬ) ---
@@ -807,7 +788,6 @@ def show_favorite_card(peer_id):
         # Третья строка (если есть место)
         keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
 
-        validate_keyboard(keyboard)
         keyboard_data = keyboard.get_keyboard()
 
         # Пробуем отправить фото с текстом и клавиатурой одним сообщением
