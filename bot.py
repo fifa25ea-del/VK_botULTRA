@@ -404,7 +404,7 @@ def show_wheel_info(peer_id, wheel):
         send(peer_id, "Произошла ошибка при получении информации о диске")
 
 def show_part(peer_id):
-    """Показывает карточку детали с быстрой отправкой текста и фоновой загрузкой фото"""
+        """Показывает карточку детали с быстрой отправкой текста и фоновой загрузкой фото"""
     try:
         index = user_index.get(peer_id, 0)
         results = user_results.get(peer_id, [])
@@ -450,6 +450,22 @@ def show_part(peer_id):
     except Exception as e:
         logging.critical(f"ФАТАЛЬНАЯ ошибка в show_part для {peer_id}: {e}")
         send_safe(peer_id, "Произошла критическая ошибка при отображении детали. Обратитесь к администратору.")
+
+         # Создаём клавиатуру (с кнопкой "Главное меню")
+        keyboard = VkKeyboard(one_time=False)
+        keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.NEGATIVE)
+        keyboard.add_line()
+        keyboard.add_button("❤️ Добавить в избранное", color=VkKeyboardColor.POSITIVE)
+        
+        if total_items > 1:
+            keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
+            
+        keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
+        
+        if total_items > 1:
+            keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
+            
+        keyboard_data = keyboard.get_keyboard()
 
 
 def show_wheel(peer_id):
@@ -498,6 +514,7 @@ def show_wheel(peer_id):
         keyboard = VkKeyboard(one_time=False)
         keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.NEGATIVE)
         keyboard.add_line()
+        keyboard.add_button("❤️ Добавить в избранное", color=VkKeyboardColor.POSITIVE)
         
         if total_items > 1:
             keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
@@ -585,6 +602,8 @@ def show_donor(peer_id):
         # Создаем клавиатуру
         keyboard = VkKeyboard(one_time=False)
         keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.NEGATIVE)
+        keyboard.add_line()
+        keyboard.add_button("❤️ Добавить в избранное", color=VkKeyboardColor.POSITIVE)
         keyboard.add_line()
         
         total_items = len(results)
@@ -760,6 +779,20 @@ def handle(event):
             else:
                 send(peer_id, "❌ Детали не найдены. Попробуйте другой запрос или номер.")
 
+            elif text == "❤️ Добавить в избранное":
+            # Получаем текущий элемент из результатов поиска пользователя
+            index = user_index.get(peer_id, 0)
+            results = user_results.get(peer_id, [])
+            
+            if results and index < len(results):
+                current_item = results[index]
+                # Вызываем функцию добавления в избранное
+                add_to_favorites(peer_id, current_item)
+                # Бот ответит сообщением внутри функции add_to_favorites
+            else:
+                send(peer_id, "Ошибка: не удалось найти элемент для добавления.")
+            return # Выходим из обработчика
+
         # --- Блок для ДИСКОВ (Wheels) ---
         elif current_state == "wheels":
             # Получаем текущие результаты для этого пользователя
@@ -803,6 +836,20 @@ def handle(event):
                     show_wheel(peer_id)
                 else:
                     send(peer_id, "❌ Диски не найдены. Проверьте введенное число (например, 17 или R18).")
+
+            elif text == "❤️ Добавить в избранное":
+            # Получаем текущий элемент из результатов поиска пользователя
+            index = user_index.get(peer_id, 0)
+            results = user_results.get(peer_id, [])
+            
+            if results and index < len(results):
+                current_item = results[index]
+                # Вызываем функцию добавления в избранное
+                add_to_favorites(peer_id, current_item)
+                # Бот ответит сообщением внутри функции add_to_favorites
+            else:
+                send(peer_id, "Ошибка: не удалось найти элемент для добавления.")
+            return # Выходим из обработчика
 
         # --- Блок для ДОНОРОВ (Donors) ---
         elif current_state == "donors":
