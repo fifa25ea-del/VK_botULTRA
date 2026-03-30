@@ -1096,7 +1096,6 @@ def handle(event):
                 return
                 
 # Запуск бота
-# ===== ГЛАВНЫЙ ЦИКЛ =====
 def run_bot():
     print("🔥 VK BOT ULTRA ЗАПУЩЕН")
     try:
@@ -1105,25 +1104,20 @@ def run_bot():
                 handle(event)
     except Exception as e:
         logging.error(f"Критическая ошибка: {e}")
-        time.sleep(5)  # пауза перед перезапуском
-        run_bot()  # перезапуск бота
+        time.sleep(5)
+        run_bot()
 
-# Добавляем обработку ошибок при запуске
 if __name__ == "__main__":
     try:
-        # Инициализируем все компоненты
         init_files()
         load_json(FAV_FILE)
         load_json(STATS_FILE)
-        
-        # Запускаем основной цикл
         run_bot()
     except Exception as e:
         logging.error(f"Критическая ошибка при запуске бота: {e}")
-        time.sleep(10)  # пауза перед повторной попыткой
-        run_bot()  # повторный запуск
+        time.sleep(10)
+        run_bot()
 
-# Добавляем автоматический перезапуск при падении
 def auto_restart():
     while True:
         try:
@@ -1131,6 +1125,3 @@ def auto_restart():
         except Exception as e:
             logging.error(f"Бот упал. Перезапуск... {e}")
             time.sleep(10)
-
-# Запускаем поток с автоперезапуском
-threading.Thread(target=auto_restart, daemon=True).start()
