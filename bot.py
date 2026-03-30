@@ -830,10 +830,6 @@ def show_favorite_card(peer_id):
                     keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
 
                 send_safe(peer_id, message, keyboard=keyboard.get_keyboard())
-
-    except Exception as e:
-        logging.error(f"Ошибка показа карточки избранного: {e}")
-        send(peer_id, "Произошла ошибка при отображении избранного.")
         
 
 # ===== ДОБАВЛЯЕМ ПОИСК ПО КРИТЕРИЯМ =====
