@@ -910,7 +910,7 @@ def handle(event):
         current_state = user_state.get(peer_id)
 
         # --- БЛОК ДЛЯ ЗАПЧАСТЕЙ (Parts) ---
-        elif current_state == "parts":
+        if current_state == "parts":
             # Получаем текущие результаты и индекс для этого пользователя
             results = user_results.get(peer_id, [])
             index = user_index.get(peer_id, 0)
