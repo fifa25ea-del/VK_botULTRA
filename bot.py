@@ -404,7 +404,7 @@ def show_wheel_info(peer_id, wheel):
         send(peer_id, "Произошла ошибка при получении информации о диске")
 
 def show_part(peer_id):
-    """Показывает карточку детали ОДНИМ сообщением (текст + фото)."""
+    """Показывает карточку детали ОДНИМ сообщением (текст + фото + клавиатура)."""
     try:
         index = user_index.get(peer_id, 0)
         results = user_results.get(peer_id, [])
@@ -424,10 +424,9 @@ def show_part(peer_id):
             send_safe(peer_id, "Данные о детали повреждены. Попробуйте поиск заново.")
             return
 
-        # Формируем текст карточки
+        # --- 1. ФОРМИРУЕМ ТЕКСТ КАРТОЧКИ ---
         message = "🚗 Карточка детали:\n"
         message += f"Название: {safe_get(part, 'Наименование')}\n"
-        message += f"Кузов: {safe_get(part, 'Кузов')}\n"
         message += f"Артикул: {safe_get(part, 'Артикул')}\n"
 
         price = safe_get(part, 'Цена')
@@ -438,22 +437,36 @@ def show_part(peer_id):
         if link != "Не указано" and link != "Нет ссылки":
             message += f"Ссылка: {link}"
 
-        # Получаем ссылку на фото
-        photo_url = get_first_photo(part.get('Фото', ''))
+        # --- 2. СОЗДАЕМ КЛАВИАТУРУ С КНОПКОЙ ИЗБРАННОГО ---
+        keyboard = VkKeyboard(one_time=False)
         
-        # --- ЛОГИКА ОТПРАВКИ ---
+        # Кнопка "Добавить в избранное"
+        keyboard.add_button("❤️ Добавить в избранное", color=VkKeyboardColor.POSITIVE)
+        keyboard.add_line()
+        
+        # Кнопки навигации
+        keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
+        keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
+        keyboard.add_line()
+        
+        # Кнопка обновления
+        keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
+        
+        keyboard_data = keyboard.get_keyboard()
+
+        # --- 3. ОТПРАВЛЯЕМ СООБЩЕНИЕ (С ФОТО ИЛИ БЕЗ) ---
+        photo_url = get_first_photo(part.get('Фото', ''))
+
         if photo_url:
             try:
-                # 1. Скачиваем фото (синхронно, ждем завершения)
+                # Пробуем загрузить фото
                 response = requests.get(photo_url, timeout=10)
                 response.raise_for_status()
 
-                # 2. Загружаем фото на сервер VK (синхронно)
                 upload_url = vk.photos.getMessagesUploadServer()['upload_url']
                 files = {'photo': ('image.jpg', response.content)}
                 upload_data = requests.post(upload_url, files=files, timeout=15).json()
 
-                # 3. Сохраняем фото и получаем attachment ID (синхронно)
                 photo_data = vk.photos.saveMessagesPhoto(
                     server=upload_data['server'],
                     photo=upload_data['photo'],
@@ -461,31 +474,33 @@ def show_part(peer_id):
                 )[0]
                 
                 attachment = f"photo{photo_data['owner_id']}_{photo_data['id']}"
-
-                # 4. ОТПРАВЛЯЕМ ВСЁ ОДНИМ ЗАПРОСОМ (текст + фото + клавиатура)
+                
+                # Отправляем ОДНО сообщение с фото и клавиатурой
                 vk.messages.send(
                     peer_id=peer_id,
                     message=message,
                     attachment=attachment,
-                    keyboard=get_main_keyboard(), # Используем главную клавиатуру
+                    keyboard=keyboard_data,  # <-- КЛАВИАТУРА передается здесь!
                     random_id=get_random_id()
                 )
 
             except requests.exceptions.RequestException as e:
-                # Если фото не скачалось или не загрузилось, отправляем только текст
+                # Если фото не загрузилось (ошибка сети), отправляем текст с клавиатурой
                 logging.warning(f"Ошибка загрузки фото (запчасти): {e}. Отправляем только текст.")
-                send_safe(peer_id, message)
+                send_safe(peer_id, message, keyboard=keyboard_data)
+                
             except Exception as e:
                 logging.error(f"Неизвестная ошибка при отправке фото детали: {e}")
-                send_safe(peer_id, message)
+                send_safe(peer_id, message, keyboard=keyboard_data)
 
         else:
-            # Если фото нет в базе, отправляем просто текст
-            send_safe(peer_id, message)
+            # Если фото нет в базе, сразу отправляем текст с клавиатурой
+            send_safe(peer_id, message, keyboard=keyboard_data)
 
     except Exception as e:
         logging.critical(f"ФАТАЛЬНАЯ ошибка в show_part для {peer_id}: {e}")
         send_safe(peer_id, "Произошла критическая ошибка при отображении детали.")
+        
 def show_wheel(peer_id):
     """Показывает карточку диска: фото + текст с кнопками одним сообщением."""
     try:
