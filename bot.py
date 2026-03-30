@@ -408,6 +408,7 @@ def show_part(peer_id):
     try:
         index = user_index.get(peer_id, 0)
         results = user_results.get(peer_id, [])
+        current_state = user_state.get(peer_id)
 
         if not results:
             send_safe(peer_id, "Нет результатов поиска для отображения")
@@ -438,28 +439,43 @@ def show_part(peer_id):
         if link != "Не указано" and link != "Нет ссылки":
             message += f"Ссылка: {link}"
 
-        # --- 2. СОЗДАЕМ КЛАВИАТУРУ С КНОПКОЙ ИЗБРАННОГО ---
+        # --- ДОБАВЛЯЕМ НУМЕРАЦИЮ ---
+        total_items = len(results)
+        current_position = index + 1
+        message += f"\n📊 {current_position} из {total_items}"
+
+
+        # --- 2. СОЗДАЕМ КЛАВИАТУРУ ---
         keyboard = VkKeyboard(one_time=False)
         
-        # Ряд 1: Управление (Удалить и Выход)
-        keyboard.add_button("🗑 Удалить", color=VkKeyboardColor.NEGATIVE)
-        keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.NEGATIVE)
-        keyboard.add_line() # Переходим на второй ряд
+        # Логика кнопок зависит от того, где мы находимся: в поиске или в избранном
+        if current_state == "favorites_view":
+            # Если мы в режиме просмотра избранного
+            keyboard.add_button("🗑 Удалить", color=VkKeyboardColor.NEGATIVE)
+            keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.NEGATIVE)
+            keyboard.add_line()
+        else: 
+            # Если мы в обычном поиске запчастей
+            keyboard.add_button("❤️ Добавить в избранное", color=VkKeyboardColor.POSITIVE)
+            keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.NEGATIVE)
+            keyboard.add_line()
 
-        # Ряд 2: Навигация (Вперед/Назад)
-        if total_items > 1:
-            keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
-            keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
-            # Если добавить еще одну кнопку сюда, будет 3 в ряду, что допустимо, но лучше держать запас.
+        # Кнопки навигации (всегда добавляем)
+        keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
+        keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
+        
+        # Кнопка обновления (на отдельной строке)
+        keyboard.add_line() 
+        keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
 
         keyboard_data = keyboard.get_keyboard()
+
 
         # --- 3. ОТПРАВЛЯЕМ СООБЩЕНИЕ (С ФОТО ИЛИ БЕЗ) ---
         photo_url = get_first_photo(part.get('Фото', ''))
 
         if photo_url:
             try:
-                # Пробуем загрузить фото
                 response = requests.get(photo_url, timeout=10)
                 response.raise_for_status()
 
@@ -480,12 +496,11 @@ def show_part(peer_id):
                     peer_id=peer_id,
                     message=message,
                     attachment=attachment,
-                    keyboard=keyboard_data,  # <-- КЛАВИАТУРА передается здесь!
+                    keyboard=keyboard_data,
                     random_id=get_random_id()
                 )
 
             except requests.exceptions.RequestException as e:
-                # Если фото не загрузилось (ошибка сети), отправляем текст с клавиатурой
                 logging.warning(f"Ошибка загрузки фото (запчасти): {e}. Отправляем только текст.")
                 send_safe(peer_id, message, keyboard=keyboard_data)
                 
