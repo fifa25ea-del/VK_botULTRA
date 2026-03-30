@@ -443,7 +443,7 @@ def show_part(peer_id):
         # Ряд 1: Управление (Удалить и Выход)
         keyboard.add_button("🗑 Удалить", color=VkKeyboardColor.NEGATIVE)
         keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.NEGATIVE)
-        keyboard.add_line() // Переходим на второй ряд
+        keyboard.add_line() # Переходим на второй ряд
 
         # Ряд 2: Навигация (Вперед/Назад)
         if total_items > 1:
