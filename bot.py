@@ -910,18 +910,40 @@ def handle(event):
         current_state = user_state.get(peer_id)
 
         # --- БЛОК ДЛЯ ЗАПЧАСТЕЙ (Parts) ---
-        if current_state == "parts":
-            # 1. Проверяем кнопки навигации и избранного (они имеют приоритет над поиском)
+        elif current_state == "parts":
+            # Получаем текущие результаты и индекс для этого пользователя
+            results = user_results.get(peer_id, [])
+            index = user_index.get(peer_id, 0)
+
+            # --- 1. ОБРАБОТКА КНОПОК (Имеют приоритет над поиском) ---
             if text in ["⬅️ Назад", "Назад"]:
-                _handle_navigation(peer_id, -1)
+                # Проверяем, есть ли что листать
+                if results and len(results) > 1:
+                    new_index = index - 1
+                    # Если ушли за начало списка, переходим в конец
+                    if new_index < 0:
+                        new_index = len(results) - 1
+                    user_index[peer_id] = new_index
+                    show_part(peer_id)
                 return
+
             elif text in ["➡️ Вперед", "Вперед"]:
-                _handle_navigation(peer_id, 1)
+                if results and len(results) > 1:
+                    new_index = index + 1
+                    # Если ушли за конец списка, переходим в начало
+                    if new_index >= len(results):
+                        new_index = 0
+                    user_index[peer_id] = new_index
+                    show_part(peer_id)
                 return
+
             elif text in ["🔄 Обновить", "Обновить"]:
+                # Просто обновляем текущую карточку (перезагрузка фото/текста)
                 show_part(peer_id)
                 return
+
             elif text == "❤️ Добавить в избранное":
+                # Логика остается прежней
                 index = user_index.get(peer_id, 0)
                 results = user_results.get(peer_id, [])
                 if results and index < len(results):
@@ -931,12 +953,13 @@ def handle(event):
                     send(peer_id, "Ошибка: не удалось найти элемент для добавления.")
                 return
 
-            # 2. Если это не кнопка, значит это поисковый запрос
+            # --- 2. ПОИСКОВЫЙ ЗАПРОС (Если это не кнопка) ---
+            # Если мы дошли досюда, значит нажата кнопка поиска или введено сообщение
             logging.info(f"Начинаем поиск деталей для запроса: '{text}'")
             results = cache.search_parts(text)
             if results:
                 user_results[peer_id] = results
-                user_index[peer_id] = 0
+                user_index[peer_id] = 0 # Сбрасываем на первую позицию при новом поиске
                 show_part(peer_id)
             else:
                 send(peer_id, "❌ Детали не найдены. Попробуйте другой запрос или номер.")
