@@ -427,6 +427,7 @@ def show_part(peer_id):
         # Формируем текст карточки
         message = "🚗 Карточка детали:\n"
         message += f"Название: {safe_get(part, 'Наименование')}\n"
+        message += f"Кузов: {safe_get(part, 'Кузов')}\n"
         message += f"Артикул: {safe_get(part, 'Артикул')}\n"
 
         price = safe_get(part, 'Цена')
