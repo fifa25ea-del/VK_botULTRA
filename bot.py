@@ -747,15 +747,17 @@ def show_favorite_card(peer_id):
             
         message += f"\n📊 {current_position} из {total_items}"
 
-        # Создаем клавиатуру (строго 2 кнопки в первом ряду)
         keyboard = VkKeyboard(one_time=False)
+        
+        # Первая строка: только 2 кнопки
         keyboard.add_button("🗑 Удалить", color=VkKeyboardColor.NEGATIVE)
         keyboard.add_button("🏠 Меню", color=VkKeyboardColor.NEGATIVE)
-        keyboard.add_line()
+        keyboard.add_line()  # Переход на новую строку
 
+        # Вторая строка для навигации
         if total_items > 1:
             keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
-            keyboard.add_line()  # Добавляем новую строку для кнопки Вперед
+            keyboard.add_line()  # Новая строка
             keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
         
         keyboard_data = keyboard.get_keyboard()
