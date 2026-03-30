@@ -794,9 +794,9 @@ def show_favorite_card(peer_id):
             send_safe(peer_id, message, keyboard=keyboard_data)
     else:
         send_safe(peer_id, message, keyboard=keyboard_data)
-except Exception as e:
-    logging.error(f"Критическая ошибка в show_favorite_card: {e}")
-    send(peer_id, "Произошла ошибка при отображении избранного.")
+    except Exception as e:
+        logging.error(f"Критическая ошибка в show_favorite_card: {e}")
+        send(peer_id, "Произошла ошибка при отображении избранного.")
 
 # ===== ДОБАВЛЯЕМ ПОИСК ПО КРИТЕРИЯМ =====
 
