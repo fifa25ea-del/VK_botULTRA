@@ -19,6 +19,20 @@ def get_random_id():
     """Генерирует случайный ID для VK API (от 0 до 2^31−1)"""
     return random.randint(0, 2**31 - 1)
 
+def validate_keyboard(keyboard):
+    rows = keyboard.keyboard['buttons']
+    for row in rows:
+        if len(row) > 2:
+            raise ValueError("В строке клавиатуры больше 2 кнопок")
+    if len(rows) > 4:
+        raise ValueError("Превышено максимальное количество строк в клавиатуре")
+
+try:
+    validate_keyboard(keyboard)
+    keyboard_data = keyboard.get_keyboard()
+except ValueError as e:
+    logging.error(f"Ошибка в структуре клавиатуры: {e}")
+    keyboard_data = get_main_keyboard()  # Используем основную клавиатуру при ошибке
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
