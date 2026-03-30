@@ -734,11 +734,11 @@ def handle(event):
         # Обработка кнопок главного меню
         if text_lower in ["🚗 запчасти", "запчасти"]:
             user_state[peer_id] = "parts"
-            send(peer_id, "Введите номер детали:", keyboard=None)
+            send(peer_id, "Введите номер детали или артикул:", keyboard=None)
             return
         elif text_lower in ["🛞 диски", "диски"]:
             user_state[peer_id] = "wheels"
-            send(peer_id, "Введите размер, например R18:", keyboard=None)
+            send(peer_id, "Введите размер (например, R18 или 18):", keyboard=None)
             return
         elif text_lower in ["🚘 доноры", "доноры"]:
             user_state[peer_id] = "donors"
@@ -765,10 +765,12 @@ def handle(event):
             send(peer_id, "Меню сброшено. Чем помочь?", keyboard=get_main_keyboard())
             return
 
+        # Если мы здесь, значит нажата кнопка внутри карточки или введен текст в режиме поиска
         current_state = user_state.get(peer_id)
 
+        # --- БЛОК ДЛЯ ЗАПЧАСТЕЙ (Parts) ---
         if current_state == "parts":
-            # Блок для ЗАПЧАСТЕЙ (Parts)
+            # 1. Проверяем кнопки навигации и избранного (они имеют приоритет над поиском)
             if text in ["⬅️ Назад", "Назад"]:
                 _handle_navigation(peer_id, -1)
                 return
@@ -788,7 +790,7 @@ def handle(event):
                     send(peer_id, "Ошибка: не удалось найти элемент для добавления.")
                 return
 
-            # Поисковый запрос для запчастей
+            # 2. Если это не кнопка, значит это поисковый запрос
             logging.info(f"Начинаем поиск деталей для запроса: '{text}'")
             results = cache.search_parts(text)
             if results:
@@ -797,92 +799,107 @@ def handle(event):
                 show_part(peer_id)
             else:
                 send(peer_id, "❌ Детали не найдены. Попробуйте другой запрос или номер.")
-
+        
+        # --- БЛОК ДЛЯ ДИСКОВ (Wheels) ---
         elif current_state == "wheels":
-            # Блок для ДИСКОВ (Wheels)
-            results = user_results.get(peer_id, [])
+             # 1. Проверяем кнопки навигации и избранного
+             if text in ["⬅️ Назад", "Назад"]:
+                 if len(user_results.get(peer_id, [])) > 1:
+                     new_index = (user_index.get(peer_id, 0) - 1) % len(user_results[peer_id])
+                     user_index[peer_id] = new_index
+                     show_wheel(peer_id)
+                 else:
+                     send(peer_id, "Сначала нужно выполнить поиск. Введите размер диска (например, R18).")
+                 return
 
-            if text in ["⬅️ Назад", "Назад"]:
-                if results and len(results) > 1:
-                    new_index = (user_index.get(peer_id, 0) - 1) % len(results)
-                    user_index[peer_id] = new_index
-                    show_wheel(peer_id)
-                else:
-                    send(peer_id, "Сначала нужно выполнить поиск. Введите размер диска (например, R18).")
-                return
-            elif text in ["➡️ Вперед", "Вперед"]:
-                if results and len(results) > 1:
-                    new_index = (user_index.get(peer_id, 0) + 1) % len(results)
-                    user_index[peer_id] = new_index
-                    show_wheel(peer_id)
-                else:
-                    send(peer_id, "Сначала нужно выполнить поиск. Введите размер диска (например, R18).")
-                return
-            elif text in ["🔄 Обновить", "Обновить"]:
-                if not results:
-                    send(peer_id, "Сначала нужно выполнить поиск. Введите размер диска (например, R18).")
-                else:
-                    show_wheel(peer_id)
-                return
-            elif text == "❤️ Добавить в избранное":
-                index = user_index.get(peer_id, 0)
-                results = user_results.get(peer_id, [])
-                if results and index < len(results):
-                    current_item = results[index]
-                    add_to_favorites(peer_id, current_item)
-                else:
-                    send(peer_id, "Ошибка: не удалось найти элемент для добавления.")
-                return
-            else:
-                # Поисковый запрос для дисков
-                logging.info(f"Начинаем поиск дисков для запроса: '{text}'")
-                results = cache.search_wheels(text)
-                if results:
-                    user_results[peer_id] = results
-            user_index[peer_id] = 0
-            show_wheel(peer_id)
-        else:
-            send(peer_id, "❌ Диски не найдены. Проверьте введенное число (например, 17 или R18).")
+             elif text in ["➡️ Вперед", "Вперед"]:
+                 if len(user_results.get(peer_id, [])) > 1:
+                     new_index = (user_index.get(peer_id, 0) + 1) % len(user_results[peer_id])
+                     user_index[peer_id] = new_index
+                     show_wheel(peer_id)
+                 else:
+                     send(peer_id, "Сначала нужно выполнить поиск. Введите размер диска (например, R18).")
+                 return
 
+             elif text in ["🔄 Обновить", "Обновить"]:
+                 # Если есть результаты, обновляем фото/текст. Если нет — просим ввести запрос.
+                 if user_results.get(peer_id):
+                     show_wheel(peer_id)
+                 else:
+                     send(peer_id, "Сначала нужно выполнить поиск. Введите размер диска (например, R18).")
+                 return
+
+             elif text == "❤️ Добавить в избранное":
+                 index = user_index.get(peer_id, 0)
+                 results = user_results.get(peer_id, [])
+                 if results and index < len(results):
+                     current_item = results[index]
+                     add_to_favorites(peer_id, current_item)
+                 else:
+                     send(peer_id, "Ошибка: не удалось найти элемент для добавления.")
+                 return
+
+             # 2. Если это не кнопка — это поисковый запрос по размеру
+             else:
+                 logging.info(f"Начинаем поиск дисков для запроса: '{text}'")
+                 results = cache.search_wheels(text)
+                 
+                 if results:
+                     user_results[peer_id] = results
+                     user_index[peer_id] = 0
+                     show_wheel(peer_id)
+                 else:
+                     send(peer_id, "❌ Диски не найдены. Проверьте введенное число (например, 17 или R18).")
+        
+        # --- БЛОК ДЛЯ ДОНОРОВ (Donors) ---
         elif current_state == "donors":
+             # В этом режиме мы либо листаем список последних доноров,
+             # ЛИБО ищем по марке/модели (если пользователь ввел текст в поле поиска VK)
+             
              # Проверяем кнопки навигации
-            if text in ["⬅️ Назад", "Назад"]:
-                results = user_results.get(peer_id, [])
-                if results and len(results) > 1:
-                    new_index = user_index.get(peer_id, 0) - 1
-                    if new_index < 0:
-                        new_index = len(results) - 1
-                    user_index[peer_id] = new_index
-                    show_donor(peer_id)
-                return
+             if text in ["⬅️ Назад", "Назад"]:
+                 results = user_results.get(peer_id, [])
+                 if results and len(results) > 1:
+                     new_index = user_index.get(peer_id, 0) - 1
+                     if new_index < 0:
+                         new_index = len(results) - 1
+                     user_index[peer_id] = new_index
+                     show_donor(peer_id)
+                 return
 
-            elif text in ["➡️ Вперед", "Вперед"]:
-                results = user_results.get(peer_id, [])
-                if results and len(results) > 1:
-                    new_index = user_index.get(peer_id, 0) + 1
-                    if new_index >= len(results):
-                        new_index = 0
-                    user_index[peer_id] = new_index
-                    show_donor(peer_id)
-                return
+             elif text in ["➡️ Вперед", "Вперед"]:
+                 results = user_results.get(peer_id, [])
+                 if results and len(results) > 1:
+                     new_index = user_index.get(peer_id, 0) + 1
+                     if new_index >= len(results):
+                         new_index = 0
+                     user_index[peer_id] = new_index
+                     show_donor(peer_id)
+                 return
 
-            # Если это не кнопка — это поисковый запрос
-            else:
-                logging.info(f"Начинаем поиск доноров для запроса: '{text}'")
-                results = cache.search_donors(text)
-                
-                if results:
-                    user_results[peer_id] = results
-                    user_index[peer_id] = 0 
-                    show_donor(peer_id)
-                else:
-                    send(peer_id, "❌ Доноры не найдены.")
+             # Если это не кнопка — это поисковый запрос по марке/модели
+             else:
+                 logging.info(f"Начинаем поиск доноров для запроса: '{text}'")
+                 results = cache.search_donors(text)
+                 
+                 if results:
+                     user_results[peer_id] = results
+                     user_index[peer_id] = 0 
+                     show_donor(peer_id)
+                 else:
+                     send(peer_id, "❌ Доноры не найдены.")
+        
+        # --- БЛОК МЕНЕДЖЕРА (Manager) ---
+        elif current_state == "manager":
+             # Здесь логика перенаправления сообщения администратору.
+             # В текущем коде она не реализована.
+             send(ADMIN_ID, f"Запрос от пользователя {peer_id}:\n{text}")
+             send(peer_id, "👨‍💻 Ваше сообщение передано менеджеру! Ответ поступит в ближайшее время.", keyboard=get_main_keyboard())
+             user_state[peer_id] = None # Сбрасываем состояние после отправки
 
     except Exception as e:
-        # Этот блок поймает любые ошибки в логике выше (например, проблемы с сетью при поиске)
-        logging.error(f"Ошибка при обработке сообщения от {peer_id}: {e}")
-        send(peer_id, "Произошла внутренняя ошибка. Попробуйте еще раз или нажмите 'Назад'.")
-
+        logging.error(f"Неожиданная ошибка в handle(): {e}")
+        send(peer_id, "Произошла внутренняя ошибка. Попробуйте позже или нажмите 'Назад'.")
 # Запуск бота
 # ===== ГЛАВНЫЙ ЦИКЛ =====
 def run_bot():
