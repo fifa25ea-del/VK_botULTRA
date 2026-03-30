@@ -719,7 +719,6 @@ def show_donor(peer_id):
         send(peer_id, "Произошла критическая ошибка при отображении донора.")
 
 def show_favorite_card(peer_id):
-    """Отображает одну карточку из списка избранного."""
     try:
         results = user_results.get(peer_id, [])
         index = user_index.get(peer_id, 0)
@@ -756,6 +755,7 @@ def show_favorite_card(peer_id):
 
         if total_items > 1:
             keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
+            keyboard.add_line()  # Добавляем новую строку для кнопки Вперед
             keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
         
         keyboard_data = keyboard.get_keyboard()
