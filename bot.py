@@ -404,7 +404,7 @@ def show_wheel_info(peer_id, wheel):
         send(peer_id, "Произошла ошибка при получении информации о диске")
 
 def show_part(peer_id):
-        """Показывает карточку детали с быстрой отправкой текста и фоновой загрузкой фото"""
+    """Показывает карточку детали с быстрой отправкой текста и фоновой загрузкой фото"""
     try:
         index = user_index.get(peer_id, 0)
         results = user_results.get(peer_id, [])
@@ -437,36 +437,43 @@ def show_part(peer_id):
             message += f"Цена: {price}\n"
 
         link = safe_get(part, 'Ссылка')
-        if link != "Не указано" and link != "Нет ссылки":
-            message += f"Ссылка: {link}"
+        if link not in ("Не указано", "Нет ссылки"):
+            message += f"Ссылка: {link}\n"  # Добавлено \n для единообразия форматирования
 
         # Отправляем текст сразу
         send_safe(peer_id, message)
 
         # Если есть фото, запускаем его загрузку в фоне
         if photo_url:
-            send_photo_with_caption(peer_id, photo_url, message)
+            # Отправка фото с подписью — лучше использовать отдельный поток/асинхронно
+            import threading
+            threading.Thread(
+                target=send_photo_with_caption,
+                args=(peer_id, photo_url, message),
+                daemon=True
+            ).start()
 
-    except Exception as e:
-        logging.critical(f"ФАТАЛЬНАЯ ошибка в show_part для {peer_id}: {e}")
-        send_safe(peer_id, "Произошла критическая ошибка при отображении детали. Обратитесь к администратору.")
-
-         # Создаём клавиатуру (с кнопкой "Главное меню")
+        # Создаём клавиатуру (с кнопкой "Главное меню")
+        total_items = len(results)  # Определяем общее количество элементов
         keyboard = VkKeyboard(one_time=False)
         keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.NEGATIVE)
         keyboard.add_line()
         keyboard.add_button("❤️ Добавить в избранное", color=VkKeyboardColor.POSITIVE)
-        
+
         if total_items > 1:
             keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
-            
+
         keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
-        
+
         if total_items > 1:
             keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
-            
-        keyboard_data = keyboard.get_keyboard()
 
+        keyboard_data = keyboard.get_keyboard()
+        send_keyboard(peer_id, keyboard_data)  # Отправляем клавиатуру пользователю
+
+    except Exception as e:
+        logging.critical(f"ФАТАЛЬНАЯ ошибка в show_part для {peer_id}: {e}")
+        send_safe(peer_id, "Произошла критическая ошибка при отображении детали. Обратитесь к администратору.")
 
 def show_wheel(peer_id):
     """Показывает карточку диска: фото + текст с кнопками одним сообщением."""
@@ -481,7 +488,7 @@ def show_wheel(peer_id):
         # Реверсивный порядок (свежие объявления первыми)
         reversed_results = list(results)
         reversed_results.reverse()
-        
+
         total_items = len(reversed_results)
         reversed_index = total_items - 1 - index
 
@@ -491,61 +498,70 @@ def show_wheel(peer_id):
 
         wheel = reversed_results[reversed_index]
 
+        # Проверка целостности данных
+        if not wheel or not any(str(v).strip() for v in wheel.values()):
+            send_safe(peer_id, "Данные о диске повреждены. Попробуйте поиск заново.")
+            return
+
         # Формируем текст карточки
         message = "🛞 Карточка диска:\n"
         message += f"Производитель: {safe_get(wheel, 'Производитель диска')}\n"
         message += f"Артикул: {safe_get(wheel, 'Артикул')}\n"
         message += f"Модель: {safe_get(wheel, 'Модель диска')}\n"
         message += f"Размер: {safe_get(wheel, 'Размер')}\n"
-        
+
         price = safe_get(wheel, 'Цена')
         if price != "Не указано":
             message += f"Цена: {price}\n"
 
         link = safe_get(wheel, 'Ссылка')
-        if link != "Не указано" and link != "Нет ссылки":
-            message += f"Ссылка: {link}"
+        if link not in ("Не указано", "Нет ссылки"):
+            message += f"Ссылка: {link}\n"  # Добавлено \n для единообразия форматирования
 
         # Добавляем нумерацию
         current_position = reversed_index + 1
         message += f"\n📊 {current_position} из {total_items}"
 
-        # Создаём клавиатуру (с кнопкой "Главное меню")
+        # Создаём клавиатуру
         keyboard = VkKeyboard(one_time=False)
         keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.NEGATIVE)
         keyboard.add_line()
         keyboard.add_button("❤️ Добавить в избранное", color=VkKeyboardColor.POSITIVE)
-        
+
         if total_items > 1:
             keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
-            
+
         keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
-        
+
         if total_items > 1:
             keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
-            
+
         keyboard_data = keyboard.get_keyboard()
-        
-        # --- ОТПРАВКА ОДНОГО СООБЩЕНИЯ С ФОТО И ТЕКСТОМ ---
-        photo_url = get_first_photo(wheel.get('Фото', '')) # Убедитесь, что колонка называется 'Фото'
-        
+
+        # Отправка сообщения с фото и текстом
+        photo_url = get_first_photo(wheel.get('Фото', ''))
+
         if photo_url:
             try:
+                # Загружаем фото
                 response = requests.get(photo_url, timeout=10)
                 response.raise_for_status()
 
+                # Получаем URL для загрузки
                 upload_url = vk.photos.getMessagesUploadServer()['upload_url']
                 files = {'photo': ('image.jpg', response.content)}
                 upload_data = requests.post(upload_url, files=files, timeout=15).json()
 
+                # Сохраняем фото
                 photo_data = vk.photos.saveMessagesPhoto(
                     server=upload_data['server'],
                     photo=upload_data['photo'],
                     hash=upload_data['hash']
                 )[0]
-                
+
                 attachment = f"photo{photo_data['owner_id']}_{photo_data['id']}"
-                
+
+                # Отправляем сообщение с фото, текстом и клавиатурой
                 vk.messages.send(
                     peer_id=peer_id,
                     message=message,
@@ -565,7 +581,7 @@ def show_wheel(peer_id):
 
     except Exception as e:
         logging.critical(f"ФАТАЛЬНАЯ ошибка в show_wheel для {peer_id}: {e}")
-        send_safe(peer_id, "Произошла критическая ошибка при отображении диска.")
+        send_safe(peer_id, "Произошла критическая ошибка при отображении диска. Обратитесь к администратору.")
 
 def show_donor(peer_id):
     """
@@ -755,101 +771,100 @@ def handle(event):
         # --- ОСНОВНАЯ ЛОГИКА ПОИСКА И НАВИГАЦИИ ---
         current_state = user_state.get(peer_id)
 
-        # --- Блок для ЗАПЧАСТЕЙ (Parts) ---
-        if current_state == "parts":
-            # Проверяем кнопки навигации
-            if text in ["⬅️ Назад", "Назад"]:
-                _handle_navigation(peer_id, -1)
-                return
-            elif text in ["➡️ Вперед", "Вперед"]:
-                _handle_navigation(peer_id, 1)
-                return
-            elif text in ["🔄 Обновить", "Обновить"]:
-                show_part(peer_id)
-                return
+       # --- Блок для ЗАПЧАСТЕЙ (Parts) ---
+if current_state == "parts":
+    # Сначала проверяем кнопки навигации и действия
+    if text in ["⬅️ Назад", "Назад"]:
+        _handle_navigation(peer_id, -1)
+        return
+    elif text in ["➡️ Вперед", "Вперед"]:
+        _handle_navigation(peer_id, 1)
+        return
+    elif text in ["🔄 Обновить", "Обновить"]:
+        show_part(peer_id)
+        return
+    elif text == "❤️ Добавить в избранное":
+        # Получаем текущий элемент из результатов поиска пользователя
+        index = user_index.get(peer_id, 0)
+        results = user_results.get(peer_id, [])
 
-            # Если это не кнопка — это поисковый запрос
-            logging.info(f"Начинаем поиск деталей для запроса: '{text}'")
-            results = cache.search_parts(text)
+        if results and index < len(results):
+            current_item = results[index]
+            # Вызываем функцию добавления в избранное
+            add_to_favorites(peer_id, current_item)
+            # Бот ответит сообщением внутри функции add_to_favorites
+        else:
+            send(peer_id, "Ошибка: не удалось найти элемент для добавления.")
+        return  # Выходим из обработчика
 
-            if results:
-                user_results[peer_id] = results
-                user_index[peer_id] = 0
-                show_part(peer_id)
-            else:
-                send(peer_id, "❌ Детали не найдены. Попробуйте другой запрос или номер.")
+    # Если это не кнопка — это поисковый запрос
+    logging.info(f"Начинаем поиск деталей для запроса: '{text}'")
+    results = cache.search_parts(text)
 
-            elif text == "❤️ Добавить в избранное":
-            # Получаем текущий элемент из результатов поиска пользователя
-            index = user_index.get(peer_id, 0)
-            results = user_results.get(peer_id, [])
-            
-            if results and index < len(results):
-                current_item = results[index]
-                # Вызываем функцию добавления в избранное
-                add_to_favorites(peer_id, current_item)
-                # Бот ответит сообщением внутри функции add_to_favorites
-            else:
-                send(peer_id, "Ошибка: не удалось найти элемент для добавления.")
-            return # Выходим из обработчика
+    if results:
+        user_results[peer_id] = results
+        user_index[peer_id] = 0
+        show_part(peer_id)
+    else:
+        send(peer_id, "❌ Детали не найдены. Попробуйте другой запрос или номер.")
 
-        # --- Блок для ДИСКОВ (Wheels) ---
-        elif current_state == "wheels":
-            # Получаем текущие результаты для этого пользователя
-            results = user_results.get(peer_id, [])
+# --- Блок для ДИСКОВ (Wheels) ---
+elif current_state == "wheels":
+    # Получаем текущие результаты для этого пользователя
+    results = user_results.get(peer_id, [])
 
-            # --- 1. СНАЧАЛА ПРОВЕРЯЕМ НАВИГАЦИОННЫЕ КОМАНДЫ ---
-            if text in ["⬅️ Назад", "Назад"]:
-                if results and len(results) > 1:
-                    new_index = (user_index.get(peer_id, 0) - 1) % len(results)
-                    user_index[peer_id] = new_index
-                    show_wheel(peer_id)
-                else:
-                    send(peer_id, "Сначала нужно выполнить поиск. Введите размер диска (например, R18).")
-                return
+    # --- 1. СНАЧАЛА ПРОВЕРЯЕМ НАВИГАЦИОННЫЕ КОМАНДЫ ---
+    if text in ["⬅️ Назад", "Назад"]:
+        if results and len(results) > 1:
+            new_index = (user_index.get(peer_id, 0) - 1) % len(results)
+            user_index[peer_id] = new_index
+            show_wheel(peer_id)
+        else:
+            send(peer_id, "Сначала нужно выполнить поиск. Введите размер диска (например, R18).")
+        return
 
-            elif text in ["➡️ Вперед", "Вперед"]:
-                if results and len(results) > 1:
-                    new_index = (user_index.get(peer_id, 0) + 1) % len(results)
-                    user_index[peer_id] = new_index
-                    show_wheel(peer_id)
-                else:
-                    send(peer_id, "Сначала нужно выполнить поиск. Введите размер диска (например, R18).")
-                return
+    elif text in ["➡️ Вперед", "Вперед"]:
+        if results and len(results) > 1:
+            new_index = (user_index.get(peer_id, 0) + 1) % len(results)
+            user_index[peer_id] = new_index
+            show_wheel(peer_id)
+        else:
+            send(peer_id, "Сначала нужно выполнить поиск. Введите размер диска (например, R18).")
+        return
 
-            elif text in ["🔄 Обновить", "Обновить"]:
-                # Если нажали обновить без поиска, просто просим ввести размер
-                if not results:
-                    send(peer_id, "Сначала нужно выполнить поиск. Введите размер диска (например, R18).")
-                else:
-                    show_wheel(peer_id)
-                return
+    elif text in ["🔄 Обновить", "Обновить"]:
+        # Если нажали обновить без поиска, просто просим ввести размер
+        if not results:
+            send(peer_id, "Сначала нужно выполнить поиск. Введите размер диска (например, R18).")
+        else:
+            show_wheel(peer_id)
+        return
 
-            # --- 2. ЕСЛИ ЭТО НЕ КНОПКА, ЗНАЧИТ ЭТО ПОИСКОВЫЙ ЗАПРОС ---
-            else:
-                logging.info(f"Начинаем поиск дисков для запроса: '{text}'")
-                results = cache.search_wheels(text)
+    elif text == "❤️ Добавить в избранное":
+        # Получаем текущий элемент из результатов поиска пользователя
+        index = user_index.get(peer_id, 0)
+        results = user_results.get(peer_id, [])
 
-                if results:
-                    user_results[peer_id] = results
-                    user_index[peer_id] = 0  # Всегда начинаем с первого элемента при новом поиске
-                    show_wheel(peer_id)
-                else:
-                    send(peer_id, "❌ Диски не найдены. Проверьте введенное число (например, 17 или R18).")
+        if results and index < len(results):
+            current_item = results[index]
+            # Вызываем функцию добавления в избранное
+            add_to_favorites(peer_id, current_item)
+            # Бот ответит сообщением внутри функции add_to_favorites
+        else:
+            send(peer_id, "Ошибка: не удалось найти элемент для добавления.")
+        return  # Выходим из обработчика
 
-            elif text == "❤️ Добавить в избранное":
-            # Получаем текущий элемент из результатов поиска пользователя
-            index = user_index.get(peer_id, 0)
-            results = user_results.get(peer_id, [])
-            
-            if results and index < len(results):
-                current_item = results[index]
-                # Вызываем функцию добавления в избранное
-                add_to_favorites(peer_id, current_item)
-                # Бот ответит сообщением внутри функции add_to_favorites
-            else:
-                send(peer_id, "Ошибка: не удалось найти элемент для добавления.")
-            return # Выходим из обработчика
+    # --- 2. ЕСЛИ ЭТО НЕ КНОПКА, ЗНАЧИТ ЭТО ПОИСКОВЫЙ ЗАПРОС ---
+    else:
+        logging.info(f"Начинаем поиск дисков для запроса: '{text}'")
+        results = cache.search_wheels(text)
+
+        if results:
+            user_results[peer_id] = results
+            user_index[peer_id] = 0  # Всегда начинаем с первого элемента при новом поиске
+            show_wheel(peer_id)
+        else:
+            send(peer_id, "❌ Диски не найдены. Проверьте введенное число (например, 17 или R18).")
 
         # --- Блок для ДОНОРОВ (Donors) ---
         elif current_state == "donors":
