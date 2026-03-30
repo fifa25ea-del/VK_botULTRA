@@ -1093,7 +1093,13 @@ def handle(event):
                 send(peer_id, "Меню сброшено. Чем помочь?", keyboard=get_main_keyboard())
                 return
 
-        return  # Явно завершаем обработку в handle()
+    except Exception as e:
+        logging.error(f"Критическая ошибка: {e}")
+        time.sleep(5)
+        run_bot()
+    finally:
+        # Код, который должен выполниться всегда
+        pass     
                 
 # Запуск бота
 def run_bot():
