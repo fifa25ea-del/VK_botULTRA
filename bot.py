@@ -811,14 +811,25 @@ def show_favorite_card(peer_id):
                     peer_id=peer_id,
                     message=message,
                     attachment=attachment,
-                    keyboard=keyboard.get_keyboard(), // Клавиатура создается прямо здесь
+                    keyboard=keyboard.get_keyboard(), # Клавиатура создается прямо здесь
                     random_id=get_random_id()
                 )
-            except Exception as e:
-                logging.warning(f"Ошибка фото в избранном: {e}. Отправляем текст.")
-                send_safe(peer_id, message, keyboard=keyboard_data)
-        else:
-            send_safe(peer_id, message, keyboard=keyboard_data)
+
+            except requests.exceptions.RequestException as e:
+                # Если фото не загрузилось (ошибка сети), отправляем текст с клавиатурой
+                logging.warning(f"Ошибка загрузки фото (избранное): {e}. Отправляем только текст.")
+                
+                # Создаем клавиатуру для случая без фото
+                keyboard = VkKeyboard(one_time=False)
+                keyboard.add_button("🗑 Удалить", color=VkKeyboardColor.NEGATIVE)
+                keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.NEGATIVE)
+                keyboard.add_line()
+                
+                if total_items > 1:
+                    keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
+                    keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
+
+                send_safe(peer_id, message, keyboard=keyboard.get_keyboard())
 
     except Exception as e:
         logging.error(f"Ошибка показа карточки избранного: {e}")
