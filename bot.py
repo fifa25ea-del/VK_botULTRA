@@ -724,57 +724,43 @@ def show_favorite_card(peer_id):
         results = user_results.get(peer_id, [])
         index = user_index.get(peer_id, 0)
 
-        if not results or index >= len(results) or index < 0:
+        if not results:
             send(peer_id, "Избранное пусто.", keyboard=get_main_keyboard())
-            user_state[peer_id] = None # Выходим из режима просмотра
+            user_state[peer_id] = None
             return
 
         item = results[index]
         total_items = len(results)
         current_position = index + 1
 
-        # --- 1. ФОРМИРУЕМ ТЕКСТ КАРТОЧКИ ---
-        message = "📦 Избранное:\n\n"
+        # Формируем текст карточки
+        name = item.get('Наименование') or item.get('Модель диска') or item.get('Марка') or 'Товар'
+        message = f"📦 {name}\n"
         
-        # Универсальный вывод данных
-        name = item.get('Наименование') or item.get('Модель диска') or item.get('Марка') or 'Товар без названия'
-        price = item.get('Цена', 'Цена не указана')
-        link = item.get('Ссылка')
-        
-        message += f"**{name}**\n"
-        
-        # Добавляем артикул или номер, если есть
         article = item.get('Артикул') or item.get('Номер')
         if article:
             message += f"Артикул: {article}\n"
             
-        message += f"Цена: {price}\n"
-        
-        if link and link != "Не указано" and link != "Нет ссылки":
-            message += f"Ссылка: {link}\n"
-
-        # Добавляем нумерацию (1 из 5)
+        message += f"Цена: {item.get('Цена', 'Не указана')}\n"
+        link = item.get('Ссылка')
+        if link and link not in ["Не указано", "Нет ссылки"]:
+            message += f"Ссылка: {link}"
+            
         message += f"\n📊 {current_position} из {total_items}"
 
-        # --- 2. СОЗДАЕМ КЛАВИАТУРУ ---
+        # Создаем клавиатуру (строго 2 кнопки в первом ряду)
         keyboard = VkKeyboard(one_time=False)
-        
-        # Кнопка удаления (слева)
         keyboard.add_button("🗑 Удалить", color=VkKeyboardColor.NEGATIVE)
-        
-        # Кнопка выхода в главное меню (справа)
-        keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.NEGATIVE)
-        
+        keyboard.add_button("🏠 Меню", color=VkKeyboardColor.NEGATIVE)
         keyboard.add_line()
-        
-        # Навигация (Вперед/Назад)
+
         if total_items > 1:
             keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
             keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
-
+        
         keyboard_data = keyboard.get_keyboard()
 
-        # --- 3. ОТПРАВЛЯЕМ СООБЩЕНИЕ С ФОТО (если есть) ---
+        # Пробуем отправить фото с текстом и клавиатурой одним сообщением
         photo_url = get_first_photo(item.get('Фото', ''))
 
         if photo_url:
@@ -793,44 +779,25 @@ def show_favorite_card(peer_id):
                 )[0]
                 
                 attachment = f"photo{photo_data['owner_id']}_{photo_data['id']}"
-
-                # --- ИСПРАВЛЕНИЕ: Создаем клавиатуру ВНУТРИ блока отправки ---
-                # Это гарантирует, что VK API получит клавиатуру в правильном контексте.
-                keyboard = VkKeyboard(one_time=False)
                 
-                keyboard.add_button("🗑 Удалить", color=VkKeyboardColor.NEGATIVE)
-                keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.NEGATIVE)
-                keyboard.add_line()
-                
-                if total_items > 1:
-                    keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
-                    keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
-
-                # Теперь вызываем send с объектом клавиатуры
                 vk.messages.send(
                     peer_id=peer_id,
                     message=message,
                     attachment=attachment,
-                    keyboard=keyboard.get_keyboard(), # Клавиатура создается прямо здесь
+                    keyboard=keyboard_data,
                     random_id=get_random_id()
                 )
+            except Exception as e:
+                # Если с фото беда, отправляем просто текст с клавиатурой
+                logging.warning(f"Ошибка фото в избранном: {e}. Отправляем текст.")
+                send_safe(peer_id, message, keyboard=keyboard_data)
+        else:
+            # Если фото нет в базе, отправляем текст с клавиатурой
+            send_safe(peer_id, message, keyboard=keyboard_data)
 
-            except requests.exceptions.RequestException as e:
-                # Если фото не загрузилось (ошибка сети), отправляем текст с клавиатурой
-                logging.warning(f"Ошибка загрузки фото (избранное): {e}. Отправляем только текст.")
-                
-                # Создаем клавиатуру для случая без фото
-                keyboard = VkKeyboard(one_time=False)
-                keyboard.add_button("🗑 Удалить", color=VkKeyboardColor.NEGATIVE)
-                keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.NEGATIVE)
-                keyboard.add_line()
-                
-                if total_items > 1:
-                    keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
-                    keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
-
-                send_safe(peer_id, message, keyboard=keyboard.get_keyboard())
-        
+    except Exception as e:
+        logging.error(f"Ошибка в show_favorite_card: {e}")
+        send(peer_id, "Произошла ошибка при отображении избранного.")
 
 # ===== ДОБАВЛЯЕМ ПОИСК ПО КРИТЕРИЯМ =====
 
@@ -863,19 +830,17 @@ def add_to_favorites(peer_id, item):
         send(peer_id, "Уже в избранном!")
 
 def show_favorites(peer_id):
-    """Показывает избранное в режиме просмотра карточек с навигацией."""
+    """Открывает режим просмотра избранного."""
     fav_items = favorites.get(peer_id, [])
     
     if not fav_items:
         send(peer_id, "❤️ Ваше избранное пусто.", keyboard=get_main_keyboard())
         return
 
-    # Сохраняем список избранного и текущую позицию
     user_results[peer_id] = fav_items
-    user_index[peer_id] = 0 # Всегда начинаем с первой позиции
-    user_state[peer_id] = "favorites_view" # Устанавливаем специальный режим
-
-    # Показываем первую карточку
+    user_index[peer_id] = 0
+    user_state[peer_id] = "favorites_view"
+    
     show_favorite_card(peer_id)
 
 
@@ -1076,41 +1041,41 @@ def handle(event):
             results = user_results.get(peer_id, [])
             index = user_index.get(peer_id, 0)
             
-            # --- ОБРАБОТКА КНОПКИ УДАЛЕНИЯ ---
+            # --- КНОПКА УДАЛЕНИЯ ---
             if text == "🗑 Удалить":
                 if results and index < len(results):
-                    # Удаляем элемент из списка в памяти
-                    removed_item = results.pop(index)
+                    # 1. Удаляем из списка в памяти
+                    del results[index]
                     
-                    # Обновляем индекс, если удалили последний элемент
-                    if index >= len(results) and len(results) > 0:
-                        user_index[peer_id] = len(results) - 1
-                    
-                    # Сохраняем изменения в файл
+                    # 2. Сохраняем изменения в файл
                     favorites[peer_id] = results
                     save_json(FAV_FILE, favorites)
                     
-                    send(peer_id, "✅ Товар удален из избранного.")
+                    send(peer_id, "Товар удален из избранного.")
                     
-                    # Если список не пуст, показываем следующую карточку
-                    if len(results) > 0:
-                        show_favorite_card(peer_id)
-                    else:
-                        # Если список пуст, выходим из режима просмотра
-                        send(peer_id, "📦 Избранное очищено.", keyboard=get_main_keyboard())
+                    # 3. Проверяем, не пуст ли список теперь
+                    if len(results) == 0:
+                        send(peer_id, "Избранное очищено.", keyboard=get_main_keyboard())
                         user_state[peer_id] = None
                         user_results.pop(peer_id, None)
-                        user_index.pop(peer_id, None)
+                        return
+
+                    # 4. Показываем следующую карточку (или предыдущую)
+                    # Если удалили последний элемент, index станет за пределами списка
+                    if index >= len(results):
+                        user_index[peer_id] = len(results) - 1
+                    
+                    show_favorite_card(peer_id)
                 return
 
-            # --- ОБРАБОТКА КНОПОК НАВИГАЦИИ ---
+            # --- КНОПКИ НАВИГАЦИИ ---
             elif text in ["⬅️ Назад", "Назад"]:
                 if len(results) > 1:
                     new_index = (index - 1) % len(results)
                     user_index[peer_id] = new_index
                     show_favorite_card(peer_id)
                 else:
-                    send(peer_id, "Это единственный товар в избранном.")
+                    send(peer_id, "В избранном только один товар.")
                 return
 
             elif text in ["➡️ Вперед", "Вперед"]:
@@ -1119,19 +1084,16 @@ def handle(event):
                     user_index[peer_id] = new_index
                     show_favorite_card(peer_id)
                 else:
-                    send(peer_id, "Это единственный товар в избранном.")
+                    send(peer_id, "В избранном только один товар.")
                 return
 
-            elif text in ["🏠 Главное меню", "⬅️ назад", "назад"]:
+            # --- КНОПКА ВЫХОДА ---
+            elif text in ["🏠 Меню", "🏠 Главное меню", "⬅️ назад", "назад"]:
                 user_state[peer_id] = None
                 user_results.pop(peer_id, None)
                 user_index.pop(peer_id, None)
                 send(peer_id, "Меню сброшено. Чем помочь?", keyboard=get_main_keyboard())
                 return
-    
-    except Exception as e:
-        logging.error(f"Неожиданная ошибка в handle(): {e}")
-        send(peer_id, "Произошла внутренняя ошибка. Попробуйте позже или нажмите 'Назад'.")
 # Запуск бота
 # ===== ГЛАВНЫЙ ЦИКЛ =====
 def run_bot():
