@@ -633,7 +633,7 @@ def show_wheel(peer_id):
         send_safe(peer_id, "Произошла критическая ошибка при отображении диска. Обратитесь к администратору.")
         
 def show_donor(peer_id):
-    """Показывает карточку донора с навигацией (без добавления в избранное)."""
+    """Показывает карточку донора с защитой от ошибок."""
     try:
         # Получаем текущие данные пользователя
         index = user_index.get(peer_id, 0)
@@ -644,48 +644,50 @@ def show_donor(peer_id):
             send_safe(peer_id, "Нет результатов поиска для отображения")
             return
 
-        total_items = len(results)  # Объявляем переменную total_items
+        total_items = len(results)
 
-        # Проверяем корректность индекса
-        if index < 0 or index >= total_items:
-            # Если индекс вышел за границы, сбрасываем на первый элемент
-            index = 0
-            user_index[peer_id] = 0
+        # Корректировка индекса для реверсивного порядка (новые первыми)
+        display_index = total_items - 1 - index
+        if display_index < 0 or display_index >= total_items:
+            display_index = 0
+            user_index[peer_id] = total_items - 1
+            index = total_items - 1
 
-        donor = results[index]
-        current_position = index + 1  # Текущая позиция (1-based)
+        donor = results[display_index]
 
-        # Формируем текст карточки
-        message = "🚗 Карточка донора:\n"
+        # ИНИЦИАЛИЗИРУЕМ message_text ДО ИСПОЛЬЗОВАНИЯ
+        message_text = "🚗 Карточка донора:\n"
         message_text += f"Марка: {safe_get(donor, 'Марка')}\n"
         message_text += f"Модель: {safe_get(donor, 'Модель')}\n"
-        message_text += f"Цвет: {safe_get(donor, 'Цвет')}\n"
         message_text += f"Год: {safe_get(donor, 'Год')}\n"
-        message_text += f"Двигатель: {safe_get(donor, 'Двигатель')}\n"
-        message_text += f"VIN: {safe_get(donor, 'VIN')}"
+        message_text += f"Пробег: {safe_get(donor, 'Пробег')}\n"
+        message_text += f"Цена: {safe_get(donor, 'Цена')}\n"
 
         comment = safe_get(donor, 'Комментарий')
         if comment != "Не указано":
-            message += f"Комментарий: {comment}\n"
+            message_text += f"Комментарий: {comment}\n"
 
         link = safe_get(donor, 'Ссылка')
         if link not in ("Не указано", "Нет ссылки"):
-            message += f"Ссылка: {link}\n"
+            message_text += f"Ссылка: {link}\n"
 
         # Добавляем информацию о позиции в результатах
-        message += f"\n📊 {current_position} из {total_items}"
+        current_position = index + 1
+        message_text += f"\n📊 {current_position} из {total_items}"
 
         # Создаём клавиатуру
         keyboard = VkKeyboard(one_time=False)
 
-        # Первая строка: навигация (только если есть несколько элементов)
+        # Первая строка
+        keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.NEGATIVE)
+        keyboard.add_line()
+
+        # Вторая строка — навигация только если есть несколько элементов
         if total_items > 1:
             keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
             keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
             keyboard.add_line()
-
-        # Вторая строка: дополнительные действия
-        keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.NEGATIVE)
+        # Третья строка
         keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
 
         keyboard_data = keyboard.get_keyboard()
@@ -712,16 +714,16 @@ def show_donor(peer_id):
 
                 vk.messages.send(
             peer_id=peer_id,
-            message=message,
+            message=message_text,
             attachment=attachment,
             keyboard=keyboard_data,
             random_id=get_random_id()
         )
             except Exception as e:
                 logging.warning(f"Ошибка загрузки фото (доноры): {e}. Отправляем только текст.")
-                send_safe(peer_id, message, keyboard=keyboard)
+                send_safe(peer_id, message_text, keyboard=keyboard)
         else:
-            send_safe(peer_id, message, keyboard=keyboard)
+            send_safe(peer_id, message_text, keyboard=keyboard)
 
     except Exception as e:
         logging.critical(f"ФАТАЛЬНАЯ ошибка в show_donor для {peer_id}: {e}")
