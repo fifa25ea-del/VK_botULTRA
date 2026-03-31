@@ -178,36 +178,28 @@ def send_photo_with_caption(peer_id, photo_url, caption):
     thread.daemon = True
     thread.start()
 
-def get_first_photo(photos_data):
-    """Получает первую рабочую ссылку на фото из строки или списка."""
-    logging.debug(f"Получены данные фото: {photos_data}")
-
-    if not photos_data:
-        logging.debug("Нет данных фото")
+def get_first_photo(photo_field):
+    """Извлекает первую валидную ссылку на фото из строки с несколькими ссылками"""
+    if not photo_field:
         return None
 
-    # Если это строка — разбиваем на отдельные URL
-    if isinstance(photos_data, str):
-        # Разбиваем по запятым и убираем кодированные пробелы
-        urls = [url.strip().replace('%20', ' ') for url in photos_data.split(',')]
-        for url in urls:
-            if url and url.lower() != 'не указано':
-                # Проверяем доступность URL
-                if is_valid_photo_url(url):
-                    logging.debug(f"Найдено рабочее фото: {url}")
-                    return url
-
-    # Если это список — проверяем каждый элемент
-    elif isinstance(photos_data, list):
-        for photo in photos_data:
-            if photo and isinstance(photo, str) and photo.lower() != 'не указано':
-                if is_valid_photo_url(photo):
-                    logging.debug(f"Найдено рабочее фото в списке: {photo}")
-                    return photo
-
-
-    logging.debug("Фото не найдено или все ссылки битые")
-    return None
+    # Иногда ссылки разделены не просто запятой, а запятой с пробелом или спецсимволами
+    # Разбиваем строку по запятым
+    potential_urls = [url.strip() for url in str(photo_field).split(',')]
+    
+    # Проверяем каждую найденную ссылку
+    for url in potential_urls:
+        # Пропускаем пустые строки
+        if not url:
+            continue
+            
+        # Проверяем, что ссылка начинается на http или https
+        if url.startswith('http://') or url.startswith('https://'):
+            # Иногда ссылки могут содержать закодированные символы (например, %20 вместо пробела)
+            # или быть повреждены. Проверим минимальную длину и наличие точки (домен)
+            if len(url) > 10 and '.' in urlparse(url).netloc:
+                return url
+            
 
 def get_donors_data():
     """Загружает и возвращает данные доноров с кэшированием."""
@@ -773,6 +765,7 @@ def show_donor(peer_id):
         message += f"Номер донора: {safe_get(donor, 'Номер')}\n"
         message += f"Марка: {safe_get(donor, 'Марка')}\n"
         message += f"Модель: {safe_get(donor, 'Модель')}\n"
+        message += f"Кузов: {safe_get(donor, 'Кузов')}\n"
         message += f"Цвет: {safe_get(donor, 'Цвет')}\n"
         message += f"Год: {safe_get(donor, 'Год')}\n"
         message += f"Двигатель: {safe_get(donor, 'Двигатель')}\n"
