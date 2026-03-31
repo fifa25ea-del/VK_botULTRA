@@ -526,7 +526,12 @@ def show_part(peer_id):
         send_safe(peer_id, "Произошла критическая ошибка при отображении детали.")
         
 def show_wheel(peer_id):
-    """Показывает карточку диска с правильной навигацией."""
+    """Показывает карточку диска с защитой от дублирования."""
+    # Пропускаем повторный вызов, если уже инициализируем поиск дисков
+    if peer_id in initializing_wheels:
+        logging.debug(f"Пропуск повторного вызова show_wheel для {peer_id} во время инициализации")
+        return
+
     try:
         index = user_index.get(peer_id, 0)
         results = user_results.get(peer_id, [])
@@ -590,10 +595,12 @@ def show_wheel(peer_id):
         # Отправка сообщения с фото и текстом
         photo_url = get_first_photo(wheel.get('Фото', ''))
 
+
         if photo_url:
             try:
                 response = requests.get(photo_url, timeout=10)
                 response.raise_for_status()
+
 
                 upload_url = vk.photos.getMessagesUploadServer()['upload_url']
                 files = {'photo': ('image.jpg', response.content)}
@@ -607,9 +614,8 @@ def show_wheel(peer_id):
 
                 attachment = f"photo{photo_data['owner_id']}_{photo_data['id']}"
 
-                # ОТПРАВЛЯЕМ ТОЛЬКО ОДИН РАЗ — здесь
                 vk.messages.send(
-                    peer_id=peer_id,
+            peer_id=peer_id,
             message=message,
             attachment=attachment,
             keyboard=keyboard_data,
@@ -617,10 +623,8 @@ def show_wheel(peer_id):
         )
             except Exception as e:
                 logging.warning(f"Ошибка загрузки фото (диски): {e}. Отправляем только текст.")
-                # И ТОЛЬКО ЗДЕСЬ — если фото не загрузилось
                 send_safe(peer_id, message, keyboard=keyboard)
         else:
-            # Если фото нет — отправляем только текст
             send_safe(peer_id, message, keyboard=keyboard)
 
 
