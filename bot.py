@@ -171,15 +171,24 @@ def get_first_photo(photo_field):
 # ===== ОТПРАВКА СООБЩЕНИЙ =====
 def send_safe(peer_id, text, keyboard=None):
     try:
+        # Валидация клавиатуры
+        if keyboard and isinstance(keyboard, VkKeyboard):
+            keyboard_data = keyboard.get_keyboard()
+        elif keyboard is None:
+            keyboard_data = None
+        else:
+            # Если передали что‑то не то — используем главную клавиатуру
+            logging.warning("Некорректный тип клавиатуры. Используем главную.")
+            keyboard_data = get_main_keyboard()
+
         vk.messages.send(
             peer_id=peer_id,
             message=text,
             random_id=get_random_id(),
-            keyboard=keyboard.get_keyboard() if keyboard else get_main_keyboard()
+            keyboard=keyboard_data
         )
     except Exception as e:
         logging.error(f"Ошибка отправки сообщения для {peer_id}: {e}")
-        # Не пытаемся отправить ещё одно сообщение — это может привести к зацикливанию
 
 def send(peer_id, text, keyboard=None):
     try:
@@ -731,36 +740,31 @@ def show_favorite_card(peer_id):
         # Формируем текст карточки
         name = item.get('Наименование') or item.get('Модель диска') or item.get('Марка') or 'Товар'
         message = f"📦 {name}\n"
-        
+
         article = item.get('Артикул') or item.get('Номер')
         if article:
             message += f"Артикул: {article}\n"
-            
         message += f"Цена: {item.get('Цена', 'Не указана')}\n"
         link = item.get('Ссылка')
         if link and link not in ["Не указано", "Нет ссылки"]:
-            message += f"Ссылка: {link}"
-            
+            message += f"Ссылка: {link}\n"
         message += f"\n📊 {current_position} из {total_items}"
 
-        # Создаём клавиатуру
+        # Создаём клавиатуру с соблюдением лимитов VK
         keyboard = VkKeyboard(one_time=False)
-                
-        # Первая строка: только 2 кнопки
+
+        # Первая строка: 2 кнопки
         keyboard.add_button("🗑 Удалить", color=VkKeyboardColor.NEGATIVE)
         keyboard.add_button("🏠 Меню", color=VkKeyboardColor.NEGATIVE)
         keyboard.add_line()  # Переход на новую строку
-        
-        # Вторая строка для навигации
+
+        # Вторая строка: навигация (только если есть несколько элементов)
         if total_items > 1:
             keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
-            keyboard.add_line()  # Новая строка
             keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
-            keyboard.add_line()  # Добавляем новую строку после навигации
-        else:
-            keyboard.add_line()  # Если нет навигации, добавляем пустую строку
-        
-        # Третья строка (если есть место)
+            keyboard.add_line()  # Новая строка
+
+        # Третья строка: кнопка обновления
         keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
 
         keyboard_data = keyboard.get_keyboard()
@@ -779,29 +783,29 @@ def show_favorite_card(peer_id):
 
                 photo_data = vk.photos.saveMessagesPhoto(
                     server=upload_data['server'],
-                    photo=upload_data['photo'],
-                    hash=upload_data['hash']
-                )[0]
-                
+            photo=upload_data['photo'],
+            hash=upload_data['hash']
+        )[0]
+
                 attachment = f"photo{photo_data['owner_id']}_{photo_data['id']}"
-                
+
                 vk.messages.send(
                     peer_id=peer_id,
-                    message=message,
-                    attachment=attachment,
-                    keyboard=keyboard_data,
-                    random_id=get_random_id()
-                )
+            message=message,
+            attachment=attachment,
+            keyboard=keyboard_data,
+            random_id=get_random_id()
+        )
             except Exception as e:
                 logging.warning(f"Ошибка фото в избранном: {e}. Отправляем текст.")
-                send_safe(peer_id, message, keyboard=keyboard_data)
+                send_safe(peer_id, message, keyboard=keyboard)  # Передаём объект клавиатуры, а не JSON
         else:
-            send_safe(peer_id, message, keyboard=keyboard_data)
-            
+            send_safe(peer_id, message, keyboard=keyboard)  # Аналогично — объект клавиатуры
+
     except Exception as e:
         logging.error(f"Критическая ошибка в show_favorite_card: {e}")
         send(peer_id, "Произошла ошибка при отображении избранного.")
-
+        
 # ===== ДОБАВЛЯЕМ ПОИСК ПО КРИТЕРИЯМ =====
 
 def find_part(query):
@@ -1106,33 +1110,56 @@ def handle(event):
 
         elif current_state == "favorites_view":
             results = user_results.get(peer_id, [])
-            index = user_index.get(peer_id, 0)
-            
-            # --- КНОПКА УДАЛЕНИЯ ---
-            if text == "🗑 Удалить":
-                if results and index < len(results):
-                    # 1. Удаляем из списка в памяти
-                    del results[index]
-                    
-                    # 2. Сохраняем изменения в файл
-                    favorites[peer_id] = results
-                    save_json(FAV_FILE, favorites)
-                    
-                    send(peer_id, "Товар удален из избранного.")
-                    
-                    # 3. Проверяем, не пуст ли список теперь
-                    if len(results) == 0:
-                        send(peer_id, "Избранное очищено.", keyboard=get_main_keyboard())
-                        user_state[peer_id] = None
-                        user_results.pop(peer_id, None)
-                        return
-
-                    # 4. Показываем следующую карточку (или предыдущую)
-                    # Если удалили последний элемент, index станет за пределами списка
-                    if index >= len(results):
-                        user_index[peer_id] = len(results) - 1
-                    
-                    show_favorite_card(peer_id)
+            total_items = len(results)
+        
+            if text in ["⬅️ Назад", "Назад"]:
+                if total_items <= 1:
+                    send(peer_id, "Только один элемент в избранном.")
+                    return
+                current_index = user_index.get(peer_id, 0)
+                new_index = (current_index - 1) % total_items
+                user_index[peer_id] = new_index
+                show_favorite_card(peer_id)
+                return
+        
+            elif text in ["➡️ Вперед", "Вперед"]:
+                if total_items <= 1:
+                    send(peer_id, "Только один элемент в избранном.")
+                    return
+                current_index = user_index.get(peer_id, 0)
+                new_index = (current_index + 1) % total_items
+                user_index[peer_id] = new_index
+                show_favorite_card(peer_id)
+                return
+        
+            elif text == "🗑 Удалить":
+                if results:
+                    current_item = results[user_index.get(peer_id, 0)]
+                    # Удаляем из избранного
+                    if peer_id in favorites and current_item in favorites[peer_id]:
+                        favorites[peer_id].remove(current_item)
+                        save_json(FAV_FILE, favorites)
+                        # Обновляем результаты
+                        user_results[peer_id] = favorites.get(peer_id, [])
+                        if not user_results[peer_id]:  # Если избранное стало пустым
+                            user_state[peer_id] = None
+                            send(peer_id, "Избранное очищено.", keyboard=get_main_keyboard())
+                            return
+                        # Корректируем индекс, если удалили текущий элемент
+                        if user_index[peer_id] >= len(user_results[peer_id]):
+                            user_index[peer_id] = len(user_results[peer_id]) - 1
+                        show_favorite_card(peer_id)
+                    else:
+                        send(peer_id, "Элемент уже удалён или не найден.")
+                return
+        
+            elif text in ["🔄 Обновить", "Обновить"]:
+                show_favorite_card(peer_id)
+                return
+        
+            elif text in ["🏠 Меню", "Главное меню"]:
+                user_state[peer_id] = None
+                send(peer_id, "Главное меню:", keyboard=get_main_keyboard())
                 return
 
             # --- КНОПКИ НАВИГАЦИИ ---
