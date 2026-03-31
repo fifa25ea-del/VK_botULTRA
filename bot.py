@@ -29,6 +29,7 @@ def get_latest_donors(data, limit=15):
     # Переворачиваем, чтобы новые были в начале
     return latest[::-1]
 
+
 def load_donors_csv(url, max_retries=3, timeout=30):
     """Загружает CSV с повторными попытками и увеличенным таймаутом."""
     for attempt in range(max_retries):
@@ -66,6 +67,10 @@ user_state = {}  # Хранит текущее состояние пользов
 user_results = {}  # Хранит результаты поиска для пользователя
 user_index = {}  # Хранит текущий индекс в результатах поиска
 initializing_wheels = set()  # Множество peer_id, которые сейчас инициализируют поиск дисков
+_donors_cache = None
+_last_cache_update = 0
+_CACHE_TTL = 300  # Время жизни кэша — 5 минут
+
 
 # ===== ИНИЦИАЛИЗАЦИЯ ФАЙЛОВ =====
 def init_files():
@@ -196,6 +201,36 @@ def get_first_photo(photo_field):
             
     return None
 
+def get_donors_data():
+    """Загружает и возвращает данные доноров с кэшированием."""
+    global _donors_cache, _last_cache_update
+
+    current_time = time.time()
+
+    # Проверяем, нужно ли обновлять кэш
+    if (_donors_cache is None or
+        current_time - _last_cache_update > _CACHE_TTL):
+
+        logging.info("Обновляем кэш данных доноров")
+        try:
+            url = "https://baz-on.ru/export/c592/5c6ca/stuttgart-site-carsrc.csv"
+            response = requests.get(url, timeout=30)
+            response.raise_for_status()
+
+            # Парсим CSV
+            csv_reader = csv.DictReader(StringIO(response.text))
+            _donors_cache = list(csv_reader)
+            _last_cache_update = current_time
+
+            logging.info(f"Кэш обновлён: {len(_donors_cache)} доноров")
+
+        except Exception as e:
+            logging.error(f"Не удалось обновить кэш: {e}")
+            if _donors_cache is None:  # Если кэш пустой и загрузка не удалась
+                return []
+
+    return _donors_cache
+    
 # ===== ОТПРАВКА СООБЩЕНИЙ =====
 def send_safe(peer_id, text, keyboard=None):
     try:
@@ -687,11 +722,18 @@ def show_wheel(peer_id):
         send_safe(peer_id, "Произошла критическая ошибка при отображении диска. Обратитесь к администратору.")
         
 def show_donor(peer_id):
+    """Показывает карточку донора с обработкой ошибок загрузки."""
     try:
-        # Получаем данные доноров
+        # Получаем данные с кэшированием
         all_donors = get_donors_data()
-        # Берём 15 самых новых (новые — первые)
-        latest_donors = get_latest_donors(all_donors, 15)
+
+        if not all_donors:
+            send_safe(peer_id, "Не удалось загрузить список доноров. Попробуйте позже.")
+            return
+
+        # Берём 15 самых новых (предполагаем, что новые добавляются в конец)
+        latest_donors = all_donors[-15:][::-1]  # Последние 15, порядок — новые первыми
+
 
         # Сохраняем в кэш пользователя
         user_results[peer_id] = latest_donors
