@@ -607,6 +607,7 @@ def show_wheel(peer_id):
 
                 attachment = f"photo{photo_data['owner_id']}_{photo_data['id']}"
 
+                # ОТПРАВЛЯЕМ ТОЛЬКО ОДИН РАЗ — здесь
                 vk.messages.send(
                     peer_id=peer_id,
             message=message,
@@ -616,9 +617,12 @@ def show_wheel(peer_id):
         )
             except Exception as e:
                 logging.warning(f"Ошибка загрузки фото (диски): {e}. Отправляем только текст.")
-                send_safe(peer_id, message, keyboard=keyboard_data)
+                # И ТОЛЬКО ЗДЕСЬ — если фото не загрузилось
+                send_safe(peer_id, message, keyboard=keyboard)
         else:
-            send_safe(peer_id, message, keyboard=keyboard_data)
+            # Если фото нет — отправляем только текст
+            send_safe(peer_id, message, keyboard=keyboard)
+
 
     except Exception as e:
         logging.critical(f"ФАТАЛЬНАЯ ошибка в show_wheel для {peer_id}: {e}")
