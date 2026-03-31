@@ -14,6 +14,7 @@ from vk_api.bot_longpoll import VkBotLongPoll, VkBotEventType
 import logging
 from urllib.parse import urlparse
 import random
+from io import StringIO
 
 def get_random_id():
     """Генерирует случайный ID для VK API (от 0 до 2^31−1)"""
@@ -401,28 +402,44 @@ class DataCache:
     last_cache_update = 0
     CACHE_TTL = 300  # Время жизни кэша — 5 минут
     
-    def get_donors_data(url):
-        """Получает данные доноров с кэшированием."""
-        global donors_cache, last_cache_update
+    def get_donors_data():
+    """Загружает и возвращает данные доноров с кэшированием."""
+    global _donors_cache, _last_cache_update
+
+    current_time = time.time()
+
+    # Проверяем, нужно ли обновлять кэш
+    if (_donors_cache is None or
+        current_time - _last_cache_update > _CACHE_TTL):
+
+        logging.info("Обновляем кэш данных доноров")
+        try:
+            url = "https://baz-on.ru/export/c592/5c6ca/stuttgart-site-carsrc.csv"
+            response = requests.get(url, timeout=30)
+            response.raise_for_status()
+
+            # Парсим CSV с использованием StringIO
+            csv_reader = csv.DictReader(StringIO(response.text))
+            _donors_cache = list(csv_reader)
+            _last_cache_update = current_time
+
+            logging.info(f"Кэш обновлён: {len(_donors_cache)} доноров")
+
+        except requests.exceptions.Timeout:
+            logging.error("Таймаут при загрузке CSV")
+            if _donors_cache is None:
+                return []
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Ошибка загрузки CSV: {e}")
+            if _donors_cache is None:
+                return []
+        except Exception as e:
+            logging.error(f"Неожиданная ошибка при парсинге CSV: {e}")
+            if _donors_cache is None:
+                return []
+
+    return _donors_cache
     
-        current_time = time.time()
-    
-        # Проверяем, нужно ли обновлять кэш
-        if (donors_cache is None or
-            current_time - last_cache_update > CACHE_TTL):
-    
-            logging.info("Обновляем кэш данных доноров")
-            try:
-                csv_data = load_donors_csv(url)
-                donors_cache = parse_csv_to_list(csv_data)  # Ваша функция парсинга CSV
-                last_cache_update = current_time
-                logging.info("Кэш данных доноров успешно обновлён")
-            except Exception as e:
-                logging.error(f"Не удалось обновить кэш: {e}")
-                if donors_cache is None:
-                    raise
-    
-        return donors_cache
 # Создаем экземпляр кэша
 cache = DataCache()
 
