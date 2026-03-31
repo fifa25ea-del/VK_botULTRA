@@ -67,6 +67,7 @@ STATS_FILE = "stats.json"
 user_state = {}  # Хранит текущее состояние пользователя
 user_results = {}  # Хранит результаты поиска для пользователя
 user_index = {}  # Хранит текущий индекс в результатах поиска
+user_mode = {}  # peer_id → 'wheel', 'part' или None
 initializing_wheels = set()  # Множество peer_id, которые сейчас инициализируют поиск дисков
 _donors_cache = None
 _last_cache_update = 0
@@ -515,6 +516,15 @@ def show_wheel_info(peer_id, wheel):
     except Exception as e:
         logging.error(f"Ошибка при отображении информации о диске: {e}")
         send(peer_id, "Произошла ошибка при получении информации о диске")
+
+def enter_wheel_mode(peer_id):
+    user_mode[peer_id] = 'wheel'
+    show_wheel_item(peer_id, 0)  # показываем первый элемент
+
+
+def enter_part_mode(peer_id):
+    user_mode[peer_id] = 'part'
+    show_part_item(peer_id, 0)  # показываем первый элемент
 
 def show_part(peer_id):
     """Показывает карточку детали ОДНИМ сообщением (текст + фото + клавиатура)."""
@@ -1317,7 +1327,61 @@ def handle(event):
     finally:
         # Код, который должен выполниться всегда
         pass     
-                
+
+def handle_navigation(peer_id, direction):
+    """Обрабатывает навигацию с учётом текущего режима."""
+    mode = user_mode.get(peer_id)
+
+    if mode == 'wheel':
+        handle_wheel_navigation(peer_id, direction)
+    elif mode == 'part':
+        handle_part_navigation(peer_id, direction)
+    else:
+        # Если режим не определён — возвращаем в меню
+        show_main_menu(peer_id)
+
+def handle_wheel_navigation(peer_id, direction):
+    current_index = user_index.get(peer_id, 0)
+    wheel_items = user_results.get(peer_id, [])
+
+    if not wheel_items:
+        send_safe(peer_id, "Нет элементов для отображения")
+        return
+
+    total_items = len(wheel_items)
+
+    # Обновляем индекс в зависимости от направления
+    if direction == 'back':
+        new_index = max(0, current_index - 1)
+    elif direction == 'forward':
+        new_index = min(total_items - 1, current_index + 1)
+    else:
+        new_index = current_index
+
+    user_index[peer_id] = new_index
+    show_wheel_item(peer_id, new_index)
+
+def handle_part_navigation(peer_id, direction):
+    current_index = user_index.get(peer_id, 0)
+    part_items = user_results.get(peer_id, [])
+
+    if not part_items:
+        send_safe(peer_id, "Нет элементов для отображения")
+        return
+
+    total_items = len(part_items)
+
+    # Обновляем индекс
+    if direction == 'back':
+        new_index = max(0, current_index - 1)
+    elif direction == 'forward':
+        new_index = min(total_items - 1, current_index + 1)
+    else:
+        new_index = current_index
+
+    user_index[peer_id] = new_index
+    show_part_item(peer_id, new_index)
+        
 # Запуск бота
 def run_bot():
     print("🔥 VK BOT ULTRA ЗАПУЩЕН")
