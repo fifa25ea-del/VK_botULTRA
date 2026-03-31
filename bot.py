@@ -953,60 +953,111 @@ def handle(event):
                 send(peer_id, "❌ Детали не найдены. Попробуйте другой запрос или номер.")
         
         # --- БЛОК ДЛЯ ДИСКОВ (Wheels) ---
+
         elif current_state == "wheels":
-    results = user_results.get(peer_id, [])
-    total_items = len(results)
-
-    if text in ["⬅️ Назад", "Назад"]:
-        if total_items <= 1:
-            send(peer_id, "Только один результат. Введите новый запрос для поиска.")
-            return
-
-        current_index = user_index.get(peer_id, 0)
-        new_index = (current_index - 1) % total_items
-        user_index[peer_id] = new_index
-        show_wheel(peer_id)
-        return
-
-    elif text in ["➡️ Вперед", "Вперед"]:
-        if total_items <= 1:
-            send(peer_id, "Только один результат. Введите новый запрос для поиска.")
-            return
-
-        current_index = user_index.get(peer_id, 0)
-        new_index = (current_index + 1) % total_items
-        user_index[peer_id] = new_index
-        show_wheel(peer_id)
-        return
-
-    elif text == "❤️ Добавить в избранное":
-        index = user_index.get(peer_id, 0)
-        if results and index < len(results):
-            current_item = results[index]
-            add_to_favorites(peer_id, current_item)
-        else:
-            send(peer_id, "Ошибка: не удалось найти элемент для добавления.")
-        return
-
-    elif text in ["🔄 Обновить", "Обновить"]:
-        if user_results.get(peer_id):
-            show_wheel(peer_id)
-        else:
-            send(peer_id, "Сначала нужно выполнить поиск. Введите размер диска (например, R18).")
-        return
-
-    else:
-        # Поисковый запрос
-        logging.info(f"Начинаем поиск дисков для запроса: '{text}'")
-        results = cache.search_wheels(text)
-
-        if results:
-            user_results[peer_id] = results
-            user_index[peer_id] = 0
-            show_wheel(peer_id)
-        else:
-            send(peer_id, "❌ Диски не найдены. Проверьте введенное число (например, 17 или R18).")
+            results = user_results.get(peer_id, [])
+            total_items = len(results)
         
+            if text in ["⬅️ Назад", "Назад"]:
+                if total_items <= 1:
+                    send(peer_id, "Только один результат. Введите новый запрос для поиска.")
+                    return
+        
+                current_index = user_index.get(peer_id, 0)
+                new_index = (current_index - 1) % total_items
+                user_index[peer_id] = new_index
+                show_wheel(peer_id)
+                return
+        
+            elif text in ["➡️ Вперед", "Вперед"]:
+                if total_items <= 1:
+                    send(peer_id, "Только один результат. Введите новый запрос для поиска.")
+                    return
+        
+                current_index = user_index.get(peer_id, 0)
+                new_index = (current_index + 1) % total_items
+                user_index[peer_id] = new_index
+                show_wheel(peer_id)
+                return
+        
+            elif text == "❤️ Добавить в избранное":
+                index = user_index.get(peer_id, 0)
+                if results and index < len(results):
+                    current_item = results[index]
+                    add_to_favorites(peer_id, current_item)
+                else:
+                    send(peer_id, "Ошибка: не удалось найти элемент для добавления.")
+                return
+        
+            elif text in ["🔄 Обновить", "Обновить"]:
+                if user_results.get(peer_id):
+                    show_wheel(peer_id)
+                else:
+                    send(peer_id, "Сначала нужно выполнить поиск. Введите размер диска (например, R18).")
+                return
+        
+            else:
+                # Поисковый запрос
+                logging.info(f"Начинаем поиск дисков для запроса: '{text}'")
+                results = cache.search_wheels(text)
+        
+                if results:
+                    user_results[peer_id] = results
+                    user_index[peer_id] = 0
+                    show_wheel(peer_id)
+                else:
+                    send(peer_id, "❌ Диски не найдены. Проверьте введенное число (например, 17 или R18).")
+        
+            if text in ["⬅️ Назад", "Назад"]:
+                if total_items <= 1:
+                    send(peer_id, "Только один результат. Введите новый запрос для поиска.")
+                    return
+        
+                current_index = user_index.get(peer_id, 0)
+                new_index = (current_index - 1) % total_items
+                user_index[peer_id] = new_index
+                show_wheel(peer_id)
+                return
+        
+            elif text in ["➡️ Вперед", "Вперед"]:
+                if total_items <= 1:
+                    send(peer_id, "Только один результат. Введите новый запрос для поиска.")
+                    return
+        
+                current_index = user_index.get(peer_id, 0)
+                new_index = (current_index + 1) % total_items
+                user_index[peer_id] = new_index
+                show_wheel(peer_id)
+                return
+        
+            elif text == "❤️ Добавить в избранное":
+                index = user_index.get(peer_id, 0)
+                if results and index < len(results):
+                    current_item = results[index]
+                    add_to_favorites(peer_id, current_item)
+                else:
+                    send(peer_id, "Ошибка: не удалось найти элемент для добавления.")
+                return
+        
+            elif text in ["🔄 Обновить", "Обновить"]:
+                if user_results.get(peer_id):
+                    show_wheel(peer_id)
+                else:
+                    send(peer_id, "Сначала нужно выполнить поиск. Введите размер диска (например, R18).")
+                return
+        
+            else:
+                # Поисковый запрос
+                logging.info(f"Начинаем поиск дисков для запроса: '{text}'")
+                results = cache.search_wheels(text)
+        
+                if results:
+                    user_results[peer_id] = results
+                    user_index[peer_id] = 0
+                    show_wheel(peer_id)
+                else:
+                    send(peer_id, "❌ Диски не найдены. Проверьте введенное число (например, 17 или R18).")
+
         # --- БЛОК ДЛЯ ДОНОРОВ (Donors) ---
         elif current_state == "donors":
              # В этом режиме мы либо листаем список последних доноров,
