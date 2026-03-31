@@ -22,6 +22,13 @@ def get_random_id():
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
+def get_latest_donors(data, limit=15):
+    """Возвращает последние N доноров, новые — первыми."""
+    # Берём последние N элементов
+    latest = data[-limit:]
+    # Переворачиваем, чтобы новые были в начале
+    return latest[::-1]
+
 def load_donors_csv(url, max_retries=3, timeout=30):
     """Загружает CSV с повторными попытками и увеличенным таймаутом."""
     for attempt in range(max_retries):
@@ -680,27 +687,29 @@ def show_wheel(peer_id):
         send_safe(peer_id, "Произошла критическая ошибка при отображении диска. Обратитесь к администратору.")
         
 def show_donor(peer_id):
-    """Показывает карточку донора с защитой от ошибок."""
     try:
-        # Получаем текущие данные пользователя
-        index = user_index.get(peer_id, 0)
-        results = user_results.get(peer_id, [])
+        # Получаем данные доноров
+        all_donors = get_donors_data()
+        # Берём 15 самых новых (новые — первые)
+        latest_donors = get_latest_donors(all_donors, 15)
 
-        # Проверяем, есть ли результаты поиска
-        if not results:
-            send_safe(peer_id, "Нет результатов поиска для отображения")
+        # Сохраняем в кэш пользователя
+        user_results[peer_id] = latest_donors
+        total_items = len(latest_donors)
+
+        if total_items == 0:
+            send_safe(peer_id, "Нет данных о донорах.")
             return
 
-        total_items = len(results)
+        # Текущий индекс пользователя
+        current_index = user_index.get(peer_id, 0)
 
-        # Корректировка индекса для реверсивного порядка (новые первыми)
-        display_index = total_items - 1 - index
-        if display_index < 0 or display_index >= total_items:
-            display_index = 0
-            user_index[peer_id] = total_items - 1
-            index = total_items - 1
+        # Ограничиваем индекс допустимыми значениями
+        if current_index >= total_items:
+            current_index = total_items - 1
+            user_index[peer_id] = current_index
 
-        donor = results[display_index]
+        donor = latest_donors[current_index]
 
         # ИНИЦИАЛИЗИРУЕМ message_text ДО ИСПОЛЬЗОВАНИЯ
         message_text = "🚗 Карточка донора:\n"
@@ -721,9 +730,9 @@ def show_donor(peer_id):
         if link not in ("Не указано", "Нет ссылки"):
             message_text += f"Ссылка: {link}\n"
 
-        # Добавляем информацию о позиции в результатах
-        current_position = index + 1
-        message_text += f"\n📊 {current_position} из {total_items}"
+        # Позиция: номер + 1 (индексация с 0)
+        position = current_index + 1
+        message_text += f"\n📊 {position} из {total_items}"
 
         # Создаём клавиатуру
         keyboard = VkKeyboard(one_time=False)
@@ -732,12 +741,18 @@ def show_donor(peer_id):
         keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.NEGATIVE)
         keyboard.add_line()
 
-        # Вторая строка — навигация только если есть несколько элементов
+        # Вторая строка
+        keyboard.add_button("❤️ Добавить в избранное", color=VkKeyboardColor.POSITIVE)
+        keyboard.add_line()
+
+        # Третья строка — навигация, если есть несколько элементов
         if total_items > 1:
             keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
             keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
             keyboard.add_line()
-        # Третья строка
+
+
+        # Четвёртая строка
         keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
 
         keyboard_data = keyboard.get_keyboard()
@@ -774,6 +789,7 @@ def show_donor(peer_id):
                 send_safe(peer_id, message_text, keyboard=keyboard)
         else:
             send_safe(peer_id, message_text, keyboard=keyboard)
+
 
     except Exception as e:
         logging.critical(f"ФАТАЛЬНАЯ ошибка в show_donor для {peer_id}: {e}")
