@@ -85,12 +85,12 @@ def get_main_keyboard():
     keyboard.add_line()
     
     # Вторая строка
-    keyboard.add_button("👨‍💻 Менеджер", color=VkKeyboardColor.SECONDARY)
+    keyboard.add_button("👨‍💻 Менеджер", color=VkKeyboardColor.POSITIVE)
     keyboard.add_button("❤️ Избранное", color=VkKeyboardColor.POSITIVE)
     keyboard.add_line()
     
     # Третья строка
-    keyboard.add_button("🚘 Доноры", color=VkKeyboardColor.NEGATIVE)
+    keyboard.add_button("🚘 Доноры", color=VkKeyboardColor.SECONDARY)
     keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.NEGATIVE)
 
     return keyboard.get_keyboard()
