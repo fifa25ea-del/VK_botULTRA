@@ -85,7 +85,7 @@ def get_main_keyboard():
     keyboard.add_line()
     
     # Вторая строка
-    keyboard.add_button("👨‍💻 Менеджер", color=VkKeyboardColor.POSITIVE)
+    keyboard.add_button("👨‍💻 Менеджер", color=VkKeyboardColor.SECONDARY)
     keyboard.add_button("❤️ Избранное", color=VkKeyboardColor.POSITIVE)
     keyboard.add_line()
     
