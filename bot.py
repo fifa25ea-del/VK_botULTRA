@@ -178,28 +178,31 @@ def send_photo_with_caption(peer_id, photo_url, caption):
     thread.daemon = True
     thread.start()
 
-def get_first_photo(photo_field):
-    """Извлекает первую валидную ссылку на фото из строки с несколькими ссылками"""
-    if not photo_field:
+def get_first_photo(photos_data):
+    """Получает первую ссылку на фото с отладкой."""
+    logging.debug(f"Получены данные фото: {photos_data}")
+
+    if not photos_data:
+        logging.debug("Нет данных фото")
         return None
 
-    # Иногда ссылки разделены не просто запятой, а запятой с пробелом или спецсимволами
-    # Разбиваем строку по запятым
-    potential_urls = [url.strip() for url in str(photo_field).split(',')]
-    
-    # Проверяем каждую найденную ссылку
-    for url in potential_urls:
-        # Пропускаем пустые строки
-        if not url:
-            continue
-            
-        # Проверяем, что ссылка начинается на http или https
-        if url.startswith('http://') or url.startswith('https://'):
-            # Иногда ссылки могут содержать закодированные символы (например, %20 вместо пробела)
-            # или быть повреждены. Проверим минимальную длину и наличие точки (домен)
-            if len(url) > 10 and '.' in urlparse(url).netloc:
-                return url
-            
+
+    # Если это строка (одна ссылка)
+    if isinstance(photos_data, str):
+        photo_url = photos_data.strip()
+        if photo_url and photo_url.lower() != 'не указано':
+            logging.debug(f"Использована прямая ссылка: {photo_url}")
+            return photo_url
+
+    # Если это список
+    elif isinstance(photos_data, list):
+        for photo in photos_data:
+            if photo and isinstance(photo, str) and photo.lower() != 'не указано':
+                logging.debug(f"Найдено фото в списке: {photo}")
+                return photo
+
+
+    logging.debug("Фото не найдено")
     return None
 
 def get_donors_data():
@@ -739,79 +742,60 @@ def show_wheel(peer_id):
         send_safe(peer_id, "Произошла критическая ошибка при отображении диска. Обратитесь к администратору.")
         
 def show_donor(peer_id):
-    """Показывает карточку донора с обработкой ошибок загрузки."""
+    """Показывает карточку донора с навигацией (без добавления в избранное)."""
     try:
-        # Получаем данные с кэшированием
-        all_donors = get_donors_data()
+        # Получаем текущие данные пользователя
+        index = user_index.get(peer_id, 0)
+        results = user_results.get(peer_id, [])
 
-        if not all_donors:
-            send_safe(peer_id, "Не удалось загрузить список доноров. Попробуйте позже.")
+        # Проверяем, есть ли результаты поиска
+        if not results:
+            send_safe(peer_id, "Нет результатов поиска для отображения")
             return
 
-        # Берём 15 самых новых (предполагаем, что новые добавляются в конец)
-        latest_donors = all_donors[-15:][::-1]  # Последние 15, порядок — новые первыми
+        total_items = len(results)  # Объявляем переменную total_items
 
+        # Проверяем корректность индекса
+        if index < 0 or index >= total_items:
+            # Если индекс вышел за границы, сбрасываем на первый элемент
+            index = 0
+            user_index[peer_id] = 0
 
-        # Сохраняем в кэш пользователя
-        user_results[peer_id] = latest_donors
-        total_items = len(latest_donors)
+        donor = results[index]
+        current_position = index + 1  # Текущая позиция (1-based)
 
-        if total_items == 0:
-            send_safe(peer_id, "Нет данных о донорах.")
-            return
-
-        # Текущий индекс пользователя
-        current_index = user_index.get(peer_id, 0)
-
-        # Ограничиваем индекс допустимыми значениями
-        if current_index >= total_items:
-            current_index = total_items - 1
-            user_index[peer_id] = current_index
-
-        donor = latest_donors[current_index]
-
-        # ИНИЦИАЛИЗИРУЕМ message_text ДО ИСПОЛЬЗОВАНИЯ
-        message_text = "🚗 Карточка донора:\n"
-        message_text += f"Номер донора: {safe_get(donor, 'Номер')}\n"
-        message_text += f"Марка: {safe_get(donor, 'Марка')}\n"
-        message_text += f"Модель: {safe_get(donor, 'Модель')}\n"
-        message_text += f"Цвет: {safe_get(donor, 'Цвет')}\n"
-        message_text += f"Год: {safe_get(donor, 'Год')}\n"
-        message_text += f"Пробег: {safe_get(donor, 'Пробег')}\n"
-        message_text += f"VIN: {safe_get(donor, 'VIN')}\n"
-        
+        # Формируем текст карточки
+        message = "🚗 Карточка донора:\n"
+        message += f"Номер донора: {safe_get(donor, 'Номер')}\n"
+        message += f"Марка: {safe_get(donor, 'Марка')}\n"
+        message += f"Модель: {safe_get(donor, 'Модель')}\n"
+        message += f"Цвет: {safe_get(donor, 'Цвет')}\n"
+        message += f"Год: {safe_get(donor, 'Год')}\n"
+        message += f"Двигатель: {safe_get(donor, 'Двигатель')}\n"
+        message += f"VIN: {safe_get(donor, 'VIN')}\n"
 
         comment = safe_get(donor, 'Комментарий')
         if comment != "Не указано":
-            message_text += f"Комментарий: {comment}\n"
+            message += f"Комментарий: {comment}\n"
 
         link = safe_get(donor, 'Ссылка')
         if link not in ("Не указано", "Нет ссылки"):
-            message_text += f"Ссылка: {link}\n"
+            message += f"Ссылка: {link}\n"
 
-        # Позиция: номер + 1 (индексация с 0)
-        position = current_index + 1
-        message_text += f"\n📊 {position} из {total_items}"
+        # Добавляем информацию о позиции в результатах
+        message += f"\n📊 {current_position} из {total_items}"
 
         # Создаём клавиатуру
         keyboard = VkKeyboard(one_time=False)
 
-        # Первая строка
-        keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.NEGATIVE)
-        keyboard.add_line()
-
-        # Вторая строка
-        keyboard.add_button("❤️ Добавить в избранное", color=VkKeyboardColor.POSITIVE)
-        keyboard.add_line()
-
-        # Третья строка — навигация, если есть несколько элементов
+        # Первая строка: навигация (только если есть несколько элементов)
         if total_items > 1:
             keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
             keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
             keyboard.add_line()
 
-
-        # Четвёртая строка
+        # Вторая строка: дополнительные действия
+        keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.NEGATIVE)
         keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
 
         keyboard_data = keyboard.get_keyboard()
@@ -838,17 +822,16 @@ def show_donor(peer_id):
 
                 vk.messages.send(
             peer_id=peer_id,
-            message=message_text,
+            message=message,
             attachment=attachment,
             keyboard=keyboard_data,
             random_id=get_random_id()
         )
             except Exception as e:
                 logging.warning(f"Ошибка загрузки фото (доноры): {e}. Отправляем только текст.")
-                send_safe(peer_id, message_text, keyboard=keyboard)
+                send_safe(peer_id, message, keyboard=keyboard)
         else:
-            send_safe(peer_id, message_text, keyboard=keyboard)
-
+            send_safe(peer_id, message, keyboard=keyboard)
 
     except Exception as e:
         logging.critical(f"ФАТАЛЬНАЯ ошибка в show_donor для {peer_id}: {e}")
