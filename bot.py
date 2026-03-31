@@ -22,6 +22,26 @@ def get_random_id():
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
+def load_donors_csv(url, max_retries=3, timeout=30):
+    """Загружает CSV с повторными попытками и увеличенным таймаутом."""
+    for attempt in range(max_retries):
+        try:
+            logging.info(f"Попытка загрузки CSV (попытка {attempt + 1}/{max_retries})")
+            response = requests.get(url, timeout=timeout)
+            response.raise_for_status()
+            logging.info("CSV успешно загружен")
+            return response.text
+        except requests.exceptions.Timeout:
+            logging.warning(f"Таймаут загрузки (попытка {attempt + 1}). Ждём перед повторной попыткой...")
+            time.sleep(2 ** attempt)  # Экспоненциальная задержка: 2, 4, 8 секунд
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Ошибка загрузки CSV: {e}")
+            if attempt < max_retries - 1:
+                time.sleep(2 ** attempt)
+            else:
+                raise
+    raise Exception("Не удалось загрузить CSV после нескольких попыток")
+    
 # ===== НАСТРОЙКИ =====
 TOKEN = "vk1.a.Ze-bIlYgJf9rdkgnhYmWc6U6Eg9DRgi0vLkokPQVV5fIMsfsLm8kVPpCBMD04qwimSsaZZS1R0e1qwndF1hj3ROCvebCapjcT7xVeOSAvAdIJ1rqPYevdcbGAIt6OxV9xreMd2w4JROXJnnKvE4XiDLIieNoPE6BMKERAjlIt8jpeKIughzD9VC7x9DdPjzgF_tvoZMRDGkbvIBycGNoeA"
 GROUP_ID = 236843733
@@ -335,6 +355,32 @@ class DataCache:
                 return part
         return None
 
+    donors_cache = None
+    last_cache_update = 0
+    CACHE_TTL = 300  # Время жизни кэша — 5 минут
+    
+    def get_donors_data(url):
+        """Получает данные доноров с кэшированием."""
+        global donors_cache, last_cache_update
+    
+        current_time = time.time()
+    
+        # Проверяем, нужно ли обновлять кэш
+        if (donors_cache is None or
+            current_time - last_cache_update > CACHE_TTL):
+    
+            logging.info("Обновляем кэш данных доноров")
+            try:
+                csv_data = load_donors_csv(url)
+                donors_cache = parse_csv_to_list(csv_data)  # Ваша функция парсинга CSV
+                last_cache_update = current_time
+                logging.info("Кэш данных доноров успешно обновлён")
+            except Exception as e:
+                logging.error(f"Не удалось обновить кэш: {e}")
+                if donors_cache is None:
+                    raise
+    
+        return donors_cache
 # Создаем экземпляр кэша
 cache = DataCache()
 
