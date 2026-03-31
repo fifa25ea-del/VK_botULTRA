@@ -978,409 +978,164 @@ def handle(event):
     text = msg.get('text', '').strip()
     text_lower = text.lower()
 
-    logging.info(f"Получено сообщение от {peer_id}: '{text}'")
-    logging.info(f"Текущее состояние пользователя: {user_state.get(peer_id)}")
+    logging.info(f"[MSG] {peer_id}: {text}")
+    state = user_state.get(peer_id)
 
-    try:
-        if not text:
-            return
+    if not text:
+        return
 
-        # Обработка кнопок главного меню
-        if text_lower in ["🚗 запчасти", "запчасти"]:
-            user_state[peer_id] = "parts"
-            send(peer_id, "Введите номер детали или артикул:", keyboard=None)
-            return
-        elif text_lower in ["🛞 диски", "диски"]:
-            user_state[peer_id] = "wheels"
-            send(peer_id, "Введите размер (например, R18 или 18):", keyboard=None)
-            return
-        elif text_lower in ["🚘 доноры", "доноры"]:
-            user_state[peer_id] = "donors"
-            latest_donors = cache.get_latest_donors(limit=15)
-            if latest_donors:
-                user_results[peer_id] = latest_donors
-                user_index[peer_id] = 0
+    # =========================
+    # ГЛАВНОЕ МЕНЮ (ВСЕГДА)
+    # =========================
+    if text_lower in ["🏠 главное меню", "главное меню", "меню"]:
+        user_state[peer_id] = None
+        user_results.pop(peer_id, None)
+        user_index.pop(peer_id, None)
+        send(peer_id, "Главное меню:", keyboard=get_main_keyboard())
+        return
+
+    # =========================
+    # СТАРТОВЫЕ КНОПКИ
+    # =========================
+    if text_lower in ["🚗 запчасти", "запчасти"]:
+        user_state[peer_id] = "parts"
+        send(peer_id, "Введите номер запчасти:")
+        return
+
+    if text_lower in ["🛞 диски", "диски"]:
+        user_state[peer_id] = "wheels"
+        send(peer_id, "Введите размер (например R18):")
+        return
+
+    if text_lower in ["🚘 доноры", "доноры"]:
+        user_state[peer_id] = "donors"
+        results = cache.get_latest_donors(limit=15)
+
+        if results:
+            user_results[peer_id] = results
+            user_index[peer_id] = 0
+            show_donor(peer_id)
+        else:
+            send(peer_id, "Нет данных.")
+        return
+
+    if text_lower in ["❤️ избранное", "избранное"]:
+        show_favorites(peer_id)
+        return
+
+    # =========================
+    # НАВИГАЦИЯ (ГЛОБАЛЬНО)
+    # =========================
+    if text in ["⬅️ Назад", "Назад"]:
+        results = user_results.get(peer_id, [])
+        if len(results) > 1:
+            user_index[peer_id] = (user_index.get(peer_id, 0) - 1) % len(results)
+
+            if state == "parts":
+                show_part(peer_id)
+            elif state == "wheels":
+                show_wheel(peer_id)
+            elif state == "donors":
                 show_donor(peer_id)
-            else:
-                send(peer_id, "🚫 Не удалось загрузить список доноров.", keyboard=get_main_keyboard())
-                user_state[peer_id] = None
-            return
-        elif text_lower in ["❤️ избранное", "избранное"]:
-            show_favorites(peer_id)
-            return
-        elif text_lower in ["👨‍💻 менеджер", "менеджер"]:
-            user_state[peer_id] = "manager"
-            send(peer_id, "👨‍💻 Вас приветствует менеджер!\n\nОпишите ваш вопрос или задачу. Сообщение будет перенаправлено специалисту.", keyboard=None)
-            return
-        elif text_lower in ["⬅️ назад", "назад", "сброс", "отмена"]:
-            user_state[peer_id] = None
-            user_results.pop(peer_id, None)
-            user_index.pop(peer_id, None)
-            send(peer_id, "Меню сброшено. Чем помочь?", keyboard=get_main_keyboard())
-            return
+            elif state == "favorites_view":
+                show_favorite_card(peer_id)
+        else:
+            send(peer_id, "Нет других элементов.")
+        return
 
-        # Если мы здесь, значит нажата кнопка внутри карточки или введен текст в режиме поиска
-        current_state = user_state.get(peer_id)
+    if text in ["➡️ Вперед", "Вперед"]:
+        results = user_results.get(peer_id, [])
+        if len(results) > 1:
+            user_index[peer_id] = (user_index.get(peer_id, 0) + 1) % len(results)
 
-        # --- БЛОК ДЛЯ ЗАПЧАСТЕЙ (Parts) ---
-        if current_state == "parts":
-            # Получаем текущие результаты и индекс для этого пользователя
+            if state == "parts":
+                show_part(peer_id)
+            elif state == "wheels":
+                show_wheel(peer_id)
+            elif state == "donors":
+                show_donor(peer_id)
+            elif state == "favorites_view":
+                show_favorite_card(peer_id)
+        else:
+            send(peer_id, "Нет других элементов.")
+        return
+
+    if text in ["🔄 Обновить", "Обновить"]:
+        if state == "parts":
+            show_part(peer_id)
+        elif state == "wheels":
+            show_wheel(peer_id)
+        elif state == "donors":
+            show_donor(peer_id)
+        elif state == "favorites_view":
+            show_favorite_card(peer_id)
+        else:
+            send(peer_id, "Нечего обновлять.")
+        return
+
+    # =========================
+    # ДОБАВИТЬ В ИЗБРАННОЕ
+    # =========================
+    if text == "❤️ Добавить в избранное":
+        results = user_results.get(peer_id, [])
+        index = user_index.get(peer_id, 0)
+
+        if results:
+            add_to_favorites(peer_id, results[index])
+        else:
+            send(peer_id, "Ошибка добавления.")
+        return
+
+    # =========================
+    # РЕЖИМЫ
+    # =========================
+
+    # --- ЗАПЧАСТИ ---
+    if state == "parts":
+        results = cache.search_parts(text)
+        if results:
+            user_results[peer_id] = results
+            user_index[peer_id] = 0
+            show_part(peer_id)
+        else:
+            send(peer_id, "❌ Не найдено")
+        return
+
+    # --- ДИСКИ ---
+    if state == "wheels":
+        results = cache.search_wheels(text)
+        if results:
+            user_results[peer_id] = results
+            user_index[peer_id] = 0
+            show_wheel(peer_id)
+        else:
+            send(peer_id, "❌ Не найдено")
+        return
+
+    # --- ДОНОРЫ ---
+    if state == "donors":
+        results = cache.search_donors(text)
+        if results:
+            user_results[peer_id] = results
+            user_index[peer_id] = 0
+            show_donor(peer_id)
+        else:
+            send(peer_id, "❌ Не найдено")
+        return
+
+    # --- ИЗБРАННОЕ ---
+    if state == "favorites_view":
+        if text == "🗑 Удалить":
             results = user_results.get(peer_id, [])
             index = user_index.get(peer_id, 0)
 
-            # --- 1. ОБРАБОТКА КНОПОК (Имеют приоритет над поиском) ---
-            if text in ["⬅️ Назад", "Назад"]:
-                # Проверяем, есть ли что листать
-                if results and len(results) > 1:
-                    new_index = index - 1
-                    # Если ушли за начало списка, переходим в конец
-                    if new_index < 0:
-                        new_index = len(results) - 1
-                    user_index[peer_id] = new_index
-                    show_part(peer_id)
-                return
-
-            elif text in ["➡️ Вперед", "Вперед"]:
-                if results and len(results) > 1:
-                    new_index = index + 1
-                    # Если ушли за конец списка, переходим в начало
-                    if new_index >= len(results):
-                        new_index = 0
-                    user_index[peer_id] = new_index
-                    show_part(peer_id)
-                return
-
-            elif text in ["🔄 Обновить", "Обновить"]:
-                # Просто обновляем текущую карточку (перезагрузка фото/текста)
-                show_part(peer_id)
-                return
-
-            elif text == "❤️ Добавить в избранное":
-                # Логика остается прежней
-                index = user_index.get(peer_id, 0)
-                results = user_results.get(peer_id, [])
-                if results and index < len(results):
-                    current_item = results[index]
-                    add_to_favorites(peer_id, current_item)
-                else:
-                    send(peer_id, "Ошибка: не удалось найти элемент для добавления.")
-                return
-
-            # --- 2. ПОИСКОВЫЙ ЗАПРОС (Если это не кнопка) ---
-            # Если мы дошли досюда, значит нажата кнопка поиска или введено сообщение
-            logging.info(f"Начинаем поиск деталей для запроса: '{text}'")
-            results = cache.search_parts(text)
             if results:
-                user_results[peer_id] = results
-                user_index[peer_id] = 0 # Сбрасываем на первую позицию при новом поиске
-                show_part(peer_id)
-            else:
-                send(peer_id, "❌ Детали не найдены. Попробуйте другой запрос или номер.")
-        
-        # --- БЛОК ДЛЯ ДИСКОВ (Wheels) ---
+                item = results[index]
+                favorites[peer_id].remove(item)
+                save_json(FAV_FILE, favorites)
 
-        elif current_state == "wheels":
-            results = user_results.get(peer_id, [])
-            total_items = len(results)
-        
-            if text in ["⬅️ Назад", "Назад"]:
-                if total_items <= 1:
-                    send(peer_id, "Только один результат. Введите новый запрос для поиска.")
-                    return
-        
-                current_index = user_index.get(peer_id, 0)
-                new_index = (current_index - 1) % total_items
-                user_index[peer_id] = new_index
-                show_wheel(peer_id)
-                return
-        
-            elif text in ["➡️ Вперед", "Вперед"]:
-                if total_items <= 1:
-                    send(peer_id, "Только один результат. Введите новый запрос для поиска.")
-                    return
-        
-                current_index = user_index.get(peer_id, 0)
-                new_index = (current_index + 1) % total_items
-                user_index[peer_id] = new_index
-                show_wheel(peer_id)
-                return
-        
-            elif text == "❤️ Добавить в избранное":
-                index = user_index.get(peer_id, 0)
-                if results and index < len(results):
-                    current_item = results[index]
-                    add_to_favorites(peer_id, current_item)
-                else:
-                    send(peer_id, "Ошибка: не удалось найти элемент для добавления.")
-                return
-        
-            elif text in ["🔄 Обновить", "Обновить"]:
-                if user_results.get(peer_id):
-                    show_wheel(peer_id)
-                else:
-                    send(peer_id, "Сначала нужно выполнить поиск. Введите размер диска (например, R18).")
-                return
-        
-            else:
-                # Поисковый запрос
-                logging.info(f"Начинаем поиск дисков для запроса: '{text}'")
-                results = cache.search_wheels(text)
-        
-                if results:
-                    user_results[peer_id] = results
-                    user_index[peer_id] = 0
-                    show_wheel(peer_id)
-                else:
-                    send(peer_id, "❌ Диски не найдены. Проверьте введенное число (например, 17 или R18).")
-        
-            if text in ["⬅️ Назад", "Назад"]:
-                if total_items <= 1:
-                    send(peer_id, "Только один результат. Введите новый запрос для поиска.")
-                    return
-        
-                current_index = user_index.get(peer_id, 0)
-                new_index = (current_index - 1) % total_items
-                user_index[peer_id] = new_index
-                show_wheel(peer_id)
-                return
-        
-            elif text in ["➡️ Вперед", "Вперед"]:
-                if total_items <= 1:
-                    send(peer_id, "Только один результат. Введите новый запрос для поиска.")
-                    return
-        
-                current_index = user_index.get(peer_id, 0)
-                new_index = (current_index + 1) % total_items
-                user_index[peer_id] = new_index
-                show_wheel(peer_id)
-                return
-        
-            elif text == "❤️ Добавить в избранное":
-                index = user_index.get(peer_id, 0)
-                if results and index < len(results):
-                    current_item = results[index]
-                    add_to_favorites(peer_id, current_item)
-                else:
-                    send(peer_id, "Ошибка: не удалось найти элемент для добавления.")
-                return
-        
-            elif text in ["🔄 Обновить", "Обновить"]:
-                if user_results.get(peer_id):
-                    show_wheel(peer_id)
-                else:
-                    send(peer_id, "Сначала нужно выполнить поиск. Введите размер диска (например, R18).")
-                return
-        
-            else:
-                # Поисковый запрос
-                logging.info(f"Начинаем поиск дисков для запроса: '{text}'")
-                results = cache.search_wheels(text)
-        
-                if results:
-                    user_results[peer_id] = results
-                    user_index[peer_id] = 0
-                    show_wheel(peer_id)
-                else:
-                    send(peer_id, "❌ Диски не найдены. Проверьте введенное число (например, 17 или R18).")
-
-        # --- БЛОК ДЛЯ ДОНОРОВ (Donors) ---
-        elif current_state == "donors":
-            results = user_results.get(peer_id, [])
-            total_items = len(results)
-        
-            if text in ["⬅️ Назад", "Назад"]:
-                if total_items <= 1:
-                    send(peer_id, "Только один результат. Введите новый запрос для поиска.")
-                    return
-                current_index = user_index.get(peer_id, 0)
-                new_index = (current_index - 1) % total_items
-                user_index[peer_id] = new_index
-                show_donor(peer_id)
-                return
-        
-            elif text in ["➡️ Вперед", "Вперед"]:
-                if total_items <= 1:
-                    send(peer_id, "Только один результат. Введите новый запрос для поиска.")
-                    return
-                current_index = user_index.get(peer_id, 0)
-                new_index = (current_index + 1) % total_items
-                user_index[peer_id] = new_index
-                show_donor(peer_id)
-                return
-        
-            elif text in ["🔄 Обновить", "Обновить"]:
-                if user_results.get(peer_id):
-                    show_donor(peer_id)
-                else:
-                    send(peer_id, "Сначала нужно выполнить поиск. Введите марку или модель авто.")
-                return
-        
-            elif text in ["🏠 Главное меню", "Главное меню"]:
-                user_state[peer_id] = None
-                send(peer_id, "Главное меню:", keyboard=get_main_keyboard())
-                return
-        
-            else:
-                # Поисковый запрос
-                logging.info(f"Начинаем поиск доноров для запроса: '{text}'")
-                results = cache.search_donors(text)
-        
-                if results:
-                    user_results[peer_id] = results
-                    user_index[peer_id] = 0
-                    show_donor(peer_id)
-                else:
-                    send(peer_id, "❌ Доноры не найдены. Проверьте запрос (например, 'w211').")
-                
-        # --- БЛОК МЕНЕДЖЕРА (Manager) ---
-        elif current_state == "manager":
-             # Здесь логика перенаправления сообщения администратору.
-             # В текущем коде она не реализована.
-             send(ADMIN_ID, f"Запрос от пользователя {peer_id}:\n{text}")
-             send(peer_id, "👨‍💻 Ваше сообщение передано менеджеру! Ответ поступит в ближайшее время.", keyboard=get_main_keyboard())
-             user_state[peer_id] = None # Сбрасываем состояние после отправки
-
-        elif current_state == "favorites_view":
-            results = user_results.get(peer_id, [])
-            total_items = len(results)
-        
-            if text in ["⬅️ Назад", "Назад"]:
-                if total_items <= 1:
-                    send(peer_id, "Только один элемент в избранном.")
-                    return
-                current_index = user_index.get(peer_id, 0)
-                new_index = (current_index - 1) % total_items
-                user_index[peer_id] = new_index
-                show_favorite_card(peer_id)
-                return
-        
-            elif text in ["➡️ Вперед", "Вперед"]:
-                if total_items <= 1:
-                    send(peer_id, "Только один элемент в избранном.")
-                    return
-                current_index = user_index.get(peer_id, 0)
-                new_index = (current_index + 1) % total_items
-                user_index[peer_id] = new_index
-                show_favorite_card(peer_id)
-                return
-        
-            elif text == "🗑 Удалить":
-                if results:
-                    current_item = results[user_index.get(peer_id, 0)]
-                    # Удаляем из избранного
-                    if peer_id in favorites and current_item in favorites[peer_id]:
-                        favorites[peer_id].remove(current_item)
-                        save_json(FAV_FILE, favorites)
-                        # Обновляем результаты
-                        user_results[peer_id] = favorites.get(peer_id, [])
-                        if not user_results[peer_id]:  # Если избранное стало пустым
-                            user_state[peer_id] = None
-                            send(peer_id, "Избранное очищено.", keyboard=get_main_keyboard())
-                            return
-                        # Корректируем индекс, если удалили текущий элемент
-                        if user_index[peer_id] >= len(user_results[peer_id]):
-                            user_index[peer_id] = len(user_results[peer_id]) - 1
-                        show_favorite_card(peer_id)
-                    else:
-                        send(peer_id, "Элемент уже удалён или не найден.")
-                return
-        
-            elif text in ["🔄 Обновить", "Обновить"]:
-                show_favorite_card(peer_id)
-                return
-        
-            elif text in ["🏠 Меню", "Главное меню"]:
-                user_state[peer_id] = None
-                send(peer_id, "Главное меню:", keyboard=get_main_keyboard())
-                return
-
-            # --- КНОПКИ НАВИГАЦИИ ---
-            elif text in ["⬅️ Назад", "Назад"]:
-                if len(results) > 1:
-                    new_index = (index - 1) % len(results)
-                    user_index[peer_id] = new_index
-                    show_favorite_card(peer_id)
-                else:
-                    send(peer_id, "В избранном только один товар.")
-                return
-
-            elif text in ["➡️ Вперед", "Вперед"]:
-                if len(results) > 1:
-                    new_index = (index + 1) % len(results)
-                    user_index[peer_id] = new_index
-                    show_favorite_card(peer_id)
-                else:
-                    send(peer_id, "В избранном только один товар.")
-                return
-
-            elif text in ["🏠 Меню", "🏠 Главное меню", "⬅️ назад", "назад"]:
-                user_state[peer_id] = None
-                user_results.pop(peer_id, None)
-                user_index.pop(peer_id, None)
-                send(peer_id, "Меню сброшено. Чем помочь?", keyboard=get_main_keyboard())
-                return
-
-    except Exception as e:
-        logging.error(f"Критическая ошибка: {e}")
-        time.sleep(5)
-        run_bot()
-    finally:
-        # Код, который должен выполниться всегда
-        pass     
-
-def handle_navigation(peer_id, direction):
-    """Обрабатывает навигацию с учётом текущего режима."""
-    mode = user_mode.get(peer_id)
-
-    if mode == 'wheel':
-        handle_wheel_navigation(peer_id, direction)
-    elif mode == 'part':
-        handle_part_navigation(peer_id, direction)
-    else:
-        # Если режим не определён — возвращаем в меню
-        show_main_menu(peer_id)
-
-def handle_wheel_navigation(peer_id, direction):
-    current_index = user_index.get(peer_id, 0)
-    wheel_items = user_results.get(peer_id, [])
-
-    if not wheel_items:
-        send_safe(peer_id, "Нет элементов для отображения")
+                show_favorites(peer_id)
         return
-
-    total_items = len(wheel_items)
-
-    # Обновляем индекс в зависимости от направления
-    if direction == 'back':
-        new_index = max(0, current_index - 1)
-    elif direction == 'forward':
-        new_index = min(total_items - 1, current_index + 1)
-    else:
-        new_index = current_index
-
-    user_index[peer_id] = new_index
-    show_wheel_item(peer_id, new_index)
-
-def handle_part_navigation(peer_id, direction):
-    current_index = user_index.get(peer_id, 0)
-    part_items = user_results.get(peer_id, [])
-
-    if not part_items:
-        send_safe(peer_id, "Нет элементов для отображения")
-        return
-
-    total_items = len(part_items)
-
-    # Обновляем индекс
-    if direction == 'back':
-        new_index = max(0, current_index - 1)
-    elif direction == 'forward':
-        new_index = min(total_items - 1, current_index + 1)
-    else:
-        new_index = current_index
-
-    user_index[peer_id] = new_index
-    show_part_item(peer_id, new_index)
         
 # Запуск бота
 def run_bot():
