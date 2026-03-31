@@ -625,103 +625,99 @@ def show_wheel(peer_id):
         send_safe(peer_id, "Произошла критическая ошибка при отображении диска. Обратитесь к администратору.")
         
 def show_donor(peer_id):
-    """
-    Показывает карточку донора: сначала фото, затем текст с кнопками.
-    """
+    """Показывает карточку донора с навигацией (без добавления в избранное)."""
     try:
-        results = user_results.get(peer_id, [])
+        # Получаем текущие данные пользователя
         index = user_index.get(peer_id, 0)
+        results = user_results.get(peer_id, [])
 
-        if not results or index >= len(results) or index < 0:
-            send(peer_id, "🚫 Данные о доноре недоступны. Попробуйте начать сначала.")
+        # Проверяем, есть ли результаты поиска
+        if not results:
+            send_safe(peer_id, "Нет результатов поиска для отображения")
             return
 
+        total_items = len(results)  # Объявляем переменную total_items
+
+        # Проверяем корректность индекса
+        if index < 0 or index >= total_items:
+            # Если индекс вышел за границы, сбрасываем на первый элемент
+            index = 0
+            user_index[peer_id] = 0
+
         donor = results[index]
+        current_position = index + 1  # Текущая позиция (1-based)
 
-        # --- 1. ФОРМИРУЕМ ТЕКСТ И КЛАВИАТУРУ ---
-        message_text = "🚘 Карточка авто-донора:\n"
-        message_text += f"Марка: {safe_get(donor, 'Марка')}\n"
-        message_text += f"Модель: {safe_get(donor, 'Модель')}\n"
-        message_text += f"Цвет: {safe_get(donor, 'Цвет')}\n"
-        message_text += f"Год: {safe_get(donor, 'Год')}\n"
-        message_text += f"Двигатель: {safe_get(donor, 'Двигатель')}\n"
-        message_text += f"VIN: {safe_get(donor, 'VIN')}"
+        # Формируем текст карточки
+        message = "🚗 Карточка донора:\n"
+        message += f"Марка: {safe_get(donor, 'Марка')}\n"
+        message += f"Модель: {safe_get(donor, 'Модель')}\n"
+        message += f"Цвет: {safe_get(donor, 'Цвет')}\n"
+        message += f"Год: {safe_get(donor, 'Год')}\n"
+        message += f"Пробег: {safe_get(donor, 'Пробег')}\n"
+        message += f"Цена: {safe_get(donor, 'Цена')}\n"
 
-        # Добавляем цену и ссылку, если они есть
-        price = safe_get(donor, 'Цена')
-        if price != "Не указано":
-            message_text += f"\nЦена: {price}"
-            
+        comment = safe_get(donor, 'Комментарий')
+        if comment != "Не указано":
+            message += f"Комментарий: {comment}\n"
+
         link = safe_get(donor, 'Ссылка')
-        if link != "Не указано" and link != "Нет ссылки":
-            message_text += f"\nСсылка: {link}"
+        if link not in ("Не указано", "Нет ссылки"):
+            message += f"Ссылка: {link}\n"
 
-        # Создаем клавиатуру
+        # Добавляем информацию о позиции в результатах
+        message += f"\n📊 {current_position} из {total_items}"
+
+        # Создаём клавиатуру
         keyboard = VkKeyboard(one_time=False)
-        
-        # Строка 1
-        keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.NEGATIVE)
-        keyboard.add_line()
-        
-        # Строка 2
-        keyboard.add_button("❤️ Добавить в избранное", color=VkKeyboardColor.POSITIVE)
-        keyboard.add_line()
-        
-        # Строка 3 (если есть навигация)
+
+        # Первая строка: навигация (только если есть несколько элементов)
         if total_items > 1:
             keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
             keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
             keyboard.add_line()
-        
-        # Строка 4
+
+        # Вторая строка: дополнительные действия
+        keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.NEGATIVE)
         keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
 
         keyboard_data = keyboard.get_keyboard()
 
-        # --- 2. ОТПРАВЛЯЕМ ФОТО (ЕСЛИ ЕСТЬ) ---
+        # Отправка сообщения с фото и текстом
         photo_url = get_first_photo(donor.get('Фото', ''))
 
         if photo_url:
             try:
-                # Загружаем изображение
                 response = requests.get(photo_url, timeout=10)
                 response.raise_for_status()
 
-                # Загружаем фото в VK
                 upload_url = vk.photos.getMessagesUploadServer()['upload_url']
                 files = {'photo': ('image.jpg', response.content)}
                 upload_data = requests.post(upload_url, files=files, timeout=15).json()
 
                 photo_data = vk.photos.saveMessagesPhoto(
                     server=upload_data['server'],
-                    photo=upload_data['photo'],
-                    hash=upload_data['hash']
-                )[0]
-                
+            photo=upload_data['photo'],
+            hash=upload_data['hash']
+        )[0]
+
                 attachment = f"photo{photo_data['owner_id']}_{photo_data['id']}"
-                
-                # Отправляем ТОЛЬКО ФОТО (без текста и кнопок)
+
                 vk.messages.send(
-                    peer_id=peer_id,
-                    attachment=attachment,
-                    random_id=get_random_id()
-                )
-                
+            peer_id=peer_id,
+            message=message,
+            attachment=attachment,
+            keyboard=keyboard_data,
+            random_id=get_random_id()
+        )
             except Exception as e:
                 logging.warning(f"Ошибка загрузки фото (доноры): {e}. Отправляем только текст.")
-                # Если фото не загрузилось, отправляем текст с кнопками сразу
-                send(peer_id, message_text, keyboard=keyboard_data)
-                return # Останавливаем функцию здесь
-
-        # --- 3. ОТПРАВЛЯЕМ ТЕКСТ С КЛАВИАТУРОЙ ---
-        # Этот код выполнится в любом случае:
-        #   - Если фото не было.
-        #   - Если фото было отправлено успешно.
-        send(peer_id, message_text, keyboard=keyboard_data)
+                send_safe(peer_id, message, keyboard=keyboard)
+        else:
+            send_safe(peer_id, message, keyboard=keyboard)
 
     except Exception as e:
         logging.critical(f"ФАТАЛЬНАЯ ошибка в show_donor для {peer_id}: {e}")
-        send(peer_id, "Произошла критическая ошибка при отображении донора.")
+        send_safe(peer_id, "Произошла критическая ошибка при отображении донора. Обратитесь к администратору.")
 
 def show_favorite_card(peer_id):
     try:
@@ -1064,42 +1060,53 @@ def handle(event):
 
         # --- БЛОК ДЛЯ ДОНОРОВ (Donors) ---
         elif current_state == "donors":
-             # В этом режиме мы либо листаем список последних доноров,
-             # ЛИБО ищем по марке/модели (если пользователь ввел текст в поле поиска VK)
-             
-             # Проверяем кнопки навигации
-             if text in ["⬅️ Назад", "Назад"]:
-                 results = user_results.get(peer_id, [])
-                 if results and len(results) > 1:
-                     new_index = user_index.get(peer_id, 0) - 1
-                     if new_index < 0:
-                         new_index = len(results) - 1
-                     user_index[peer_id] = new_index
-                     show_donor(peer_id)
-                 return
-
-             elif text in ["➡️ Вперед", "Вперед"]:
-                 results = user_results.get(peer_id, [])
-                 if results and len(results) > 1:
-                     new_index = user_index.get(peer_id, 0) + 1
-                     if new_index >= len(results):
-                         new_index = 0
-                     user_index[peer_id] = new_index
-                     show_donor(peer_id)
-                 return
-
-             # Если это не кнопка — это поисковый запрос по марке/модели
-             else:
-                 logging.info(f"Начинаем поиск доноров для запроса: '{text}'")
-                 results = cache.search_donors(text)
-                 
-                 if results:
-                     user_results[peer_id] = results
-                     user_index[peer_id] = 0 
-                     show_donor(peer_id)
-                 else:
-                     send(peer_id, "❌ Доноры не найдены.")
+            results = user_results.get(peer_id, [])
+            total_items = len(results)
         
+            if text in ["⬅️ Назад", "Назад"]:
+                if total_items <= 1:
+                    send(peer_id, "Только один результат. Введите новый запрос для поиска.")
+                    return
+                current_index = user_index.get(peer_id, 0)
+                new_index = (current_index - 1) % total_items
+                user_index[peer_id] = new_index
+                show_donor(peer_id)
+                return
+        
+            elif text in ["➡️ Вперед", "Вперед"]:
+                if total_items <= 1:
+                    send(peer_id, "Только один результат. Введите новый запрос для поиска.")
+                    return
+                current_index = user_index.get(peer_id, 0)
+                new_index = (current_index + 1) % total_items
+                user_index[peer_id] = new_index
+                show_donor(peer_id)
+                return
+        
+            elif text in ["🔄 Обновить", "Обновить"]:
+                if user_results.get(peer_id):
+                    show_donor(peer_id)
+                else:
+                    send(peer_id, "Сначала нужно выполнить поиск. Введите марку или модель авто.")
+                return
+        
+            elif text in ["🏠 Главное меню", "Главное меню"]:
+                user_state[peer_id] = None
+                send(peer_id, "Главное меню:", keyboard=get_main_keyboard())
+                return
+        
+            else:
+                # Поисковый запрос
+                logging.info(f"Начинаем поиск доноров для запроса: '{text}'")
+                results = cache.search_donors(text)
+        
+                if results:
+                    user_results[peer_id] = results
+                    user_index[peer_id] = 0
+                    show_donor(peer_id)
+                else:
+                    send(peer_id, "❌ Доноры не найдены. Проверьте запрос (например, 'w211').")
+                
         # --- БЛОК МЕНЕДЖЕРА (Manager) ---
         elif current_state == "manager":
              # Здесь логика перенаправления сообщения администратору.
