@@ -179,30 +179,34 @@ def send_photo_with_caption(peer_id, photo_url, caption):
     thread.start()
 
 def get_first_photo(photos_data):
-    """Получает первую ссылку на фото с отладкой."""
+    """Получает первую рабочую ссылку на фото из строки или списка."""
     logging.debug(f"Получены данные фото: {photos_data}")
 
     if not photos_data:
         logging.debug("Нет данных фото")
         return None
 
-
-    # Если это строка (одна ссылка)
+    # Если это строка — разбиваем на отдельные URL
     if isinstance(photos_data, str):
-        photo_url = photos_data.strip()
-        if photo_url and photo_url.lower() != 'не указано':
-            logging.debug(f"Использована прямая ссылка: {photo_url}")
-            return photo_url
+        # Разбиваем по запятым и убираем кодированные пробелы
+        urls = [url.strip().replace('%20', ' ') for url in photos_data.split(',')]
+        for url in urls:
+            if url and url.lower() != 'не указано':
+                # Проверяем доступность URL
+                if is_valid_photo_url(url):
+                    logging.debug(f"Найдено рабочее фото: {url}")
+                    return url
 
-    # Если это список
+    # Если это список — проверяем каждый элемент
     elif isinstance(photos_data, list):
         for photo in photos_data:
             if photo and isinstance(photo, str) and photo.lower() != 'не указано':
-                logging.debug(f"Найдено фото в списке: {photo}")
-                return photo
+                if is_valid_photo_url(photo):
+                    logging.debug(f"Найдено рабочее фото в списке: {photo}")
+                    return photo
 
 
-    logging.debug("Фото не найдено")
+    logging.debug("Фото не найдено или все ссылки битые")
     return None
 
 def get_donors_data():
