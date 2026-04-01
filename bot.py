@@ -709,14 +709,12 @@ def show_wheel(peer_id):
         # Создаём клавиатуру
         keyboard = VkKeyboard(one_time=False)
 
-        # Первая строка
+   
+        keyboard.add_button("❤️ Добавить в избранное", color=VkKeyboardColor.POSITIVE)
         keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.NEGATIVE)
         keyboard.add_line()
 
-        # Вторая строка
-        keyboard.add_button("❤️ Добавить в избранное", color=VkKeyboardColor.POSITIVE)
-        keyboard.add_line()
-
+        
         # Третья строка — навигация только если есть несколько элементов
         if total_items > 1:
             keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
