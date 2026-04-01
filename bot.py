@@ -16,6 +16,27 @@ from urllib.parse import urlparse
 import random
 from io import StringIO
 
+def normalize_query(text: str) -> str:
+    text = text.upper()
+
+    # заменяем русские буквы на английские
+    ru_to_en = {
+        'А': 'A', 'В': 'B', 'Е': 'E', 'К': 'K',
+        'М': 'M', 'Н': 'H', 'О': 'O', 'Р': 'P',
+        'С': 'C', 'Т': 'T', 'Х': 'X'
+    }
+
+    for ru, en in ru_to_en.items():
+        text = text.replace(ru, en)
+
+    # убираем всё кроме букв и цифр
+    text = re.sub(r'[^A-Z0-9]', '', text)
+
+    # убираем ведущие буквы (например A)
+    text = re.sub(r'^[A-Z]+', '', text)
+
+    return text
+
 def get_random_id():
     """Генерирует случайный ID для VK API (от 0 до 2^31−1)"""
     return random.randint(0, 2**31 - 1)
@@ -551,6 +572,7 @@ def show_part(peer_id):
         # --- 1. ФОРМИРУЕМ ТЕКСТ КАРТОЧКИ ---
         message = "🚗 Карточка детали:\n"
         message += f"Название: {safe_get(part, 'Наименование')}\n"
+        message += f"Номер запчасти: {safe_get(part, 'Номер')}\n"
         message += f"Кузов: {safe_get(part, 'Кузов')}\n"
         message += f"Артикул: {safe_get(part, 'Артикул')}\n"
 
@@ -1092,7 +1114,8 @@ def handle(event):
 
     # --- ЗАПЧАСТИ ---
     if state == "parts":
-        results = cache.search_parts(text)
+        query = normalize_query(text)
+        results = cache.search_parts(query)
         if results:
             user_results[peer_id] = results
             user_index[peer_id] = 0
