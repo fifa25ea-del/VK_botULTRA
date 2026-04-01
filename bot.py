@@ -607,7 +607,6 @@ def show_part(peer_id):
         
         # Кнопки навигации (всегда добавляем)
         keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
-        keyboard.add_line()  # Добавляем новую строку
         keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
         keyboard.add_line()  # Новая строка для кнопки обновления
         
