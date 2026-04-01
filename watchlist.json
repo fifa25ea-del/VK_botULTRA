@@ -1,0 +1,2 @@
+WATCHLIST_FILE = "watchlist.json"
+watchlist = load_json(WATCHLIST_FILE)  # peer_id → список артикулов
