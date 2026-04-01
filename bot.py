@@ -16,6 +16,14 @@ from urllib.parse import urlparse
 import random
 from io import StringIO
 
+def get_image(url):
+    try:
+        response = requests.get(url, timeout=3)
+        return response.content
+    except Exception as e:
+        logging.warning(f"Ошибка загрузки фото: {e}")
+        return None
+
 def normalize_query(text: str) -> str:
     text = text.upper()
 
@@ -93,6 +101,8 @@ initializing_wheels = set()  # Множество peer_id, которые сей
 _donors_cache = None
 _last_cache_update = 0
 _CACHE_TTL = 300  # Время жизни кэша — 5 минут
+image_cache = {}
+
 
 
 # ===== ИНИЦИАЛИЗАЦИЯ ФАЙЛОВ =====
@@ -221,7 +231,16 @@ def get_first_photo(photo_field):
             # или быть повреждены. Проверим минимальную длину и наличие точки (домен)
             if len(url) > 10 and '.' in urlparse(url).netloc:
                 return url
-            
+
+def get_image_cached(url):
+    if url in image_cache:
+        return image_cache[url]
+
+    img = get_image(url)
+    if img:
+        image_cache[url] = img
+
+    return img
 
 def get_donors_data():
     """Загружает и возвращает данные доноров с кэшированием."""
