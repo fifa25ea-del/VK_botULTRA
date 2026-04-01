@@ -1103,17 +1103,17 @@ def handle(event):
         return
 
     if text_lower == "🔔 следить за товаром":
-    state = user_state.get(peer_id)
-    if state and "watch_query" in state:
-        query = state["watch_query"]
-        if peer_id not in watchlist:
-            watchlist[peer_id] = []
-        if query not in watchlist[peer_id]:
-            watchlist[peer_id].append(query)
-            save_watchlist()
-            send(peer_id, f"Вы теперь будете уведомлены, когда '{query}' появится в базе.")
-        else:
-            send(peer_id, "Вы уже отслеживаете этот товар.")
+        state = user_state.get(peer_id)
+        if state and "watch_query" in state:
+            query = state["watch_query"]
+            if peer_id not in watchlist:
+                watchlist[peer_id] = []
+            if query not in watchlist[peer_id]:
+                watchlist[peer_id].append(query)
+                save_watchlist()
+                send(peer_id, f"Вы теперь будете уведомлены, когда '{query}' появится в базе.")
+            else:
+                send(peer_id, "Вы уже отслеживаете этот товар.")
     
     # =========================
     # НАВИГАЦИЯ (ГЛОБАЛЬНО)
