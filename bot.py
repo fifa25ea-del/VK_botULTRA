@@ -16,21 +16,6 @@ from urllib.parse import urlparse
 import random
 from io import StringIO
 
-WATCHLIST_FILE = "watchlist.json"
-
-# Загружаем watchlist
-try:
-    if os.path.exists(WATCHLIST_FILE):
-        with open(WATCHLIST_FILE, "r", encoding="utf-8") as f:
-            watchlist = json.load(f)
-    else:
-        watchlist = {}
-except Exception as e:
-    logging.error(f"Ошибка загрузки watchlist: {e}")
-    watchlist = {}
-def save_watchlist():
-    save_json(WATCHLIST_FILE, watchlist)
-
 def get_image(url):
     try:
         response = requests.get(url, timeout=3)
@@ -286,13 +271,6 @@ def get_donors_data():
                 return []
 
     return _donors_cache
-
-def save_watchlist():
-    try:
-        with open(WATCHLIST_FILE, "w", encoding="utf-8") as f:
-            json.dump(watchlist, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        logging.error(f"Ошибка сохранения watchlist: {e}")
     
 # ===== ОТПРАВКА СООБЩЕНИЙ =====
 def send_safe(peer_id, text, keyboard=None):
@@ -516,33 +494,12 @@ def auto_update():
     while True:
         try:
             cache.update()
-            notify_watchlist()
         except Exception as e:
             logging.error(f"Ошибка автообновления: {e}")
         time.sleep(300)  # Обновляем каждые 5 минут
 
 # Запускаем поток автообновления
 threading.Thread(target=auto_update, daemon=True).start()
-
-def notify_watchlist():
-    global watchlist
-    try:
-        for peer_id, queries in list(watchlist.items()):
-            to_remove = []
-            for query in queries:
-                results = find_part(query)
-                if results:  # если появилась хотя бы одна деталь
-                    send(peer_id, f"🔔 Товар '{query}' появился в базе!")
-                    show_part_info(peer_id, results[0])
-                    to_remove.append(query)  # убираем из списка отслеживания
-            # удаляем отправленные
-            for q in to_remove:
-                queries.remove(q)
-            if not queries:
-                watchlist.pop(peer_id)
-        save_watchlist()
-    except Exception as e:
-        logging.error(f"Ошибка при уведомлении watchlist: {e}")
 
 # Добавляем методы для работы с результатами поиска
 def safe_get(data_dict, field_name, default="Не указано"):
@@ -1018,24 +975,6 @@ def find_part(query):
             results.append(part)
     return results
 
-def handle_part_search(peer_id, query):
-    results = find_part(query)
-    user_results[peer_id] = results
-    user_index[peer_id] = 0
-
-    if results:
-        show_part(peer_id)
-    else:
-        keyboard = VkKeyboard(one_time=True)
-        keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.NEGATIVE)
-        keyboard.add_line()
-        keyboard.add_button("🔔 Следить за товаром", color=VkKeyboardColor.PRIMARY)
-
-        # Сохраняем временно, какой артикул хотим отслеживать
-        user_state[peer_id] = {"watch_query": query}
-
-        send_safe(peer_id, f"Запчасть с номером '{query}' не найдена.", keyboard=keyboard)
-
 def find_donor(query):
     query = query.lower()
     results = []
@@ -1122,19 +1061,6 @@ def handle(event):
         show_favorites(peer_id)
         return
 
-    if text_lower == "🔔 следить за товаром":
-        state = user_state.get(peer_id)
-        if state and "watch_query" in state:
-            query = state["watch_query"]
-            if peer_id not in watchlist:
-                watchlist[peer_id] = []
-            if query not in watchlist[peer_id]:
-                watchlist[peer_id].append(query)
-                save_watchlist()
-                send(peer_id, f"Вы теперь будете уведомлены, когда '{query}' появится в базе.")
-            else:
-                send(peer_id, "Вы уже отслеживаете этот товар.")
-    
     # =========================
     # НАВИГАЦИЯ (ГЛОБАЛЬНО)
     # =========================
@@ -1249,24 +1175,6 @@ def handle(event):
 
                 show_favorites(peer_id)
         return
-
-def handle_watch_button(peer_id):
-    state = user_state.get(peer_id)
-    if not state or "watch_query" not in state:
-        send_safe(peer_id, "Не удалось добавить товар в отслеживание.")
-        return
-    
-    query = state["watch_query"]
-
-    if peer_id not in watchlist:
-        watchlist[peer_id] = []
-
-    if query not in watchlist[peer_id]:
-        watchlist[peer_id].append(query)
-        save_watchlist()
-        send_safe(peer_id, f"✅ Вы теперь следите за товаром '{query}'. Как только он появится, мы уведомим вас!")
-    else:
-        send_safe(peer_id, f"Вы уже следите за товаром '{query}'.")
         
 # Запуск бота
 def run_bot():
