@@ -433,6 +433,23 @@ class DataCache:
             logging.error(f"Неизвестная ошибка при загрузке CSV: {e}")
             return []
 
+    def load_local_akpp(self):
+        # Автоматически находит папку, в которой лежит сам скрипт
+        base_path = os.path.dirname(os.path.abspath(__file__))
+        file_path = os.path.join(base_path, "akpp.csv")
+        
+        if os.path.exists(file_path):
+            try:
+                with open(file_path, mode='r', encoding='utf-8-sig') as f:
+                    # delimiter=';' если в Excel сохраняли как обычный CSV
+                    reader = csv.DictReader(f, delimiter=';') 
+                    self.akpp_base = list(reader)
+                logging.info(f"✅ База АКПП загружена из файла: {len(self.akpp_base)} строк")
+            except Exception as e:
+                logging.error(f"❌ Ошибка загрузки локальной базы: {e}")
+        else:
+            logging.error(f"⚠️ Файл {file_path} не найден!")
+    
     def update(self):
         try:
             print("🔄 Обновление базы...")
@@ -1240,29 +1257,24 @@ def handle(event):
         return
 
     if isinstance(state, dict) and state.get("mode") == "await_akpp_drive":
-        drive_query = text.lower().strip() # "полный", "задний" и т.д.
-        body_query = state.get("body")      # очищенные цифры кузова, например "211"
+        drive_query = text.lower().strip()
+        body_query = state.get("body")
         
         results = []
         
-        for part in cache.parts:
-            # 1. Получаем данные из нужных колонок
+        # ТЕПЕРЬ ИЩЕМ В cache.akpp_base
+        for part in cache.akpp_base:
             name = part.get('Наименование', '').lower()
-            # ТЕПЕРЬ ИЩЕМ ПРИВОД В КОЛОНКЕ "Комплектация"
-            komplekt_info = part.get('Комплектация', '').lower() 
+            komplekt_info = part.get('Комплектация', '').lower()
             body_info = part.get('Кузов', '').lower()
             
-            # 2. Проверка на АКПП
+            # (Логика фильтров остается прежней)
             is_akpp = "акпп" in name or "кпп" in name
-            
-            # 3. Проверка привода (ищем слово "полный" в строке комплектации)
             is_right_drive = drive_query in komplekt_info
             
-            # 4. Проверка кузова (гибкий поиск по цифрам или строке)
             body_info_digits = "".join(filter(str.isdigit, body_info))
             is_right_body = body_query in body_info_digits or body_query in body_info
 
-            # Если все три условия совпали — добавляем в результаты
             if is_akpp and is_right_drive and is_right_body:
                 results.append(part)
         
