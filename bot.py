@@ -1355,25 +1355,28 @@ def handle(event):
         results = user_results.get(peer_id, [])
         idx = user_index.get(peer_id, 0)
         
-        # ЗАМЕНА: вместо continue используем return, так как мы в функции
+        # Если результатов нет, просто выходим из этого блока обработки
         if not results: 
+            # Если это внутри функции (например, def handle_msg):
             return 
+            # Если это внутри цикла (например, for event in longpoll.listen()):
+            # continue 
 
         # Листаем индекс
         if text_lower == "➡️ вперед":
             idx = (idx + 1) if idx + 1 < len(results) else 0
         else:
             idx = (idx - 1) if idx - 1 >= 0 else len(results) - 1
-            
+        
         user_index[peer_id] = idx
 
-        # ОПРЕДЕЛЯЕМ ТИП ТОВАРА
+        # ОПРЕДЕЛЯЕМ ТИП ТОВАРА И ВЫЗЫВАЕМ НУЖНУЮ ФУНКЦИЮ
         item = results[idx]
         
-        # 1. Если это диск
+        # 1. Если это диск (проверяем ключи)
         if 'Диаметр диска' in item or 'Производитель диска' in item:
             show_wheel(peer_id)
-        # 2. Если это донор
+        # 2. Если это донор (есть VIN или Марка+Модель+Год)
         elif 'VIN' in item or ('Марка' in item and 'Модель' in item and 'Год' in item):
             show_donor(peer_id)
         # 3. Если это двигатель
@@ -1383,7 +1386,10 @@ def handle(event):
         else:
             show_part(peer_id)
             
+        # Убираем одинокий continue здесь, если мы в функции. 
+        # Если нужно прервать дальнейшую обработку сообщения:
         return
+        
         # ПРОВЕРКА РЕЖИМА: Если мы искали АКПП, вызываем show_akpp
         state_data = user_state.get(peer_id)
         current_mode = state_data.get("mode") if isinstance(state_data, dict) else state_data
