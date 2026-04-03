@@ -1055,9 +1055,12 @@ def show_wheel(peer_id):
         )
             except Exception as e:
                 logging.warning(f"Ошибка загрузки фото: {e}")
-                send_safe(peer_id, message, keyboard=keyboard_data) # Используем keyboard_data!
+                # Передаем keyboard_data (строку), а не объект клавиатуры
+                send_safe(peer_id, message, keyboard=keyboard_data) 
             else:
-                send_safe(peer_id, message, keyboard=keyboard_data) # И здесь тоже!
+                # Если фото нет вообще
+                if not photo_url:
+                    send_safe(peer_id, message, keyboard=keyboard_data)
 
 
     except Exception as e:
@@ -1549,32 +1552,26 @@ def handle(event):
         
         if results and 0 <= idx < len(results):
             item_to_add = results[idx]
-            
-            # Инициализируем список избранного, если его нет
             if peer_id not in user_favorites:
                 user_favorites[peer_id] = []
             
-            # Создаем уникальный ID для проверки дубликатов
-            # Проверяем все возможные поля (Артикул для дисков, Номер для запчастей)
             item_id = (item_to_add.get('Артикул') or 
                        item_to_add.get('Номер') or 
                        item_to_add.get('VIN') or 
                        str(item_to_add.get('Наименование')))
 
-            # Проверка на дубликат
             is_duplicate = any((f.get('Артикул') or f.get('Номер') or f.get('VIN') or str(f.get('Наименование'))) == item_id 
                                for f in user_favorites[peer_id])
             
             if not is_duplicate:
                 user_favorites[peer_id].append(item_to_add)
-                # Сохраняем в файл (опционально)
                 save_json(FAV_FILE, user_favorites)
                 send_safe(peer_id, "✅ Добавлено в избранное!")
             else:
                 send_safe(peer_id, "ℹ️ Уже в избранном.")
         else:
             send_safe(peer_id, "❌ Ошибка: не удалось определить товар.")
-        continue
+        return
         
     # Обработка кнопки "Следить" (если в state словарь)
     if text_lower == "🔔 следить за товаром":
