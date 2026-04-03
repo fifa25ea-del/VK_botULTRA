@@ -808,11 +808,10 @@ def show_engine(peer_id):
     part = results[idx]
 
     # --- 1. ФОРМИРУЕМ ТЕКСТ (Стиль как в АКПП) ---
-    title = "🚀 ДВИГАТЕЛЬ В СБОРЕ"
+    title = "🚀 ДВИГАТЕЛЬ"
     model_engine = part.get('Двигатель') or part.get('Маркировка') or 'Не указана'
     price = part.get('Цена') or 'По запросу'
     body = part.get('Кузов') or 'Не указан'
-    mileage = part.get('Пробег') or 'Не указан'
     item_id = part.get('Артикул') or part.get('Номер') or '---'
     
     msg = (
@@ -820,7 +819,6 @@ def show_engine(peer_id):
         f"💰 Цена: {price} руб.\n\n"
         f"⛽ Модель ДВС: {model_engine}\n"
         f"🚗 Кузов: {body}\n"
-        f"🛣 Пробег: {mileage}\n\n"
         f"📄 Комментарий: {part.get('Комментарий', 'информация отсутствует')}\n"
         f"🔢 Артикул: {item_id}\n\n"
         f"📊 Результат {idx + 1} из {len(results)}"
@@ -837,7 +835,7 @@ def show_engine(peer_id):
 
     if photo_url and photo_url.startswith('http'):
         try:
-            response = requests.get(photo_url, timeout=10)
+            response = requests.get(photo_url, timeout=20)
             response.raise_for_status()
 
             upload_url = vk.photos.getMessagesUploadServer()['upload_url']
