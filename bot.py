@@ -422,16 +422,15 @@ class DataCache:
         self.donors = []
         self.akpp_base = []
 
-    def load_csv(self, url):
+    def _load_csv(self, url):
         try:
             r = requests.get(url, timeout=15)
-            r.encoding = "cp1251"
+            # Для ваших ссылок baz-on лучше использовать cp1251
+            r.encoding = "cp1251" 
+            # Используем delimiter=";" так как в ваших файлах точка с запятой
             return list(csv.DictReader(io.StringIO(r.text), delimiter=";"))
-        except requests.exceptions.RequestException as e:
-            logging.error(f"Ошибка загрузки CSV с {url}: {e}")
-            return []
         except Exception as e:
-            logging.error(f"Неизвестная ошибка при загрузке CSV: {e}")
+            logging.error(f"Ошибка загрузки CSV с {url}: {e}")
             return []
 
     def load_local_akpp(self):
@@ -454,12 +453,12 @@ class DataCache:
     
     def update(self):
         logging.info("🔄 Запуск обновления данных...")
-        # Теперь имена совпадают: _load_csv
+        # Убедитесь, что метод _load_csv определен ВНУТРИ класса DataCache
         self.parts = self._load_csv(PARTS_CSV)
         self.wheels = self._load_csv(WHEELS_CSV)
         self.donors = self._load_csv(DONORS_CSV)
         
-        # Загрузка локального файла
+        # Загрузка локального файла АКПП
         self.load_local_akpp()
         
     def search_parts(self, query):
