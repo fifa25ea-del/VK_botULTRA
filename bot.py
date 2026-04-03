@@ -422,10 +422,11 @@ class DataCache:
         self.donors = []
         self.akpp_base = []
 
-    def load_csv(self, url):
+    def _load_csv(self, url):
         try:
             r = requests.get(url, timeout=15)
             r.encoding = "cp1251"
+            # Важно: проверяем разделитель. Если в онлайн-базе запятые, смените на delimiter=","
             return list(csv.DictReader(io.StringIO(r.text), delimiter=";"))
         except requests.exceptions.RequestException as e:
             logging.error(f"Ошибка загрузки CSV с {url}: {e}")
@@ -435,31 +436,32 @@ class DataCache:
             return []
 
     def load_local_akpp(self):
-        # Находим путь к файлу в той же папке, где лежит бот на GitHub/сервере
         base_path = os.path.dirname(os.path.abspath(__file__))
         file_path = os.path.join(base_path, "akpp.csv")
         
         if os.path.exists(file_path):
             try:
+                # utf-8-sig помогает правильно читать файлы, сохраненные через Excel
                 with open(file_path, mode='r', encoding='utf-8-sig') as f:
-                    # delimiter=';' если в Excel сохраняли как обычный CSV
+                    # delimiter=';' — стандарт для русского Excel. 
                     reader = csv.DictReader(f, delimiter=';') 
                     self.akpp_base = list(reader)
                 logging.info(f"✅ База АКПП загружена: {len(self.akpp_base)} строк")
             except Exception as e:
                 logging.error(f"❌ Ошибка чтения akpp.csv: {e}")
-                self.akpp_base = [] # В случае ошибки оставляем список пустым
+                self.akpp_base = [] 
         else:
-            logging.warning(f"⚠️ Файл {file_path} не найден. Проверьте GitHub.")
+            logging.warning(f"⚠️ Файл {file_path} не найден в репозитории.")
             self.akpp_base = []
     
     def update(self):
-        # Загрузка онлайн баз
+        logging.info("🔄 Запуск обновления данных...")
+        # Теперь имена совпадают: _load_csv
         self.parts = self._load_csv(PARTS_CSV)
         self.wheels = self._load_csv(WHEELS_CSV)
         self.donors = self._load_csv(DONORS_CSV)
         
-        # ЗАГРУЗКА ЛОКАЛЬНОЙ БАЗЫ (из файла akpp.csv в папке проекта)
+        # Загрузка локального файла
         self.load_local_akpp()
 
     def search_parts(self, query):
