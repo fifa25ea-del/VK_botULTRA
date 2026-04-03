@@ -16,7 +16,6 @@ from urllib.parse import urlparse
 import random
 from io import StringIO
 
-
 def get_image(url):
     try:
         response = requests.get(url, timeout=3)
