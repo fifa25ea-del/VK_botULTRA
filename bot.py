@@ -96,7 +96,8 @@ FAV_FILE = "favorites.json"
 STATS_FILE = "stats.json"
 
 # ===== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ СОСТОЯНИЯ =====
-user_state = {}  # Хранит текущее состояние пользователя
+user_state[peer_id] = "watch_wait"
+user_watch_query[peer_id] = query
 user_results = {}  # Хранит результаты поиска для пользователя
 user_index = {}  # Хранит текущий индекс в результатах поиска
 user_mode = {}  # peer_id → 'wheel', 'part' или None
