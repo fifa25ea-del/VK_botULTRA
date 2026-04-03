@@ -441,9 +441,9 @@ class DataCache:
         
         if os.path.exists(file_path):
             try:
-                # utf-8-sig помогает правильно читать файлы, сохраненные через Excel
-                with open(file_path, mode='r', encoding='utf-8-sig') as f:
-                    # delimiter=';' — стандарт для русского Excel. 
+                # МЕНЯЕМ КОДИРОВКУ ТУТ:
+                with open(file_path, mode='r', encoding='cp1251') as f:
+                    # Также проверьте разделитель. В Excel это обычно ';'
                     reader = csv.DictReader(f, delimiter=';') 
                     self.akpp_base = list(reader)
                 logging.info(f"✅ База АКПП загружена: {len(self.akpp_base)} строк")
@@ -451,8 +451,7 @@ class DataCache:
                 logging.error(f"❌ Ошибка чтения akpp.csv: {e}")
                 self.akpp_base = [] 
         else:
-            logging.warning(f"⚠️ Файл {file_path} не найден в репозитории.")
-            self.akpp_base = []
+            logging.warning(f"⚠️ Файл {file_path} не найден.")
     
     def update(self):
         logging.info("🔄 Запуск обновления данных...")
