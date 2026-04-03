@@ -1242,21 +1242,20 @@ def handle(event):
         send_safe(peer_id, "Введите номер вашего кузова (например, w211 или 211):")
         return
     if state == "await_akpp_body":
-        # Очищаем ввод пользователя: оставляем только цифры (w211 -> 211, w 211 -> 211)
-        body_digits = "".join(filter(str.isdigit, text)) 
-        
-        # Если в кузове только буквы (например, 'Gelandewagen'), оставляем текст
-        body_query = body_digits if body_digits else text.lower().strip()
+        body_query = "".join(filter(str.isdigit, text)) 
+        if not body_query: body_query = text.upper()
         
         user_state[peer_id] = {"mode": "await_akpp_drive", "body": body_query}
         
+        # Создаем клавиатуру правильно
         kb = VkKeyboard(one_time=True)
-        kb.add_button("Полный", color=VkKeyboardColor.PRIMARY)
         kb.add_button("Задний", color=VkKeyboardColor.PRIMARY)
+        kb.add_button("Полный", color=VkKeyboardColor.PRIMARY)
         kb.add_line()
-        kb.add_button("Передний", color=VkKeyboardColor.PRIMARY)
+        kb.add_button("Передний", color=VkKeyboardColor.SECONDARY)
         
-        send_safe(peer_id, f"Кузов '{text}' принят. Выберите тип привода:", keyboard=kb)
+        # ВАЖНО: передаем kb.get_keyboard(), а не просто kb
+        send_safe(peer_id, f"Кузов {body_query} принят. Укажите ваш привод:", keyboard=kb.get_keyboard())
         return
 
     if isinstance(state, dict) and state.get("mode") == "await_akpp_drive":
