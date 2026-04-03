@@ -1092,49 +1092,38 @@ def show_favorites(peer_id):
 def handle(event):
     msg = event.obj.message
     peer_id = msg['peer_id']
-    text = msg.get('text', '').strip()
+    text = msg.get('text', '').strip()  # сначала определяем текст
     if not text:
-        return  # если текста нет, выходим
+        return
 
-    text_lower = text.lower()
+    text_lower = text.lower()  # теперь безопасно
     logging.info(f"[MSG] {peer_id}: {text}")
     state = user_state.get(peer_id)
 
     # =========================
     # ГЛАВНОЕ МЕНЮ (ВСЕГДА)
     # =========================
-    if text_lower in ["🏠 главное меню", "главное меню", "меню", "start", "назад"]:
+     if text_lower in ["🏠 главное меню", "главное меню", "меню", "start", "назад"]:
         user_state[peer_id] = None
         user_results.pop(peer_id, None)
         user_index.pop(peer_id, None)
-        send(peer_id, "Главное меню:", keyboard=get_main_keyboard())
+        send_safe(peer_id, "Главное меню:", keyboard=get_main_keyboard())
         return
 
-
-    # =========================
-    # ЛОГИКА КНОПОК (ГЛАВНОЕ МЕНЮ)
-    # =========================
-    text = getattr(event, 'text', None)
-    if not text:
-        return  # ничего не делать, если текста нет
-    
-    text_lower = text.lower()
-    
     # --- Главное меню ---
     if text == "⚙️ Двигатель":
         user_state[peer_id] = "await_engine_number"
         send_safe(peer_id, "Введите номер вашего двигателя, например M272:")
         return
 
-    if state == "await_engine_number":
+    # ========= Ввод номера двигателя =========
+    if user_state.get(peer_id) == "await_engine_number":
         query = text.upper().replace(".", "").replace(" ", "")
         results = []
-        # ищем только по двигателям
         for part in cache.get_parts(category="ДВИГАТЕЛЬ"):
             part_number = part['number'].upper().replace(".", "").replace(" ", "")
             if query in part_number:
                 results.append(part)
-
         if results:
             user_results[peer_id] = results
             user_index[peer_id] = 0
@@ -1143,6 +1132,7 @@ def handle(event):
         else:
             send_safe(peer_id, f"По номеру двигателя '{text}' ничего не найдено. Попробуйте ещё раз.")
         return
+
     
     # --- Другие разделы ---
     if text_lower == "🚗 запчасти":
@@ -1164,6 +1154,10 @@ def handle(event):
             show_donor(peer_id)
         else:
             send_safe(peer_id, "Нет данных.")
+        return
+
+    elif text_lower == "❤️ избранное":
+        show_favorites(peer_id)
         return
 
     elif text_lower == "❤️ избранное":
@@ -1229,8 +1223,14 @@ def handle(event):
                  keyboard=get_watch_keyboard())
         return
 
-    # Навигация (вперед/назад)
-    if text_lower in ["➡️ вперед", "вперед", "⬅️ назад", "назад"]:
+    if text_lower in ["⬅️ назад", "назад"]:
+        user_state[peer_id] = None
+        user_results.pop(peer_id, None)
+        user_index.pop(peer_id, None)
+        send_safe(peer_id, "Главное меню:", keyboard=get_main_keyboard())
+        return
+
+    if text_lower in ["➡️ вперед", "вперед"]:
         handle_navigation(peer_id, text_lower, state)
         return
 
