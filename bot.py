@@ -796,7 +796,76 @@ def show_part(peer_id):
     except Exception as e:
         logging.critical(f"ФАТАЛЬНАЯ ошибка в show_part для {peer_id}: {e}")
         send_safe(peer_id, "Произошла критическая ошибка при отображении детали.")
-        
+
+def show_engine(peer_id):
+    results = user_results.get(peer_id, [])
+    idx = user_index.get(peer_id, 0)
+
+    if not results or not (0 <= idx < len(results)):
+        send_safe(peer_id, "Данные двигателя не найдены.")
+        return
+
+    part = results[idx]
+
+    # --- 1. ФОРМИРУЕМ ТЕКСТ (Стиль как в АКПП) ---
+    title = "🚀 ДВИГАТЕЛЬ В СБОРЕ"
+    model_engine = part.get('Двигатель') or part.get('Маркировка') or 'Не указана'
+    price = part.get('Цена') or 'По запросу'
+    body = part.get('Кузов') or 'Не указан'
+    mileage = part.get('Пробег') or 'Не указан'
+    item_id = part.get('Артикул') or part.get('Номер') or '---'
+    
+    msg = (
+        f"{title}\n"
+        f"💰 Цена: {price} руб.\n\n"
+        f"⛽ Модель ДВС: {model_engine}\n"
+        f"🚗 Кузов: {body}\n"
+        f"🛣 Пробег: {mileage}\n\n"
+        f"📄 Комментарий: {part.get('Комментарий', 'информация отсутствует')}\n"
+        f"🔢 Артикул: {item_id}\n\n"
+        f"📊 Результат {idx + 1} из {len(results)}"
+    )
+
+    # --- 2. ПОДГОТОВКА КЛАВИАТУРЫ ---
+    keyboard_data = get_nav_keyboard()
+
+    # --- 3. ЗАГРУЗКА ФОТО ---
+    photos_str = part.get('Фото') or part.get('Превью', '')
+    photo_url = None
+    if photos_str:
+        photo_url = photos_str.split(',')[0].strip()
+
+    if photo_url and photo_url.startswith('http'):
+        try:
+            response = requests.get(photo_url, timeout=10)
+            response.raise_for_status()
+
+            upload_url = vk.photos.getMessagesUploadServer()['upload_url']
+            files = {'photo': ('engine.jpg', response.content)}
+            upload_data = requests.post(upload_url, files=files, timeout=15).json()
+
+            photo_data = vk.photos.saveMessagesPhoto(
+                server=upload_data['server'],
+                photo=upload_data['photo'],
+                hash=upload_data['hash']
+            )[0]
+            
+            attachment = f"photo{photo_data['owner_id']}_{photo_data['id']}"
+            
+            vk.messages.send(
+                peer_id=peer_id,
+                message=msg,
+                attachment=attachment,
+                keyboard=keyboard_data,
+                random_id=get_random_id()
+            )
+            return 
+        except Exception as e:
+            logging.error(f"Ошибка загрузки фото двигателя: {e}")
+    
+    # Отправка без фото, если что-то пошло не так
+    send_safe(peer_id, msg, keyboard=keyboard_data)
+
 def show_akpp(peer_id):
     results = user_results.get(peer_id, [])
     idx = user_index.get(peer_id, 0)
@@ -1268,6 +1337,17 @@ def handle(event):
             
         user_index[peer_id] = idx
 
+        state_data = user_state.get(peer_id)
+        current_mode = state_data.get("mode") if isinstance(state_data, dict) else state_data
+        
+        if current_mode == "engine_view":
+            show_engine(peer_id)
+        elif current_mode in ["akpp_view", "await_akpp_drive"]:
+            show_akpp(peer_id)
+        else:
+            show_part(peer_id)
+        return
+
         # ПРОВЕРКА РЕЖИМА: Если мы искали АКПП, вызываем show_akpp
         state_data = user_state.get(peer_id)
         current_mode = state_data.get("mode") if isinstance(state_data, dict) else state_data
@@ -1285,16 +1365,14 @@ def handle(event):
         clean_text = text.upper().replace(".", "").replace(" ", "")
         
         # Вызываем созданный нами метод
-        results = cache.get_engines(clean_text)
-        
+        results = cache.get_engines(text)
         if results:
             user_results[peer_id] = results
             user_index[peer_id] = 0
-            user_state[peer_id] = "parts" # Переходим в режим просмотра
-            show_part(peer_id)
+            user_state[peer_id] = {"mode": "engine_view"} # Устанавливаем режим
+            show_engine(peer_id)
         else:
-            send_safe(peer_id, f"❌ Двигатель с номером '{text}' не найден в базе. Попробуйте другой номер.")
-        return
+            send_safe(peer_id, "❌ Двигатель с таким номером не найден или стоит дешевле 30к.")
 
     # Режим ввода артикула запчасти
     if state == "wait_part_number":
