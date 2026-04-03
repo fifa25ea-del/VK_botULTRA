@@ -1240,29 +1240,29 @@ def handle(event):
         return
 
     if isinstance(state, dict) and state.get("mode") == "await_akpp_drive":
-        drive_query = text.lower().strip() 
-        body_query = state.get("body") # Тут у нас уже очищенные цифры, например "211"
+        drive_query = text.lower().strip() # "полный", "задний" и т.д.
+        body_query = state.get("body")      # очищенные цифры кузова, например "211"
         
         results = []
+        
         for part in cache.parts:
+            # 1. Получаем данные из нужных колонок
             name = part.get('Наименование', '').lower()
-            drive_info = part.get('Комплектация', '').lower()
-            # Берем данные кузова из базы и тоже оставляем только цифры для сравнения
-            raw_body_info = part.get('Кузов', '').lower()
-            body_info_digits = "".join(filter(str.isdigit, raw_body_info))
+            # ТЕПЕРЬ ИЩЕМ ПРИВОД В КОЛОНКЕ "Комплектация"
+            komplekt_info = part.get('Комплектация', '').lower() 
+            body_info = part.get('Кузов', '').lower()
             
-            # Условия поиска:
-            # 1. Это АКПП
-            is_akpp = "акпп" in name 
-            # 2. Привод совпадает
-            is_right_drive = drive_query in drive_info 
-            # 3. Кузов совпадает (сравниваем только цифры "211" in "211" или "211" в "w211")
-            # Если цифр в базе нет, ищем просто вхождение строки
-            if body_info_digits:
-                is_right_body = body_query in body_info_digits
-            else:
-                is_right_body = body_query in raw_body_info
+            # 2. Проверка на АКПП
+            is_akpp = "акпп" in name or "кпп" in name
             
+            # 3. Проверка привода (ищем слово "полный" в строке комплектации)
+            is_right_drive = drive_query in komplekt_info
+            
+            # 4. Проверка кузова (гибкий поиск по цифрам или строке)
+            body_info_digits = "".join(filter(str.isdigit, body_info))
+            is_right_body = body_query in body_info_digits or body_query in body_info
+
+            # Если все три условия совпали — добавляем в результаты
             if is_akpp and is_right_drive and is_right_body:
                 results.append(part)
         
@@ -1272,10 +1272,14 @@ def handle(event):
             user_state[peer_id] = "parts" 
             show_part(peer_id)
         else:
-            send_safe(peer_id, f"❌ АКПП не найдена.\nПараметры: кузов {body_query}, привод {drive_query}", 
+            # Выводим подсказку, что именно не нашлось
+            send_safe(peer_id, 
+                      f"❌ Не найдено АКПП на кузов {body_query} с приводом {drive_query}.\n"
+                      f"Подсказка: я искал слово '{drive_query}' в колонке 'Комплектация'.", 
                       keyboard=get_parts_menu_keyboard())
             user_state[peer_id] = "parts_menu"
         return
+        
     if text_lower == "🛞 диски":
         user_state[peer_id] = "wheels"
         send_safe(peer_id, "Введите размер (например R18):")
