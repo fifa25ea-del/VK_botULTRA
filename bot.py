@@ -157,6 +157,24 @@ except Exception as e:
 
 from vk_api.keyboard import VkKeyboard, VkKeyboardColor
 
+def get_parts_menu_keyboard():
+    keyboard = VkKeyboard(one_time=False)
+    
+    # Первая строка: Поиск и Популярное
+    keyboard.add_button("🔍 Поиск по номеру", color=VkKeyboardColor.PRIMARY)
+    keyboard.add_button("🔥 Популярное", color=VkKeyboardColor.POSITIVE)
+    keyboard.add_line()
+    
+    # Вторая строка: Категории
+    keyboard.add_button("⚙️ Двигатель", color=VkKeyboardColor.SECONDARY)
+    keyboard.add_button("🕹 Акпп", color=VkKeyboardColor.SECONDARY)
+    keyboard.add_line()
+    
+    # Кнопка возврата
+    keyboard.add_button("⬅️ В главное меню", color=VkKeyboardColor.NEGATIVE)
+    
+    return keyboard.get_keyboard()
+
 def get_main_keyboard():
     keyboard = VkKeyboard(one_time=False)
     
@@ -1249,6 +1267,45 @@ def handle(event):
 
                 show_favorites(peer_id)
         return
+
+    
+    text = event.obj.message['text']
+    peer_id = event.obj.message['peer_id']
+    
+    if text == "🚗 Запчасти":
+        user_state[peer_id] = "parts_menu" # Устанавливаем состояние подменю
+        send_safe(peer_id, "Выберите раздел запчастей:", keyboard=get_parts_menu_keyboard())
+    
+    elif text == "🔍 Поиск по номеру":
+        user_state[peer_id] = "wait_part_number"
+        send_safe(peer_id, "Введите артикул или номер детали:")
+    
+    elif text == "⚙️ Двигатель":
+        # Фильтруем базу по слову "Двигатель" в наименовании
+        results = [p for p in cache.parts if "двигатель" in p.get('Наименование', '').lower()]
+        user_results[peer_id] = results
+        user_index[peer_id] = 0
+        show_part(peer_id) # Используем вашу готовую функцию показа [cite: 149]
+    
+    elif text == "🕹 Акпп":
+        # Фильтруем базу по ключевым словам АКПП/Коробка
+        keywords = ["акпп", "кпп", "коробка"]
+        results = [p for p in cache.parts if any(k in p.get('Наименование', '').lower() for k in keywords)]
+        user_results[peer_id] = results
+        user_index[peer_id] = 0
+        show_part(peer_id)
+    
+    elif text == "🔥 Популярное":
+        # Здесь можно выводить топ-20 последних или самых востребованных деталей
+        results = cache.parts[:20] 
+        user_results[peer_id] = results
+        user_index[peer_id] = 0
+        show_part(peer_id)
+    
+    elif text == "⬅️ В главное меню":
+        user_state[peer_id] = None
+        send_safe(peer_id, "Возвращаю в главное меню", keyboard=get_main_keyboard())
+    
 
 def handle_watch_button(peer_id):
     state = user_state.get(peer_id)
