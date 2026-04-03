@@ -391,6 +391,26 @@ class DataCache:
         latest_donors.reverse()
         
         return latest_donors
+   
+    def get_engines(self, engine_number_query):
+        """
+        Ищет запчасти, где в 'Наименовании' есть 'двигатель', 
+        а в колонке 'Двигатель' содержится искомый номер.
+        """
+        query = engine_number_query.upper().replace(" ", "").replace(".", "")
+        results = []
+        
+        for part in self.parts:
+            # 1. Проверяем, что это запчасть именно двигателя
+            name = part.get('Наименование', '').lower()
+            if 'двигатель' in name:
+                # 2. Берем номер из колонки 'Двигатель'
+                raw_engine_val = part.get('Двигатель', '').upper().replace(" ", "").replace(".", "")
+                
+                # Если номер из колонки совпадает с запросом (например, M272 в M272.964)
+                if query in raw_engine_val:
+                    results.append(part)
+        return results
         
     def __init__(self):
         self.parts = []
