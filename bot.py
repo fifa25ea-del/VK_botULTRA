@@ -403,22 +403,27 @@ class DataCache:
     
     def get_engines(self, engine_number_query):
         """
-        Ищет запчасти, где в 'Наименовании' есть 'двигатель', 
-        а в колонке 'Двигатель' содержится искомый номер.
+        Поиск строго агрегатов. 
+        Условие: слово 'ДВИГАТЕЛЬ' в названии + номер в колонке 'Двигатель'.
         """
-        query = engine_number_query.upper().replace(" ", "").replace(".", "")
+        # Нормализуем запрос (удаляем пробелы, точки, приводим к верхнему регистру)
+        query = normalize_query(engine_number_query)
         results = []
         
         for part in self.parts:
-            # 1. Проверяем, что это запчасть именно двигателя
-            name = part.get('Наименование', '').lower()
-            if 'двигатель' in name:
-                # 2. Берем номер из колонки 'Двигатель'
-                raw_engine_val = part.get('Двигатель', '').upper().replace(" ", "").replace(".", "")
+            # 1. ОБЯЗАТЕЛЬНОЕ УСЛОВИЕ: слово 'двигатель' в названии запчасти
+            # Мы приводим к нижнему регистру для надежности поиска
+            item_name = part.get('Наименование', '').lower()
+            
+            if 'двигатель' in item_name:
+                # 2. Проверяем номер модели двигателя в соответствующей колонке
+                raw_engine_val = part.get('Двигатель', '')
+                db_val_normalized = normalize_query(raw_engine_val)
                 
-                # Если номер из колонки совпадает с запросом (например, M272 в M272.964)
-                if query in raw_engine_val:
+                # Если клиент ввел "272", а в базе "M272.964", это сработает
+                if query in db_val_normalized:
                     results.append(part)
+                    
         return results
         
     def __init__(self):
