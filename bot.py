@@ -1293,28 +1293,27 @@ def add_to_favorites(peer_id, item):
     if peer_id not in user_favorites:
         user_favorites[peer_id] = []
     
-    # 1. Пытаемся создать уникальный ключ для проверки дубликатов
-    # Проверяем все возможные поля ID
+    # Пытаемся найти уникальный идентификатор товара
+    # Для дисков это 'Артикул', для запчастей 'Номер', для АКПП 'Номер товара'
     item_id = (
         item.get('Артикул') or 
-        item.get('Номер товара') or 
         item.get('Номер') or 
-        # Если ID нет (как часто бывает в Wheels), создаем ключ из названия и цены
-        f"{item.get('Наименование', '')}_{item.get('Цена', '')}"
+        item.get('Номер товара') or 
+        item.get('Наименование', '') + str(item.get('Цена', ''))
     )
     
-    # 2. Проверяем, нет ли его уже в списке
+    # Проверка на дубликат
     is_duplicate = any(
-        (f.get('Артикул') or f.get('Номер товара') or f.get('Номер') or 
-         f"{f.get('Наименование', '')}_{f.get('Цена', '')}") == item_id 
+        (f.get('Артикул') or f.get('Номер') or f.get('Номер товара') or 
+         f.get('Наименование', '') + str(f.get('Цена', ''))) == item_id 
         for f in user_favorites[peer_id]
     )
     
     if not is_duplicate:
         user_favorites[peer_id].append(item)
-        send_safe(peer_id, "✅ Товар (диски) добавлен в избранное!")
+        send_safe(peer_id, "✅ Добавлено в избранное!")
     else:
-        send_safe(peer_id, "ℹ️ Этот товар уже есть в вашем избранном.")
+        send_safe(peer_id, "ℹ️ Этот товар уже есть в избранном.")
 
 def show_favorites(peer_id):
     """Загружает список избранного в результаты поиска и показывает первую карточку."""
@@ -1551,18 +1550,20 @@ def handle(event):
         return
 
     if text_lower == "❤️ добавить в избранное":
-        # Берем результаты и индекс конкретно для этого пользователя
+        # 1. Берем текущие результаты и индекс пользователя
         results = user_results.get(peer_id, [])
         idx = user_index.get(peer_id, 0)
 
+        # 2. Проверяем, что в результатах что-то есть
         if results and 0 <= idx < len(results):
-            item_to_add = results[idx]
-            # Вызываем функцию добавления (которую мы подправим ниже)
-            add_to_favorites(peer_id, item_to_add)
+            current_item = results[idx]
+            
+            # 3. Вызываем универсальную функцию добавления
+            add_to_favorites(peer_id, current_item)
         else:
-            # Если бот пишет "не найдены", значит results почему-то пустой
-            logging.error(f"Ошибка избранного: results пуст для {peer_id}")
-            send_safe(peer_id, "❌ Ошибка: не удалось определить товар для добавления.")
+            # Если бот выдает "не найдены", значит результаты в памяти стерлись
+            logging.error(f"Ошибка: user_results пуст для {peer_id}")
+            send_safe(peer_id, "❌ Ошибка: не удалось захватить данные карточки. Попробуйте найти диски заново.")
         return
         
     # Обработка кнопки "Следить" (если в state словарь)
