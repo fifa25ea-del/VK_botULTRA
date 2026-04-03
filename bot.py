@@ -1222,42 +1222,46 @@ def handle(event):
         send_safe(peer_id, "Введите номер вашего кузова (например, w211 или 211):")
         return
     if state == "await_akpp_body":
-        # Сохраняем кузов (очищаем от лишних букв, если нужно, например w211 -> 211)
-        body_query = "".join(filter(str.isdigit, text)) 
-        if not body_query: body_query = text.upper() # Если цифр нет, оставляем как есть
+        # Очищаем ввод пользователя: оставляем только цифры (w211 -> 211, w 211 -> 211)
+        body_digits = "".join(filter(str.isdigit, text)) 
+        
+        # Если в кузове только буквы (например, 'Gelandewagen'), оставляем текст
+        body_query = body_digits if body_digits else text.lower().strip()
         
         user_state[peer_id] = {"mode": "await_akpp_drive", "body": body_query}
         
-        # Можно сделать кнопками для удобства
         kb = VkKeyboard(one_time=True)
-        kb.add_button("Задний", color=VkKeyboardColor.PRIMARY)
         kb.add_button("Полный", color=VkKeyboardColor.PRIMARY)
+        kb.add_button("Задний", color=VkKeyboardColor.PRIMARY)
         kb.add_line()
         kb.add_button("Передний", color=VkKeyboardColor.PRIMARY)
         
-        send_safe(peer_id, f"Кузов {body_query} принят. Теперь укажите ваш привод:", keyboard=kb)
+        send_safe(peer_id, f"Кузов '{text}' принят. Выберите тип привода:", keyboard=kb)
         return
 
     if isinstance(state, dict) and state.get("mode") == "await_akpp_drive":
-        drive_query = text.lower().strip() # Например: "полный"
-        body_query = state.get("body")      # Например: "211"
+        drive_query = text.lower().strip() 
+        body_query = state.get("body") # Тут у нас уже очищенные цифры, например "211"
         
         results = []
         for part in cache.parts:
-            # 1. Получаем данные из колонок (используйте те названия, что в вашем CSV)
             name = part.get('Наименование', '').lower()
-            drive_info = part.get('Комплектация', '').lower() # Здесь лежит "левый руль, акпп, полный"
-            body_info = part.get('Кузов', '').lower()
+            drive_info = part.get('Комплектация', '').lower()
+            # Берем данные кузова из базы и тоже оставляем только цифры для сравнения
+            raw_body_info = part.get('Кузов', '').lower()
+            body_info_digits = "".join(filter(str.isdigit, raw_body_info))
             
-            # 2. Проверяем условия
-            # Ищем "акпп" в названии
+            # Условия поиска:
+            # 1. Это АКПП
             is_akpp = "акпп" in name 
-            
-            # Ищем тип привода в строке привода (например, "полный" в "левый руль, акпп, полный")
+            # 2. Привод совпадает
             is_right_drive = drive_query in drive_info 
-            
-            # Ищем номер кузова
-            is_right_body = body_query in body_info
+            # 3. Кузов совпадает (сравниваем только цифры "211" in "211" или "211" в "w211")
+            # Если цифр в базе нет, ищем просто вхождение строки
+            if body_info_digits:
+                is_right_body = body_query in body_info_digits
+            else:
+                is_right_body = body_query in raw_body_info
             
             if is_akpp and is_right_drive and is_right_body:
                 results.append(part)
@@ -1268,11 +1272,10 @@ def handle(event):
             user_state[peer_id] = "parts" 
             show_part(peer_id)
         else:
-            send_safe(peer_id, f"❌ АКПП не найдена.\nФильтры: кузов {body_query}, привод {drive_query}", 
+            send_safe(peer_id, f"❌ АКПП не найдена.\nПараметры: кузов {body_query}, привод {drive_query}", 
                       keyboard=get_parts_menu_keyboard())
             user_state[peer_id] = "parts_menu"
         return
-
     if text_lower == "🛞 диски":
         user_state[peer_id] = "wheels"
         send_safe(peer_id, "Введите размер (например R18):")
