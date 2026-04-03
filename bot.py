@@ -1,6 +1,3 @@
-# =========================
-# VK BOT ULTRA (ТОП ВЕРСИЯ)
-# =========================
 import re
 import os
 import vk_api
@@ -10,22 +7,12 @@ import io
 import threading
 import time
 import json
-from vk_api.bot_longpoll import VkBotLongPoll, VkBotEventType
 import logging
-from urllib.parse import urlparse
 import random
+from vk_api.bot_longpoll import VkBotLongPoll, VkBotEventType
+from vk_api.keyboard import VkKeyboard, VkKeyboardColor
+from urllib.parse import urlparse
 from io import StringIO
-
-def save_watchlist():
-    save_json(WATCHLIST_FILE, watchlist)
-
-def get_image(url):
-    try:
-        response = requests.get(url, timeout=3)
-        return response.content
-    except Exception as e:
-        logging.warning(f"Ошибка загрузки фото: {e}")
-        return None
 
 def normalize_query(text: str) -> str:
     text = text.upper()
@@ -83,28 +70,22 @@ def load_donors_csv(url, max_retries=3, timeout=30):
                 raise
     raise Exception("Не удалось загрузить CSV после нескольких попыток")
     
-# ===== НАСТРОЙКИ =====
 TOKEN = "vk1.a.Ze-bIlYgJf9rdkgnhYmWc6U6Eg9DRgi0vLkokPQVV5fIMsfsLm8kVPpCBMD04qwimSsaZZS1R0e1qwndF1hj3ROCvebCapjcT7xVeOSAvAdIJ1rqPYevdcbGAIt6OxV9xreMd2w4JROXJnnKvE4XiDLIieNoPE6BMKERAjlIt8jpeKIughzD9VC7x9DdPjzgF_tvoZMRDGkbvIBycGNoeA"
 GROUP_ID = 236843733
 ADMIN_ID = 888230055
 
-DONORS_CSV = "https://baz-on.ru/export/c592/5c6ca/stuttgart-site-carsrc.csv"
 PARTS_CSV = "https://baz-on.ru/export/c592/e61a0/stuttgart-drom.csv"
 WHEELS_CSV = "https://baz-on.ru/export/c592/77023/drom-wheels.csv"
+DONORS_CSV = "https://baz-on.ru/export/c592/5c6ca/stuttgart-site-carsrc.csv"
 
-FAV_FILE = "favorites.json"
-STATS_FILE = "stats.json"
+FAV_FILE, STATS_FILE, WATCHLIST_FILE = "favorites.json", "stats.json", "watchlist.json"
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # ===== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ СОСТОЯНИЯ =====
-user_state = {}  # Хранит текущее состояние пользователя
-user_results = {}  # Хранит результаты поиска для пользователя
-user_index = {}  # Хранит текущий индекс в результатах поиска
-user_mode = {}  # peer_id → 'wheel', 'part' или None
-initializing_wheels = set()  # Множество peer_id, которые сейчас инициализируют поиск дисков
-_donors_cache = None
-_last_cache_update = 0
-_CACHE_TTL = 300  # Время жизни кэша — 5 минут
-image_cache = {}
+user_state = {}     # peer_id -> "wait_part_number", "viewing_wheels", etc.
+user_results = {}   # peer_id -> list of found items
+user_index = {}     # peer_id -> current item index
 watchlist = {}
 
 
@@ -146,52 +127,36 @@ except Exception as e:
 
 from vk_api.keyboard import VkKeyboard, VkKeyboardColor
 
-def get_parts_menu_keyboard():
-    keyboard = VkKeyboard(one_time=False)
-    
-    # Первая строка: Поиск и Популярное
-    keyboard.add_button("🔍 Поиск по номеру", color=VkKeyboardColor.PRIMARY)
-    keyboard.add_button("🔥 Популярное", color=VkKeyboardColor.POSITIVE)
-    keyboard.add_line()
-    
-    # Вторая строка: Категории
-    keyboard.add_button("⚙️ Двигатель", color=VkKeyboardColor.SECONDARY)
-    keyboard.add_button("🕹 Акпп", color=VkKeyboardColor.SECONDARY)
-    keyboard.add_line()
-    
-    # Кнопка возврата
-    keyboard.add_button("⬅️ В главное меню", color=VkKeyboardColor.NEGATIVE)
-    
-    return keyboard
-
 def get_main_keyboard():
-    keyboard = VkKeyboard(one_time=False)
-    
-    # Первая строка
-    keyboard.add_button("🚗 Запчасти", color=VkKeyboardColor.PRIMARY)
-    keyboard.add_button("🛞 Диски", color=VkKeyboardColor.PRIMARY)
-    keyboard.add_line()
-    
-    # Вторая строка
-    keyboard.add_button("👨‍💻 Менеджер", color=VkKeyboardColor.POSITIVE)
-    keyboard.add_button("❤️ Избранное", color=VkKeyboardColor.POSITIVE)
-    keyboard.add_line()
-    
-    # Третья строка
-    keyboard.add_button("🚘 Доноры", color=VkKeyboardColor.SECONDARY)
-    keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.NEGATIVE)
+    kb = VkKeyboard(one_time=False)
+    kb.add_button("🚗 Запчасти", color=VkKeyboardColor.PRIMARY)
+    kb.add_button("🛞 Диски", color=VkKeyboardColor.PRIMARY)
+    kb.add_line()
+    kb.add_button("👨‍💻 Менеджер", color=VkKeyboardColor.POSITIVE)
+    kb.add_button("❤️ Избранное", color=VkKeyboardColor.POSITIVE)
+    kb.add_line()
+    kb.add_button("🚘 Доноры", color=VkKeyboardColor.SECONDARY)
+    return kb
 
-    return keyboard
-    
+def get_parts_menu():
+    kb = VkKeyboard(one_time=False)
+    kb.add_button("🔍 Поиск по номеру", color=VkKeyboardColor.PRIMARY)
+    kb.add_button("🔥 Популярное", color=VkKeyboardColor.POSITIVE)
+    kb.add_line()
+    kb.add_button("⚙️ Двигатель", color=VkKeyboardColor.SECONDARY)
+    kb.add_button("🕹 АКПП", color=VkKeyboardColor.SECONDARY)
+    kb.add_line()
+    kb.add_button("🏠 Главное меню", color=VkKeyboardColor.NEGATIVE)
+    return kb
+
 def get_nav_keyboard():
-    keyboard = VkKeyboard(one_time=False)
-    keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
-    keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
-    keyboard.add_line()
-    keyboard.add_button("❤️ Добавить в избранное", color=VkKeyboardColor.POSITIVE)
-    keyboard.add_line()
-    keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.SECONDARY)
-    return keyboard
+    kb = VkKeyboard(one_time=False)
+    kb.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
+    kb.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
+    kb.add_line()
+    kb.add_button("❤️ В избранное", color=VkKeyboardColor.POSITIVE)
+    kb.add_button("🏠 Главное меню", color=VkKeyboardColor.NEGATIVE)
+    return kb
 
 def send_photo_with_caption(peer_id, photo_url, caption):
     """Отправляет фото с подписью"""
@@ -334,20 +299,25 @@ def send_safe(peer_id, text, keyboard=None):
     except Exception as e:
         logging.error(f"Ошибка отправки сообщения: {e}")
 
-def send(peer_id, text, keyboard=None):
+def send_msg(peer_id, text, keyboard=None, photo_url=None):
     try:
-        # Проверяем клавиатуру
-        if keyboard and not isinstance(keyboard, VkKeyboard):
-            keyboard = get_main_keyboard()
-        
+        attachment = None
+        if photo_url:
+            # Упрощенная загрузка фото для примера (лучше использовать кэширование media_id)
+            upload = vk_api.VkUpload(vk_session)
+            img_data = requests.get(photo_url).content
+            photo = upload.photo_messages(io.BytesIO(img_data))[0]
+            attachment = f"photo{photo['owner_id']}_{photo['id']}"
+
         vk.messages.send(
             peer_id=peer_id,
             message=text,
-            random_id=get_random_id(),
-            keyboard=keyboard.get_keyboard() if isinstance(keyboard, VkKeyboard) else get_main_keyboard()
+            attachment=attachment,
+            random_id=random.getrandbits(31),
+            keyboard=keyboard.get_keyboard() if keyboard else None
         )
     except Exception as e:
-        logging.error(f"Ошибка отправки сообщения: {e}")
+        logging.error(f"Ошибка отправки: {e}")
 
 
 # ===== ХРАНИЛИЩЕ =====
@@ -372,55 +342,28 @@ stats = load_json(STATS_FILE)
 
 # ===== КЭШ =====
 class DataCache:
-    
-    def get_latest_donors(self, limit=15):
-        """
-        Возвращает список последних 'limit' доноров из локального кэша.
-        Сортировка: от НОВЫХ к СТАРЫМ.
-        """
-        # Создаем копию списка, чтобы не сломать исходный порядок в кэше
-        donors_copy = self.donors.copy()
-        
-        # Если доноров меньше, чем лимит, просто возвращаем все что есть
-        if len(donors_copy) <= limit:
-            return donors_copy
-        
-        # Берем последние 'limit' элементов из списка.
-        # Предполагается, что в CSV-файле самые свежие авто находятся в конце.
-        latest_donors = donors_copy[-limit:]
-        
-        # Так как мы взяли срез с конца, порядок будет [Старый_в_выборке, ..., Новый_в_выборке].
-        # Нам нужно перевернуть его, чтобы [Новый_в_выборке, ..., Старый_в_выборке].
-        latest_donors.reverse()
-        
-        return latest_donors
-        
     def __init__(self):
         self.parts = []
         self.wheels = []
         self.donors = []
 
-    def load_csv(self, url):
+    def _load_csv(self, url):
         try:
-            r = requests.get(url, timeout=15)
+            r = requests.get(url, timeout=20)
             r.encoding = "cp1251"
-            return list(csv.DictReader(io.StringIO(r.text), delimiter=";"))
-        except requests.exceptions.RequestException as e:
-            logging.error(f"Ошибка загрузки CSV с {url}: {e}")
-            return []
+            return list(csv.DictReader(StringIO(r.text), delimiter=";"))
         except Exception as e:
-            logging.error(f"Неизвестная ошибка при загрузке CSV: {e}")
+            logging.error(f"Ошибка загрузки CSV {url}: {e}")
             return []
 
     def update(self):
-        try:
-            print("🔄 Обновление базы...")
-            self.parts = self.load_csv(PARTS_CSV)
-            self.wheels = self.load_csv(WHEELS_CSV)
-            self.donors = self.load_csv(DONORS_CSV)
-            print("База данных успешно обновлена")
-        except Exception as e:
-            logging.error(f"Критическая ошибка при обновлении базы: {e}")
+        logging.info("🔄 Обновление базы данных...")
+        self.parts = self._load_csv(PARTS_CSV)
+        self.wheels = self._load_csv(WHEELS_CSV)
+        self.donors = self._load_csv(DONORS_CSV)
+        logging.info(f"✅ База обновлена. Запчасти: {len(self.parts)}, Диски: {len(self.wheels)}")
+
+cache = DataCache()
 
     def search_parts(self, query):
         """Поиск деталей по названию или артикулу"""
@@ -563,65 +506,13 @@ def notify_watchlist():
         logging.error(f"Ошибка при уведомлении watchlist: {e}")
 
 # Добавляем методы для работы с результатами поиска
-def safe_get(data_dict, field_name, default="Не указано"):
-    """Безопасно получает значение из словаря, очищает от пробелов"""
-    value = data_dict.get(field_name, "")
-    if value is None:
-        return default
-    value = str(value).strip()
-    return value if value else default
-
-def show_part_info(peer_id, part):
-    logging.debug(f"Пытаемся получить фото по ссылке: {part.get('Фото', '')}")
-    """Показывает подробную информацию о детали"""
-    try:
-        message = "🚗 Информация о детали:\n"
-        message += f"Название: {safe_get(part, 'Наименование')}\n"
-        message += f"Артикул: {safe_get(part, 'Артикул')}\n"
-        message += f"Номер: {safe_get(part, 'Номер')}\n"
-        message += f"Цена: {safe_get(part, 'Цена')}\n"
-        comment = safe_get(part, 'Комментарий')
-        if comment != "Не указано":
-            message += f"Комментарий: {comment}"
-        send(peer_id, message)
-    except Exception as e:
-        logging.error(f"Критическая ошибка в show_part_info: {e}")
-        send(peer_id, "Произошла ошибка при получении информации о детали")
-
-def show_donor_info(peer_id, donor):
-    """Показывает подробную информацию о доноре"""
-    try:
-        message = "🚘 Информация о доноре:\n"
-        message += f"Марка: {donor.get('Марка', 'Не указана')}\n"
-        message += f"Модель: {donor.get('Модель', 'Не указана')}\n"
-        message += f"Год выпуска: {donor.get('Год', 'Не указан')}\n"
-        message += f"Цена: {donor.get('Цена', 'Не указана')}\n"
-        message += f"Пробег: {donor.get('Пробег', 'Не указан')}"
-        send(peer_id, message)
-    except Exception as e:
-        logging.error(f"Ошибка при отображении информации о доноре: {e}")
-        send(peer_id, "Произошла ошибка при получении информации о доноре")
-
-def show_wheel_info(peer_id, wheel):
-    """Показывает подробную информацию о диске"""
-    try:
-        message = "🛞 Информация о диске:\n"
-        message += f"Производитель: {wheel.get('Производитель диска', 'Не указан')}\n"
-        message += f"Артикул: {wheel.get('Артикул', 'Не указан')}\n"
-        message += f"Модель диска: {wheel.get('Модель диска', 'Не указана')}\n"
-        message += f"Размер: {wheel.get('Размер', 'Не указан')}\n"
-        message += f"PCD диска: {wheel.get('PCD диска', 'Не указан')}\n"
-        message += f"Тип диска: {wheel.get('Тип диска', 'Не указан')}\n"
-        message += f"Цена: {wheel.get('Цена', 'Не указана')}"
-        send(peer_id, message)
-    except Exception as e:
-        logging.error(f"Ошибка при отображении информации о диске: {e}")
-        send(peer_id, "Произошла ошибка при получении информации о диске")
+def safe_get(d, key, default="Не указано"):
+    val = d.get(key, "").strip()
+    return val if val and val != "None" else default
 
 def enter_wheel_mode(peer_id):
     user_mode[peer_id] = 'wheel'
     show_wheel_item(peer_id, 0)  # показываем первый элемент
-
 
 def enter_part_mode(peer_id):
     user_mode[peer_id] = 'part'
