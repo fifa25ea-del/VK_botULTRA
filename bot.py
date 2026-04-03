@@ -105,6 +105,7 @@ _donors_cache = None
 _last_cache_update = 0
 _CACHE_TTL = 300  # Время жизни кэша — 5 минут
 image_cache = {}
+watchlist = {}
 
 
 
@@ -329,6 +330,9 @@ def send_safe(peer_id, text, keyboard=None):
             random_id=get_random_id(),
             keyboard=keyboard_data
         )
+
+    except Exception as e:
+        logging.error(f"Ошибка отправки сообщения: {e}")
 
 def send(peer_id, text, keyboard=None):
     try:
