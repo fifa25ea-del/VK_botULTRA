@@ -149,39 +149,35 @@ from vk_api.keyboard import VkKeyboard, VkKeyboardColor
 def get_parts_menu_keyboard():
     keyboard = VkKeyboard(one_time=False)
     
-    # Первая строка: Поиск и Популярное
     keyboard.add_button("🔍 Поиск по номеру", color=VkKeyboardColor.PRIMARY)
     keyboard.add_button("🔥 Популярное", color=VkKeyboardColor.POSITIVE)
     keyboard.add_line()
     
-    # Вторая строка: Категории
     keyboard.add_button("⚙️ Двигатель", color=VkKeyboardColor.SECONDARY)
     keyboard.add_button("🕹 Акпп", color=VkKeyboardColor.SECONDARY)
     keyboard.add_line()
     
-    # Кнопка возврата
     keyboard.add_button("⬅️ В главное меню", color=VkKeyboardColor.NEGATIVE)
     
-    return keyboard
+    # ДОБАВЛЕНО .get_keyboard()
+    return keyboard.get_keyboard() 
 
 def get_main_keyboard():
     keyboard = VkKeyboard(one_time=False)
     
-    # Первая строка
     keyboard.add_button("🚗 Запчасти", color=VkKeyboardColor.PRIMARY)
     keyboard.add_button("🛞 Диски", color=VkKeyboardColor.PRIMARY)
     keyboard.add_line()
     
-    # Вторая строка
     keyboard.add_button("👨‍💻 Менеджер", color=VkKeyboardColor.POSITIVE)
     keyboard.add_button("❤️ Избранное", color=VkKeyboardColor.POSITIVE)
     keyboard.add_line()
     
-    # Третья строка
     keyboard.add_button("🚘 Доноры", color=VkKeyboardColor.SECONDARY)
     keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.NEGATIVE)
 
-    return keyboard
+    # ДОБАВЛЕНО .get_keyboard()
+    return keyboard.get_keyboard() 
     
 def get_nav_keyboard():
     keyboard = VkKeyboard(one_time=False)
@@ -191,7 +187,9 @@ def get_nav_keyboard():
     keyboard.add_button("❤️ Добавить в избранное", color=VkKeyboardColor.POSITIVE)
     keyboard.add_line()
     keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.SECONDARY)
-    return keyboard
+    
+    # ДОБАВЛЕНО .get_keyboard()
+    return keyboard.get_keyboard()
 
 def send_photo_with_caption(peer_id, photo_url, caption):
     """Отправляет фото с подписью"""
