@@ -1239,28 +1239,37 @@ def handle(event):
         return
 
     if isinstance(state, dict) and state.get("mode") == "await_akpp_drive":
-        drive_query = text.lower()
-        body_query = state.get("body")
+        drive_query = text.lower().strip() # Например: "полный"
+        body_query = state.get("body")      # Например: "211"
         
         results = []
         for part in cache.parts:
-            # Фильтр 1: Наименование содержит АКПП
-            name = part.get('Наименование', '').upper()
-            # Фильтр 2: Привод совпадает
-            drive = part.get('Привод', '').lower()
-            # Фильтр 3: Кузов содержит цифры модели
-            body = part.get('Кузов', '').upper()
+            # 1. Получаем данные из колонок (используйте те названия, что в вашем CSV)
+            name = part.get('Наименование', '').lower()
+            drive_info = part.get('Комплектация', '').lower() # Здесь лежит "левый руль, акпп, полный"
+            body_info = part.get('Кузов', '').lower()
             
-            if "АКПП" in name and drive_query in drive and body_query in body:
+            # 2. Проверяем условия
+            # Ищем "акпп" в названии
+            is_akpp = "акпп" in name 
+            
+            # Ищем тип привода в строке привода (например, "полный" в "левый руль, акпп, полный")
+            is_right_drive = drive_query in drive_info 
+            
+            # Ищем номер кузова
+            is_right_body = body_query in body_info
+            
+            if is_akpp and is_right_drive and is_right_body:
                 results.append(part)
         
         if results:
             user_results[peer_id] = results
             user_index[peer_id] = 0
-            user_state[peer_id] = "parts" # Переходим в режим показа запчастей
+            user_state[peer_id] = "parts" 
             show_part(peer_id)
         else:
-            send_safe(peer_id, f"❌ АКПП на кузов {body_query} ({drive_query} привод) не найдена.", keyboard=get_parts_menu_keyboard())
+            send_safe(peer_id, f"❌ АКПП не найдена.\nФильтры: кузов {body_query}, привод {drive_query}", 
+                      keyboard=get_parts_menu_keyboard())
             user_state[peer_id] = "parts_menu"
         return
 
