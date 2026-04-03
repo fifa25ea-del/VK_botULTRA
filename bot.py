@@ -789,24 +789,21 @@ def show_akpp(peer_id):
     results = user_results.get(peer_id, [])
     idx = user_index.get(peer_id, 0)
 
-    if not results or idx >= len(results):
+    if not results or not (0 <= idx < len(results)):
         send_safe(peer_id, "Данные АКПП не найдены.")
         return
 
     part = results[idx]
 
-    # Извлекаем данные по ключам из вашего akpp.csv
-    # Используем .get(..., ''), чтобы не вылетало ошибок, если колонки нет
-    title = part.get('Запчасть', 'АКПП')
-    price = part.get('Цена', 'По запросу')
+    # Специфичные поля для файла АКПП (baz-on формат)
+    title = part.get('Запчасть') or part.get('Наименование') or 'АКПП'
+    price = part.get('Цена') or 'По запросу'
     marking = part.get('Маркировка') or part.get('Номер производителя') or 'Не указана'
     body = part.get('Кузов', 'Не указан')
     engine = part.get('Двигатель', 'Не указан')
-    drive = part.get('Комплектация', 'Не указан') # Здесь обычно "Задний" или "Полный"
-    item_id = part.get('Номер товара', '000000')
-    comment = part.get('Комментарий', 'нет')
-
-    # Формируем красивый текст карточки
+    drive = part.get('Комплектация', 'Не указан') # В АКПП тут часто тип привода
+    item_id = part.get('Номер товара') or part.get('Артикул') or '---'
+    
     msg = (
         f"🕹 {title}\n"
         f"💰 Цена: {price} руб.\n\n"
@@ -814,20 +811,19 @@ def show_akpp(peer_id):
         f"🚗 Кузов: {body}\n"
         f"⛽ Двигатель: {engine}\n"
         f"🚜 Привод: {drive}\n\n"
-        f"📄 Комментарий: {comment}\n"
+        f"📄 Комментарий: {part.get('Комментарий', 'нет')}\n"
         f"🔢 ID товара: {item_id}\n\n"
-        f"📈 Результат {idx + 1} из {len(results)}"
+        f"📊 Результат {idx + 1} из {len(results)}"
     )
 
-    # Работа с фото (в baz-on ссылки идут через запятую в 'Превью')
-    photos_str = part.get('Превью', '')
+    # Работа с фото (в АКПП колонка 'Превью')
+    photos_str = part.get('Превью') or part.get('Фото') or ""
     attachment = None
     if photos_str:
-        # Берем первую ссылку из списка
-        first_photo_url = photos_str.split(',')[0].strip()
-        attachment = upload_photo_by_url(first_photo_url)
+        first_url = photos_str.split(',')[0].strip()
+        # Используем вашу функцию загрузки (убедитесь, что она загружает в VK)
+        attachment = upload_photo_by_url(first_url) 
 
-    # Отправляем сообщение с навигационной клавиатурой
     send_safe(peer_id, msg, keyboard=get_nav_keyboard(), attachment=attachment)
 
 def show_wheel(peer_id):
@@ -1205,30 +1201,29 @@ def handle(event):
 
     # ========= Навигация (Листалка) =========
     # Ставим в начало, чтобы перехватывать кнопки раньше остальной логики
-    if text_lower in ["⬅️ назад", "назад", "➡️ вперед", "вперед"]:
+    if text_lower in ["➡️ вперед", "⬅️ назад"]:
         results = user_results.get(peer_id, [])
+        idx = user_index.get(peer_id, 0)
+        
         if not results:
-            send_safe(peer_id, "Нет активных результатов для листания.")
             return
 
-        current_index = user_index.get(peer_id, 0)
-        if text_lower in ["⬅️ назад", "назад"]:
-            user_index[peer_id] = (current_index - 1) % len(results)
+        # Листаем индекс
+        if text_lower == "➡️ вперед":
+            idx = (idx + 1) if idx + 1 < len(results) else 0
         else:
-            user_index[peer_id] = (current_index + 1) % len(results)
+            idx = (idx - 1) if idx - 1 >= 0 else len(results) - 1
+            
+        user_index[peer_id] = idx
 
-        # Проверка режима показа
-        if current_state in ["part_mode", "parts"]:
-            show_part(peer_id)
-        elif current_state == "wheels":
-            show_wheel(peer_id)
-        elif current_state == "donors":
-            show_donor(peer_id)
-        return
-        if current_state == "akpp_view":
+        # ПРОВЕРКА РЕЖИМА: Если мы искали АКПП, вызываем show_akpp
+        state_data = user_state.get(peer_id)
+        current_mode = state_data.get("mode") if isinstance(state_data, dict) else state_data
+        
+        if current_mode == "akpp_view" or current_mode == "await_akpp_drive":
             show_akpp(peer_id)
         else:
-            show_part(peer_id) # Обычная карточка для запчастей/двигателей
+            show_part(peer_id) # Обычная карточка для запчастей
         return
     # ========= Обработка состояний (Ввод текста пользователем) =========
     
@@ -1381,13 +1376,14 @@ def handle(event):
 
    if text_lower == "❤️ добавить в избранное":
         results = user_results.get(peer_id, [])
-        # Исправлено: убрали лишние слова и опечатку в user_index
-        idx = user_index.get(peer_id, 0) 
+        idx = user_index.get(peer_id, 0) # Исправлено: корректное получение индекса
         
-        if results and idx < len(results):
+        if results and 0 <= idx < len(results):
+            # Передаем текущий товар в функцию сохранения
             add_to_favorites(peer_id, results[idx])
-            # Можно добавить подтверждение для пользователя:
-            # send_safe(peer_id, "✅ Добавлено в избранное!")
+            send_safe(peer_id, "✅ Товар добавлен в список избранного!")
+        else:
+            send_safe(peer_id, "❌ Не удалось определить товар для добавления.")
         return
 
     # Обработка кнопки "Следить" (если в state словарь)
