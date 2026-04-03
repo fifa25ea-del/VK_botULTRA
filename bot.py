@@ -827,7 +827,7 @@ def show_akpp(peer_id):
         f"💰 Цена: {price} руб.\n\n"
         f"⚙️ Модель КПП: {marking}\n"
         f"🚗 Кузов: {part.get('Кузов', '---')}\n"
-        f"🚜 Привод: {part.get('Комплектация', '---')}\n\n"
+        f"🚜 Комплектация: {part.get('Комплектация', '---')}\n\n"
         f"🔢 ID товара: {item_id}\n\n"
         f"📊 Результат {idx + 1} из {len(results)}"
     )
