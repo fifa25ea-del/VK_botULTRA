@@ -684,6 +684,26 @@ def enter_part_mode(peer_id):
     user_mode[peer_id] = 'part'
     show_part_item(peer_id, 0)  # показываем первый элемент
 
+def render_current_item(peer_id):
+    """Решает, какую функцию отрисовки вызвать на основе данных."""
+    results = user_results.get(peer_id, [])
+    index = user_index.get(peer_id, 0)
+    
+    if not results or index >= len(results):
+        return
+
+    item = results[index]
+
+    # Если есть VIN или 'Номер донора' — это точно донор
+    if 'VIN' in item or 'Номер донора' in item or 'Марка' in item:
+        show_donor(peer_id)
+    # Если есть КПП/АКПП в названии — вызываем show_akpp
+    elif 'маркировка' in str(item).lower() and 'кпп' in str(item).lower():
+        show_akpp(peer_id)
+    # Иначе — обычная деталь
+    else:
+        show_part(peer_id)
+
 def show_part(peer_id):
     """Показывает карточку детали ОДНИМ сообщением (текст + фото + клавиатура)."""
     try:
