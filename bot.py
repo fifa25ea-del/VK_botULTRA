@@ -1137,8 +1137,13 @@ def handle(event):
     if not text:
         return
 
-    # 1. СНАЧАЛА ОПРЕДЕЛЯЕМ STATE (Чтобы не было ошибок доступа)
+    # 1. ОПРЕДЕЛЯЕМ STATE (Обязательно определяем current_state для проверок)
     state = user_state.get(peer_id)
+    if isinstance(state, dict):
+        current_state = state.get("mode")
+    else:
+        current_state = state
+        
 
     # ========= Главное меню (Всегда доступно) =========
     if text_lower in ["🏠 главное меню", "главное меню", "меню", "start"]:
@@ -1162,12 +1167,12 @@ def handle(event):
         else:
             user_index[peer_id] = (current_index + 1) % len(results)
 
-        # Показываем результат в зависимости от текущего режима
-        if state == "part_mode" or state == "parts":
+        # Проверка режима показа
+        if current_state in ["part_mode", "parts"]:
             show_part(peer_id)
-        elif state == "wheels":
+        elif current_state == "wheels":
             show_wheel(peer_id)
-        elif state == "donors":
+        elif current_state == "donors":
             show_donor(peer_id)
         return
 
@@ -1237,25 +1242,26 @@ def handle(event):
 
     if text_lower == "🕹 акпп":
         user_state[peer_id] = "await_akpp_body"
-        send_safe(peer_id, "Введите номер вашего кузова (например, w211 или 211):")
+        send_safe(peer_id, "Введите номер вашего кузова (например, 211):")
         return
-    if state == "await_akpp_body":
+        
+    if current_state == "await_akpp_body":
         body_query = "".join(filter(str.isdigit, text)) 
         if not body_query: body_query = text.upper()
         
+        # Сохраняем как словарь, чтобы не потерять номер кузова
         user_state[peer_id] = {"mode": "await_akpp_drive", "body": body_query}
         
-        # Создаем клавиатуру правильно
         kb = VkKeyboard(one_time=True)
         kb.add_button("Задний", color=VkKeyboardColor.PRIMARY)
         kb.add_button("Полный", color=VkKeyboardColor.PRIMARY)
         kb.add_line()
         kb.add_button("Передний", color=VkKeyboardColor.SECONDARY)
         
-        # ВАЖНО: передаем kb.get_keyboard(), а не просто kb
-        send_safe(peer_id, f"Кузов {body_query} принят. Укажите ваш привод:", keyboard=kb.get_keyboard())
+        # ОШИБКА БЫЛА ТУТ: Убедитесь, что send_safe принимает строку JSON
+        send_safe(peer_id, f"Кузов {body_query} принят. Укажите привод:", keyboard=kb.get_keyboard())
         return
-
+        
     if isinstance(state, dict) and state.get("mode") == "await_akpp_drive":
         drive_query = text.lower().strip() 
         body_query = state.get("body")
