@@ -420,6 +420,7 @@ class DataCache:
         self.parts = []
         self.wheels = []
         self.donors = []
+        self.akpp_base = []
 
     def load_csv(self, url):
         try:
@@ -433,16 +434,34 @@ class DataCache:
             logging.error(f"Неизвестная ошибка при загрузке CSV: {e}")
             return []
 
+    def load_local_akpp(self):
+        base_path = os.path.dirname(os.path.abspath(__file__))
+        file_path = os.path.join(base_path, "akpp.csv")
+        
+        if os.path.exists(file_path):
+            try:
+                # МЕНЯЕМ КОДИРОВКУ ТУТ:
+                with open(file_path, mode='r', encoding='cp1251') as f:
+                    # Также проверьте разделитель. В Excel это обычно ';'
+                    reader = csv.DictReader(f, delimiter=';') 
+                    self.akpp_base = list(reader)
+                logging.info(f"✅ База АКПП загружена: {len(self.akpp_base)} строк")
+            except Exception as e:
+                logging.error(f"❌ Ошибка чтения akpp.csv: {e}")
+                self.akpp_base = [] 
+        else:
+            logging.warning(f"⚠️ Файл {file_path} не найден.")
+    
     def update(self):
-        try:
-            print("🔄 Обновление базы...")
-            self.parts = self.load_csv(PARTS_CSV)
-            self.wheels = self.load_csv(WHEELS_CSV)
-            self.donors = self.load_csv(DONORS_CSV)
-            print("База данных успешно обновлена")
-        except Exception as e:
-            logging.error(f"Критическая ошибка при обновлении базы: {e}")
-
+        logging.info("🔄 Запуск обновления данных...")
+        # Теперь имена совпадают: _load_csv
+        self.parts = self._load_csv(PARTS_CSV)
+        self.wheels = self._load_csv(WHEELS_CSV)
+        self.donors = self._load_csv(DONORS_CSV)
+        
+        # Загрузка локального файла
+        self.load_local_akpp()
+        
     def search_parts(self, query):
         """Поиск деталей по названию или артикулу"""
         query = query.lower()
