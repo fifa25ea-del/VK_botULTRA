@@ -786,6 +786,51 @@ def show_part(peer_id):
         logging.critical(f"ФАТАЛЬНАЯ ошибка в show_part для {peer_id}: {e}")
         send_safe(peer_id, "Произошла критическая ошибка при отображении детали.")
         
+def show_akpp(peer_id):
+    results = user_results.get(peer_id, [])
+    idx = user_index.get(peer_id, 0)
+
+    if not results or idx >= len(results):
+        send_safe(peer_id, "Данные АКПП не найдены.")
+        return
+
+    part = results[idx]
+
+    # Извлекаем данные по ключам из вашего akpp.csv
+    # Используем .get(..., ''), чтобы не вылетало ошибок, если колонки нет
+    title = part.get('Запчасть', 'АКПП')
+    price = part.get('Цена', 'По запросу')
+    marking = part.get('Маркировка') or part.get('Номер производителя') or 'Не указана'
+    body = part.get('Кузов', 'Не указан')
+    engine = part.get('Двигатель', 'Не указан')
+    drive = part.get('Комплектация', 'Не указан') # Здесь обычно "Задний" или "Полный"
+    item_id = part.get('Номер товара', '000000')
+    comment = part.get('Комментарий', 'нет')
+
+    # Формируем красивый текст карточки
+    msg = (
+        f"🕹 {title}\n"
+        f"💰 Цена: {price} руб.\n\n"
+        f"⚙️ Модель КПП: {marking}\n"
+        f"🚗 Кузов: {body}\n"
+        f"⛽ Двигатель: {engine}\n"
+        f"🚜 Привод: {drive}\n\n"
+        f"📄 Комментарий: {comment}\n"
+        f"🔢 ID товара: {item_id}\n\n"
+        f"📈 Результат {idx + 1} из {len(results)}"
+    )
+
+    # Работа с фото (в baz-on ссылки идут через запятую в 'Превью')
+    photos_str = part.get('Превью', '')
+    attachment = None
+    if photos_str:
+        # Берем первую ссылку из списка
+        first_photo_url = photos_str.split(',')[0].strip()
+        attachment = upload_photo_by_url(first_photo_url)
+
+    # Отправляем сообщение с навигационной клавиатурой
+    send_safe(peer_id, msg, keyboard=get_nav_keyboard(), attachment=attachment)
+
 def show_wheel(peer_id):
     """Показывает карточку диска с защитой от дублирования."""
     # Пропускаем повторный вызов, если уже инициализируем поиск дисков
@@ -1181,7 +1226,11 @@ def handle(event):
         elif current_state == "donors":
             show_donor(peer_id)
         return
-
+        if current_state == "akpp_view":
+            show_akpp(peer_id)
+        else:
+            show_part(peer_id) # Обычная карточка для запчастей/двигателей
+        return
     # ========= Обработка состояний (Ввод текста пользователем) =========
     
     # Режим ввода номера двигателя
@@ -1299,10 +1348,11 @@ def handle(event):
         if results:
             user_results[peer_id] = results
             user_index[peer_id] = 0
-            user_state[peer_id] = "parts" 
-            show_part(peer_id)
+            # ВАЖНО: ставим режим 'akpp_view'
+            user_state[peer_id] = "akpp_view" 
+            show_akpp(peer_id) # Вызываем новую функцию
         else:
-            # Если не нашли, выведем отладочную информацию (поможет понять, что не так)
+            send_safe(peer_id, "❌ АКПП не найдена.", keyboard=get_parts_menu_keyboard())
             send_safe(peer_id, 
                       f"❌ Не найдено.\n"
                       f"Искали: кузов '{body_query}', привод '{drive_query}'.\n"
@@ -1332,7 +1382,7 @@ def handle(event):
 
     if text_lower == "❤️ добавить в избранное":
         results = user_results.get(peer_id, [])
-        idx = user_index.get(peer_id, 0)
+        idx = uif text_lower iser_index.get(peer_id, 0)
         if results:
             add_to_favorites(peer_id, results[idx])
         return
