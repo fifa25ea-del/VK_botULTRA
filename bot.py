@@ -981,16 +981,10 @@ def show_wheel(peer_id):
             send_safe(peer_id, "Нет результатов поиска для отображения")
             return
 
+        # Упрощаем: берем напрямую по индексу. 
+        # (Реверсируйте сам список results один раз при поиске, а не здесь)
+        wheel = results[index]
         total_items = len(results)
-
-        # Корректировка индекса для реверсивного порядка (новые первыми)
-        display_index = total_items - 1 - index
-        if display_index < 0 or display_index >= total_items:
-            display_index = 0
-            user_index[peer_id] = total_items - 1
-            index = total_items - 1
-
-        wheel = results[display_index]
 
         # Формируем текст карточки
         message = "🛞 Карточка диска:\n"
@@ -1362,39 +1356,32 @@ def handle(event):
         results = user_results.get(peer_id, [])
         idx = user_index.get(peer_id, 0)
         
-        if not results:
-            return
+        if not results: continue
 
-        # --- 1. Листаем индекс ---
+        # Листаем индекс
         if text_lower == "➡️ вперед":
             idx = (idx + 1) if idx + 1 < len(results) else 0
         else:
             idx = (idx - 1) if idx - 1 >= 0 else len(results) - 1
-            
+        
         user_index[peer_id] = idx
 
-        # --- 2. Умное определение функции отрисовки ---
+        # ОПРЕДЕЛЯЕМ ТИП ТОВАРА И ВЫЗЫВАЕМ НУЖНУЮ ФУНКЦИЮ
         item = results[idx]
-        state_data = user_state.get(peer_id)
-        current_mode = state_data.get("mode") if isinstance(state_data, dict) else state_data
-
-        # Приоритет 1: Если это донор (проверяем по ключам в данных)
-        if 'VIN' in item or 'Номер донора' in item or 'Марка' in item:
+        
+        # 1. Если это диск (проверяем по ключу, который есть только в дисках)
+        if 'Диаметр диска' in item or 'Производитель диска' in item:
+            show_wheel(peer_id)
+        # 2. Если это донор (есть VIN или Номер донора)
+        elif 'VIN' in item or 'Марка' in item and 'Модель' in item and 'Год' in item:
             show_donor(peer_id)
-            
-        # Приоритет 2: Если режим явно "Двигатель"
-        elif current_mode == "engine_view":
+        # 3. Если это двигатель (проверка была в render_current_item)
+        elif 'двигатель' in str(item.get('Наименование', '')).lower():
             show_engine(peer_id)
-            
-        # Приоритет 3: Если режим явно "АКПП" или в данных есть ключи КПП
-        elif current_mode in ["akpp_view", "await_akpp_drive"] or 'Маркировка' in item:
-            show_akpp(peer_id)
-            
-        # Приоритет 4: Обычная деталь
+        # 4. По умолчанию - запчасть
         else:
             show_part(peer_id)
-            
-        return
+        continue
 
         # ПРОВЕРКА РЕЖИМА: Если мы искали АКПП, вызываем show_akpp
         state_data = user_state.get(peer_id)
@@ -1551,21 +1538,36 @@ def handle(event):
 
     if text_lower == "❤️ добавить в избранное":
         results = user_results.get(peer_id, [])
-        index = user_index.get(peer_id, 0)
+        idx = user_index.get(peer_id, 0)
         
-        if results and 0 <= index < len(results):
-            # ВАЖНО: Повторяем логику реверсивного индекса из show_wheel
-            total_items = len(results)
-            display_index = total_items - 1 - index
+        if results and 0 <= idx < len(results):
+            item_to_add = results[idx]
             
-            # Берем именно тот объект, который показан на экране
-            item_to_save = results[display_index]
+            # Инициализируем список избранного, если его нет
+            if peer_id not in user_favorites:
+                user_favorites[peer_id] = []
             
-            # Вызываем функцию сохранения
-            add_to_favorites(peer_id, item_to_save)
+            # Создаем уникальный ID для проверки дубликатов
+            # Проверяем все возможные поля (Артикул для дисков, Номер для запчастей)
+            item_id = (item_to_add.get('Артикул') or 
+                       item_to_add.get('Номер') or 
+                       item_to_add.get('VIN') or 
+                       str(item_to_add.get('Наименование')))
+
+            # Проверка на дубликат
+            is_duplicate = any((f.get('Артикул') or f.get('Номер') or f.get('VIN') or str(f.get('Наименование'))) == item_id 
+                               for f in user_favorites[peer_id])
+            
+            if not is_duplicate:
+                user_favorites[peer_id].append(item_to_add)
+                # Сохраняем в файл (опционально)
+                save_json(FAV_FILE, user_favorites)
+                send_safe(peer_id, "✅ Добавлено в избранное!")
+            else:
+                send_safe(peer_id, "ℹ️ Уже в избранном.")
         else:
-            send_safe(peer_id, "❌ Ошибка: данные карточки не найдены в памяти.")
-        return
+            send_safe(peer_id, "❌ Ошибка: не удалось определить товар.")
+        continue
         
     # Обработка кнопки "Следить" (если в state словарь)
     if text_lower == "🔔 следить за товаром":
