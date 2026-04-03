@@ -1348,7 +1348,6 @@ def handle(event):
         return
 
     # ========= Навигация (Листалка) =========
-    # Ставим в начало, чтобы перехватывать кнопки раньше остальной логики
     if text_lower in ["➡️ вперед", "⬅️ назад"]:
         results = user_results.get(peer_id, [])
         idx = user_index.get(peer_id, 0)
@@ -1356,7 +1355,7 @@ def handle(event):
         if not results:
             return
 
-        # Листаем индекс
+        # --- 1. Листаем индекс ---
         if text_lower == "➡️ вперед":
             idx = (idx + 1) if idx + 1 < len(results) else 0
         else:
@@ -1364,15 +1363,27 @@ def handle(event):
             
         user_index[peer_id] = idx
 
+        # --- 2. Умное определение функции отрисовки ---
+        item = results[idx]
         state_data = user_state.get(peer_id)
         current_mode = state_data.get("mode") if isinstance(state_data, dict) else state_data
-        
-        if current_mode == "engine_view":
+
+        # Приоритет 1: Если это донор (проверяем по ключам в данных)
+        if 'VIN' in item or 'Номер донора' in item or 'Марка' in item:
+            show_donor(peer_id)
+            
+        # Приоритет 2: Если режим явно "Двигатель"
+        elif current_mode == "engine_view":
             show_engine(peer_id)
-        elif current_mode in ["akpp_view", "await_akpp_drive"]:
+            
+        # Приоритет 3: Если режим явно "АКПП" или в данных есть ключи КПП
+        elif current_mode in ["akpp_view", "await_akpp_drive"] or 'Маркировка' in item:
             show_akpp(peer_id)
+            
+        # Приоритет 4: Обычная деталь
         else:
             show_part(peer_id)
+            
         return
 
         # ПРОВЕРКА РЕЖИМА: Если мы искали АКПП, вызываем show_akpp
