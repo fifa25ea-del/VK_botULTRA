@@ -785,6 +785,12 @@ def show_part(peer_id):
         logging.critical(f"ФАТАЛЬНАЯ ошибка в show_part для {peer_id}: {e}")
         send_safe(peer_id, "Произошла критическая ошибка при отображении детали.")
         
+Чтобы загрузка фото в show_akpp работала так же надежно и по той же логике, как в show_part (с обработкой ошибок и отправкой через метод vk.messages.send одним сообщением), перепишите функцию show_akpp следующим образом.
+
+Я интегрировал блок загрузки фото напрямую в функцию, чтобы она не зависела от внешних upload_photo_by_url, которые могут работать иначе.
+
+Исправленная функция show_akpp
+Python
 def show_akpp(peer_id):
     results = user_results.get(peer_id, [])
     idx = user_index.get(peer_id, 0)
@@ -795,13 +801,13 @@ def show_akpp(peer_id):
 
     part = results[idx]
 
-    # Специфичные поля для файла АКПП (baz-on формат)
+    # --- 1. ФОРМИРУЕМ ТЕКСТ (Данные из baz-on АКПП) ---
     title = part.get('Запчасть') or part.get('Наименование') or 'АКПП'
     price = part.get('Цена') or 'По запросу'
     marking = part.get('Маркировка') or part.get('Номер производителя') or 'Не указана'
     body = part.get('Кузов', 'Не указан')
     engine = part.get('Двигатель', 'Не указан')
-    drive = part.get('Комплектация', 'Не указан') # В АКПП тут часто тип привода
+    drive = part.get('Комплектация', 'Не указан')
     item_id = part.get('Номер товара') or part.get('Артикул') or '---'
     
     msg = (
@@ -816,15 +822,57 @@ def show_akpp(peer_id):
         f"📊 Результат {idx + 1} из {len(results)}"
     )
 
-    # Работа с фото (в АКПП колонка 'Превью')
-    photos_str = part.get('Превью') or part.get('Фото') or ""
-    attachment = None
-    if photos_str:
-        first_url = photos_str.split(',')[0].strip()
-        # Используем вашу функцию загрузки (убедитесь, что она загружает в VK)
-        attachment = upload_photo_by_url(first_url) 
+    # --- 2. ПОДГОТОВКА КЛАВИАТУРЫ ---
+    # Используем ту же навигационную клавиатуру, что и в деталях
+    keyboard_data = get_nav_keyboard()
 
-    send_safe(peer_id, msg, keyboard=get_nav_keyboard(), attachment=attachment)
+    # --- 3. ЗАГРУЗКА ФОТО (Как в show_part) ---
+    # В АКПП обычно колонка 'Превью', но проверяем и 'Фото'
+    photos_str = part.get('Превью') or part.get('Фото', '')
+    photo_url = None
+    
+    if photos_str:
+        # Извлекаем первую ссылку из списка через запятую
+        photo_url = photos_str.split(',')[0].strip()
+
+    if photo_url and photo_url.startswith('http'):
+        try:
+            # Скачиваем фото во временную память
+            response = requests.get(photo_url, timeout=10)
+            response.raise_for_status()
+
+            # Получаем сервер для загрузки
+            upload_url = vk.photos.getMessagesUploadServer()['upload_url']
+            files = {'photo': ('image.jpg', response.content)}
+            
+            # Загружаем на сервер ВК
+            upload_data = requests.post(upload_url, files=files, timeout=15).json()
+
+            # Сохраняем фото в ВК
+            photo_data = vk.photos.saveMessagesPhoto(
+                server=upload_data['server'],
+                photo=upload_data['photo'],
+                hash=upload_data['hash']
+            )[0]
+            
+            attachment = f"photo{photo_data['owner_id']}_{photo_data['id']}"
+            
+            # Отправляем ВСЁ ОДНИМ сообщением
+            vk.messages.send(
+                peer_id=peer_id,
+                message=msg,
+                attachment=attachment,
+                keyboard=keyboard_data,
+                random_id=get_random_id()
+            )
+            return # Выходим после успешной отправки
+
+        except Exception as e:
+            logging.error(f"Ошибка загрузки фото АКПП: {e}")
+            # Если фото сломалось — отправляем просто текст ниже
+    
+    # --- 4. ОТПРАВКА БЕЗ ФОТО (Если его нет или произошла ошибка) ---
+    send_safe(peer_id, msg, keyboard=keyboard_data)
 
 def show_wheel(peer_id):
     """Показывает карточку диска с защитой от дублирования."""
