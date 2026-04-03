@@ -1090,15 +1090,12 @@ def handle(event):
     msg = event.obj.message
     peer_id = msg['peer_id']
     text = msg.get('text', '').strip()
+    text_lower = text.lower()
+
     if not text:
         return
-
-    text_lower = text.lower()
-    logging.info(f"[MSG] {peer_id}: {text}")
-    state = user_state.get(peer_id)
-
     # ========= Главное меню =========
-    if text_lower in ["🏠 главное меню", "главное меню", "меню", "start", "назад"]:
+    if text_lower in ["🏠 главное меню", "главное меню", "меню", "start"]:
         user_state[peer_id] = None
         user_results.pop(peer_id, None)
         user_index.pop(peer_id, None)
@@ -1218,15 +1215,28 @@ def handle(event):
                  keyboard=get_watch_keyboard())
         return
 
-    if text_lower in ["⬅️ назад", "назад"]:
-        user_state[peer_id] = None
-        user_results.pop(peer_id, None)
-        user_index.pop(peer_id, None)
-        send_safe(peer_id, "Главное меню:", keyboard=get_main_keyboard())
-        return
+    if text_lower in ["⬅️ назад", "назад", "➡️ вперед", "вперед"]:
+        results = user_results.get(peer_id, [])
+        if not results:
+            send_safe(peer_id, "Нет активных результатов для листания.")
+            return
 
-    if text_lower in ["➡️ вперед", "вперед"]:
-        handle_navigation(peer_id, text_lower, state)
+        current_index = user_index.get(peer_id, 0)
+
+        if text_lower in ["⬅️ назад", "назад"]:
+            # Листаем назад (с переходом в конец, если мы в начале)
+            user_index[peer_id] = (current_index - 1) % len(results)
+        else:
+            # Листаем вперед
+            user_index[peer_id] = (current_index + 1) % len(results)
+
+        state = user_state.get(peer_id)
+        if state == "viewing_parts" or state == "parts":
+            show_part(peer_id, results[user_index[peer_id]])
+        elif state == "viewing_wheels" or state == "wheels":
+            show_wheel(peer_id, results[user_index[peer_id]])
+        elif state == "viewing_donors" or state == "donors":
+            show_donor(peer_id, results[user_index[peer_id]])
         return
 
     # Добавление в избранное
