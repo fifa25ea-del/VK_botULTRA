@@ -785,12 +785,6 @@ def show_part(peer_id):
         logging.critical(f"ФАТАЛЬНАЯ ошибка в show_part для {peer_id}: {e}")
         send_safe(peer_id, "Произошла критическая ошибка при отображении детали.")
         
-Чтобы загрузка фото в show_akpp работала так же надежно и по той же логике, как в show_part (с обработкой ошибок и отправкой через метод vk.messages.send одним сообщением), перепишите функцию show_akpp следующим образом.
-
-Я интегрировал блок загрузки фото напрямую в функцию, чтобы она не зависела от внешних upload_photo_by_url, которые могут работать иначе.
-
-Исправленная функция show_akpp
-Python
 def show_akpp(peer_id):
     results = user_results.get(peer_id, [])
     idx = user_index.get(peer_id, 0)
@@ -800,55 +794,56 @@ def show_akpp(peer_id):
         return
 
     part = results[idx]
-
-    # --- 1. ФОРМИРУЕМ ТЕКСТ (Данные из baz-on АКПП) ---
+    
+    # --- 1. ОСНОВНЫЕ ДАННЫЕ ИЗ ЛОКАЛЬНОЙ БАЗЫ АКПП ---
     title = part.get('Запчасть') or part.get('Наименование') or 'АКПП'
     price = part.get('Цена') or 'По запросу'
     marking = part.get('Маркировка') or part.get('Номер производителя') or 'Не указана'
-    body = part.get('Кузов', 'Не указан')
-    engine = part.get('Двигатель', 'Не указан')
-    drive = part.get('Комплектация', 'Не указан')
     item_id = part.get('Номер товара') or part.get('Артикул') or '---'
     
+    # --- 2. УМНЫЙ ПОИСК ФОТО ПО АРТИКУЛУ В ОНЛАЙН-БАЗЕ ---
+    photo_url = None
+    
+    # Сначала проверяем, вдруг в самом файле АКПП уже есть ссылка
+    photos_str = part.get('Превью') or part.get('Фото', '')
+    
+    if not photos_str or photos_str == "Не указано":
+        # Если в АКПП пусто, ищем этот же артикул в основной базе запчастей (cache.parts)
+        # Мы ищем совпадение по 'Номер товара' или 'Артикул'
+        for main_part in cache.parts:
+            main_id = main_part.get('Артикул') or main_part.get('Номер')
+            if main_id == item_id:
+                # Нашли! Берем фото из основной базы
+                photos_str = main_part.get('Фото') or main_part.get('Превью', '')
+                break
+
+    # Извлекаем первый URL, если нашли хоть что-то
+    if photos_str and photos_str != "Не указано":
+        photo_url = photos_str.split(',')[0].strip()
+
+    # --- 3. ФОРМИРУЕМ ТЕКСТ ---
     msg = (
         f"🕹 {title}\n"
         f"💰 Цена: {price} руб.\n\n"
         f"⚙️ Модель КПП: {marking}\n"
-        f"🚗 Кузов: {body}\n"
-        f"⛽ Двигатель: {engine}\n"
-        f"🚜 Привод: {drive}\n\n"
-        f"📄 Комментарий: {part.get('Комментарий', 'нет')}\n"
+        f"🚗 Кузов: {part.get('Кузов', '---')}\n"
+        f"🚜 Привод: {part.get('Комплектация', '---')}\n\n"
         f"🔢 ID товара: {item_id}\n\n"
         f"📊 Результат {idx + 1} из {len(results)}"
     )
 
-    # --- 2. ПОДГОТОВКА КЛАВИАТУРЫ ---
-    # Используем ту же навигационную клавиатуру, что и в деталях
+    # --- 4. ЗАГРУЗКА И ОТПРАВКА (ЕДИНЫЙ БЛОК) ---
     keyboard_data = get_nav_keyboard()
-
-    # --- 3. ЗАГРУЗКА ФОТО (Как в show_part) ---
-    # В АКПП обычно колонка 'Превью', но проверяем и 'Фото'
-    photos_str = part.get('Превью') or part.get('Фото', '')
-    photo_url = None
-    
-    if photos_str:
-        # Извлекаем первую ссылку из списка через запятую
-        photo_url = photos_str.split(',')[0].strip()
 
     if photo_url and photo_url.startswith('http'):
         try:
-            # Скачиваем фото во временную память
-            response = requests.get(photo_url, timeout=10)
+            response = requests.get(photo_url, timeout=7)
             response.raise_for_status()
 
-            # Получаем сервер для загрузки
             upload_url = vk.photos.getMessagesUploadServer()['upload_url']
             files = {'photo': ('image.jpg', response.content)}
-            
-            # Загружаем на сервер ВК
-            upload_data = requests.post(upload_url, files=files, timeout=15).json()
+            upload_data = requests.post(upload_url, files=files, timeout=10).json()
 
-            # Сохраняем фото в ВК
             photo_data = vk.photos.saveMessagesPhoto(
                 server=upload_data['server'],
                 photo=upload_data['photo'],
@@ -857,7 +852,6 @@ def show_akpp(peer_id):
             
             attachment = f"photo{photo_data['owner_id']}_{photo_data['id']}"
             
-            # Отправляем ВСЁ ОДНИМ сообщением
             vk.messages.send(
                 peer_id=peer_id,
                 message=msg,
@@ -865,13 +859,11 @@ def show_akpp(peer_id):
                 keyboard=keyboard_data,
                 random_id=get_random_id()
             )
-            return # Выходим после успешной отправки
-
+            return 
         except Exception as e:
-            logging.error(f"Ошибка загрузки фото АКПП: {e}")
-            # Если фото сломалось — отправляем просто текст ниже
-    
-    # --- 4. ОТПРАВКА БЕЗ ФОТО (Если его нет или произошла ошибка) ---
+            logging.error(f"Ошибка подтягивания фото из онлайн-базы: {e}")
+
+    # Если фото так и не нашли или произошла ошибка загрузки
     send_safe(peer_id, msg, keyboard=keyboard_data)
 
 def show_wheel(peer_id):
