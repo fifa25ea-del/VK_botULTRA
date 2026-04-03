@@ -403,26 +403,33 @@ class DataCache:
     
     def get_engines(self, engine_number_query):
         """
-        Поиск строго агрегатов. 
-        Условие: слово 'ДВИГАТЕЛЬ' в названии + номер в колонке 'Двигатель'.
+        Поиск агрегатов: слово 'ДВИГАТЕЛЬ' + номер + цена > 30000.
         """
-        # Нормализуем запрос (удаляем пробелы, точки, приводим к верхнему регистру)
         query = normalize_query(engine_number_query)
         results = []
         
         for part in self.parts:
-            # 1. ОБЯЗАТЕЛЬНОЕ УСЛОВИЕ: слово 'двигатель' в названии запчасти
-            # Мы приводим к нижнему регистру для надежности поиска
+            # 1. Проверка на слово 'двигатель' в названии
             item_name = part.get('Наименование', '').lower()
             
             if 'двигатель' in item_name:
-                # 2. Проверяем номер модели двигателя в соответствующей колонке
-                raw_engine_val = part.get('Двигатель', '')
-                db_val_normalized = normalize_query(raw_engine_val)
+                # 2. Проверка цены (должна быть > 30000)
+                raw_price = part.get('Цена', '0')
+                # Очищаем цену от пробелов и лишних символов, оставляем только цифры
+                clean_price = ''.join(filter(str.isdigit, str(raw_price)))
                 
-                # Если клиент ввел "272", а в базе "M272.964", это сработает
-                if query in db_val_normalized:
-                    results.append(part)
+                try:
+                    price_val = int(clean_price) if clean_price else 0
+                except ValueError:
+                    price_val = 0
+
+                if price_val > 30000:
+                    # 3. Проверка номера модели двигателя
+                    raw_engine_val = part.get('Двигатель', '')
+                    db_val_normalized = normalize_query(raw_engine_val)
+                    
+                    if query in db_val_normalized:
+                        results.append(part)
                     
         return results
         
