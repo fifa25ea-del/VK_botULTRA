@@ -313,13 +313,13 @@ def save_watchlist():
 # ===== ОТПРАВКА СООБЩЕНИЙ =====
 def send_safe(peer_id, text, keyboard=None):
     try:
-        # Валидация клавиатуры
-        if keyboard and isinstance(keyboard, VkKeyboard):
+        if isinstance(keyboard, VkKeyboard):
             keyboard_data = keyboard.get_keyboard()
+        elif isinstance(keyboard, dict):
+            keyboard_data = keyboard
         elif keyboard is None:
             keyboard_data = None
         else:
-            # Если передали что‑то не то — используем главную клавиатуру
             logging.warning("Некорректный тип клавиатуры. Используем главную.")
             keyboard_data = get_main_keyboard()
 
@@ -329,8 +329,6 @@ def send_safe(peer_id, text, keyboard=None):
             random_id=get_random_id(),
             keyboard=keyboard_data
         )
-    except Exception as e:
-        logging.error(f"Ошибка отправки сообщения для {peer_id}: {e}")
 
 def send(peer_id, text, keyboard=None):
     try:
