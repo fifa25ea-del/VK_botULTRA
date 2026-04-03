@@ -1491,6 +1491,7 @@ def handle(event):
                       keyboard=get_parts_menu_keyboard())
             user_state[peer_id] = "parts_menu"
         return
+        
     if text_lower == "🛞 диски":
         user_state[peer_id] = "wheels"
         send_safe(peer_id, "Введите размер (например R18):")
@@ -1524,6 +1525,31 @@ def handle(event):
     # Обработка кнопки "Следить" (если в state словарь)
     if text_lower == "🔔 следить за товаром":
         handle_watch_button(peer_id)
+        return
+
+    if text_lower == "🗑 удалить":
+        # Получаем текущий список избранного и индекс
+        favs = user_favorites.get(peer_id, [])
+        idx = user_index.get(peer_id, 0)
+
+        if favs and 0 <= idx < len(favs):
+            # Удаляем элемент по текущему индексу
+            removed_item = favs.pop(idx)
+            
+            # Обновляем индекс, чтобы он не выходил за границы после удаления
+            if idx >= len(favs) and len(favs) > 0:
+                user_index[peer_id] = len(favs) - 1
+            
+            send_safe(peer_id, f"✅ Удалено: {removed_item.get('Наименование', 'Товар')}")
+
+            # Если список пуст — возвращаем в меню, если нет — показываем следующий товар
+            if not favs:
+                send_safe(peer_id, "Ваш список избранного теперь пуст. Возвращаюсь в меню.")
+                # Здесь можно вызвать функцию показа главного меню
+            else:
+                show_part(peer_id) # Показываем карточку, которая встала на место удаленной
+        else:
+            send_safe(peer_id, "❌ Ошибка: нечего удалять.")
         return
         
 def handle_navigation(peer_id, direction, state):
