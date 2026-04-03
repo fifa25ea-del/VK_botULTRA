@@ -1260,23 +1260,29 @@ def handle(event):
         return
 
     if isinstance(state, dict) and state.get("mode") == "await_akpp_drive":
-        drive_query = text.lower().strip()
+        drive_query = text.lower().strip() 
         body_query = state.get("body")
         
         results = []
         
-        # ТЕПЕРЬ ИЩЕМ В cache.akpp_base
         for part in cache.akpp_base:
-            name = part.get('Наименование', '').lower()
-            komplekt_info = part.get('Комплектация', '').lower()
-            body_info = part.get('Кузов', '').lower()
+            # --- УМНОЕ ПОЛУЧЕНИЕ ДАННЫХ ---
+            # Ищем колонку, которая СОДЕРЖИТ слово 'Наименование', 'Комплект' или 'Кузов'
+            # Это спасет, если в CSV заголовок называется " Комплектация" (с пробелом)
+            p_name = next((v for k, v in part.items() if 'наименование' in k.lower()), "").lower()
+            p_komplekt = next((v for k, v in part.items() if 'комплект' in k.lower()), "").lower()
+            p_body = next((v for k, v in part.items() if 'кузов' in k.lower()), "").lower()
             
-            # (Логика фильтров остается прежней)
-            is_akpp = "акпп" in name or "кпп" in name
-            is_right_drive = drive_query in komplekt_info
+            # --- ФИЛЬТРЫ ---
+            # 1. Проверка на АКПП (ищем в названии или комплектации)
+            is_akpp = "акпп" in p_name or "акпп" in p_komplekt or "кпп" in p_name
             
-            body_info_digits = "".join(filter(str.isdigit, body_info))
-            is_right_body = body_query in body_info_digits or body_query in body_info
+            # 2. Проверка привода (первые 4 буквы: "полн", "задн", "пере")
+            is_right_drive = drive_query[:4] in p_komplekt 
+            
+            # 3. Проверка кузова (оставляем только цифры для сравнения)
+            body_digits_in_base = "".join(filter(str.isdigit, p_body))
+            is_right_body = body_query in body_digits_in_base or body_query in p_body
 
             if is_akpp and is_right_drive and is_right_body:
                 results.append(part)
@@ -1287,10 +1293,11 @@ def handle(event):
             user_state[peer_id] = "parts" 
             show_part(peer_id)
         else:
-            # Выводим подсказку, что именно не нашлось
+            # Если не нашли, выведем отладочную информацию (поможет понять, что не так)
             send_safe(peer_id, 
-                      f"❌ Не найдено АКПП на кузов {body_query} с приводом {drive_query}.\n"
-                      f"Подсказка: я искал слово '{drive_query}' в колонке 'Комплектация'.", 
+                      f"❌ Не найдено.\n"
+                      f"Искали: кузов '{body_query}', привод '{drive_query}'.\n"
+                      f"Проверьте, чтобы в файле были заполнены колонки 'Кузов' и 'Комплектация'.", 
                       keyboard=get_parts_menu_keyboard())
             user_state[peer_id] = "parts_menu"
         return
