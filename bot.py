@@ -1094,7 +1094,11 @@ def handle(event):
 
     if not text:
         return
-    # ========= Главное меню =========
+
+    # 1. СНАЧАЛА ОПРЕДЕЛЯЕМ STATE (Чтобы не было ошибок доступа)
+    state = user_state.get(peer_id)
+
+    # ========= Главное меню (Всегда доступно) =========
     if text_lower in ["🏠 главное меню", "главное меню", "меню", "start"]:
         user_state[peer_id] = None
         user_results.pop(peer_id, None)
@@ -1102,119 +1106,8 @@ def handle(event):
         send_safe(peer_id, "Главное меню:", keyboard=get_main_keyboard())
         return
 
-    # ========= Двигатель =========
-    if text == "⚙️ Двигатель":
-        user_state[peer_id] = "await_engine_number"
-        send_safe(peer_id, "Введите номер вашего двигателя, например M272:")
-        return
-
-    # ========= Ввод номера двигателя =========
-    if user_state.get(peer_id) == "await_engine_number":
-        query = text.upper().replace(".", "").replace(" ", "")
-        results = []
-        for part in cache.get_parts(category="ДВИГАТЕЛЬ"):
-            part_number = part['number'].upper().replace(".", "").replace(" ", "")
-            if query in part_number:
-                results.append(part)
-        if results:
-            user_results[peer_id] = results
-            user_index[peer_id] = 0
-            user_state[peer_id] = "part_mode"
-            show_part(peer_id)
-        else:
-            send_safe(peer_id, f"По номеру двигателя '{text}' ничего не найдено. Попробуйте ещё раз.")
-        return
-
-    
-    # --- Другие разделы ---
-    if text_lower == "🚗 запчасти":
-        user_state[peer_id] = "parts_menu"
-        send_safe(peer_id, "Выберите раздел запчастей:", keyboard=get_parts_menu_keyboard())
-        return
-
-    elif text_lower == "🛞 диски":
-        user_state[peer_id] = "wheels"
-        send_safe(peer_id, "Введите размер (например R18):")
-        return
-
-    elif text_lower == "🚘 доноры":
-        user_state[peer_id] = "donors"
-        results = cache.get_latest_donors(limit=15)
-        if results:
-            user_results[peer_id] = results
-            user_index[peer_id] = 0
-            show_donor(peer_id)
-        else:
-            send_safe(peer_id, "Нет данных.")
-        return
-
-    elif text_lower == "❤️ избранное":
-        show_favorites(peer_id)
-        return
-
-    elif text_lower == "❤️ избранное":
-        show_favorites(peer_id)
-        return
-    # =========================
-    # ЛОГИКА ПОДМЕНЮ ЗАПЧАСТЕЙ
-    # =========================
-    if text_lower == "🔍 поиск по номеру":
-        user_state[peer_id] = "wait_part_number"
-        send_safe(peer_id, "Введите артикул или номер детали:")
-        return
-
-    elif text_lower == "⚙️ двигатель":
-        # Поиск по ключевому слову
-        results = [p for p in cache.parts if "двигатель" in p.get('Наименование', '').lower()]
-        if results:
-            user_state[peer_id] = "parts" # Переводим в режим просмотра запчастей
-            user_results[peer_id] = results
-            user_index[peer_id] = 0
-            show_part(peer_id)
-        else:
-            send(peer_id, "В категории 'Двигатель' ничего не найдено.")
-        return
-
-    elif text_lower == "🕹 акпп":
-        keywords = ["акпп", "кпп", "коробка"]
-        results = [p for p in cache.parts if any(k in p.get('Наименование', '').lower() for k in keywords)]
-        if results:
-            user_state[peer_id] = "parts"
-            user_results[peer_id] = results
-            user_index[peer_id] = 0
-            show_part(peer_id)
-        else:
-            send(peer_id, "В категории 'АКПП' ничего не найдено.")
-        return
-
-    elif text_lower == "🔥 популярное":
-        results = cache.parts[:20]
-        user_state[peer_id] = "parts"
-        user_results[peer_id] = results
-        user_index[peer_id] = 0
-        show_part(peer_id)
-        return
-
-    # =========================
-    # ОБРАБОТКА ВВОДА (ПОИСК)
-    # =========================
-    
-    # Если пользователь прислал номер детали после нажатия "Поиск по номеру"
-    if state == "wait_part_number":
-        query = normalize_query(text)
-        results = cache.search_parts(query)
-        if results:
-            user_state[peer_id] = "parts"
-            user_results[peer_id] = results
-            user_index[peer_id] = 0
-            show_part(peer_id)
-        else:
-            # Предлагаем подписаться, если ничего не нашли
-            user_state[peer_id] = {"watch_query": query}
-            send(peer_id, f"❌ По запросу '{query}' ничего не найдено.\nНажмите '🔔 Следить за товаром', чтобы получить уведомление о поступлении.", 
-                 keyboard=get_watch_keyboard())
-        return
-
+    # ========= Навигация (Листалка) =========
+    # Ставим в начало, чтобы перехватывать кнопки раньше остальной логики
     if text_lower in ["⬅️ назад", "назад", "➡️ вперед", "вперед"]:
         results = user_results.get(peer_id, [])
         if not results:
@@ -1222,24 +1115,113 @@ def handle(event):
             return
 
         current_index = user_index.get(peer_id, 0)
-
         if text_lower in ["⬅️ назад", "назад"]:
-            # Листаем назад (с переходом в конец, если мы в начале)
             user_index[peer_id] = (current_index - 1) % len(results)
         else:
-            # Листаем вперед
             user_index[peer_id] = (current_index + 1) % len(results)
 
-        state = user_state.get(peer_id)
-        if state == "viewing_parts" or state == "parts":
-            show_part(peer_id, results[user_index[peer_id]])
-        elif state == "viewing_wheels" or state == "wheels":
-            show_wheel(peer_id, results[user_index[peer_id]])
-        elif state == "viewing_donors" or state == "donors":
-            show_donor(peer_id, results[user_index[peer_id]])
+        # Показываем результат в зависимости от текущего режима
+        if state == "part_mode" or state == "parts":
+            show_part(peer_id)
+        elif state == "wheels":
+            show_wheel(peer_id)
+        elif state == "donors":
+            show_donor(peer_id)
         return
 
-    # Добавление в избранное
+    # ========= Обработка состояний (Ввод текста пользователем) =========
+    
+    # Режим ввода номера двигателя
+    if state == "await_engine_number":
+        query = text.upper().replace(".", "").replace(" ", "")
+        results = [p for p in cache.get_parts(category="ДВИГАТЕЛЬ") 
+                   if query in p.get('number', '').upper().replace(".", "").replace(" ", "")]
+        if results:
+            user_results[peer_id] = results
+            user_index[peer_id] = 0
+            user_state[peer_id] = "part_mode"
+            show_part(peer_id)
+        else:
+            send_safe(peer_id, f"По номеру двигателя '{text}' ничего не найдено.")
+        return
+
+    # Режим ввода артикула запчасти
+    if state == "wait_part_number":
+        query = normalize_query(text)
+        results = cache.search_parts(query)
+        if results:
+            user_results[peer_id] = results
+            user_index[peer_id] = 0
+            user_state[peer_id] = "parts"
+            show_part(peer_id)
+        else:
+            # Сохраняем запрос в state как словарь для функции отслеживания
+            user_state[peer_id] = {"watch_query": query}
+            send_safe(peer_id, f"❌ По запросу '{query}' ничего не найдено.", 
+                      keyboard=get_watch_keyboard())
+        return
+
+    # Режим ввода размера дисков
+    if state == "wheels" and text_lower not in ["🛞 диски"]:
+        results = cache.search_wheels(text)
+        if results:
+            user_results[peer_id] = results
+            user_index[peer_id] = 0
+            show_wheel(peer_id)
+        else:
+            send_safe(peer_id, "❌ Диски не найдены.")
+        return
+
+    # ========= Обработка кнопок основного меню =========
+    
+    if text_lower == "🚗 запчасти":
+        user_state[peer_id] = "parts_menu"
+        send_safe(peer_id, "Выберите раздел запчастей:", keyboard=get_parts_menu_keyboard())
+        return
+
+    if text_lower == "⚙️ двигатель":
+        # Если нажали кнопку в подменю - просим номер
+        user_state[peer_id] = "await_engine_number"
+        send_safe(peer_id, "Введите номер вашего двигателя (например M272):")
+        return
+
+    if text_lower == "🔍 поиск по номеру":
+        user_state[peer_id] = "wait_part_number"
+        send_safe(peer_id, "Введите артикул или номер детали:")
+        return
+
+    if text_lower == "🕹 акпп":
+        keywords = ["акпп", "кпп", "коробка"]
+        results = [p for p in cache.parts if any(k in p.get('Наименование', '').lower() for k in keywords)]
+        if results:
+            user_results[peer_id] = results
+            user_index[peer_id] = 0
+            user_state[peer_id] = "parts"
+            show_part(peer_id)
+        else:
+            send_safe(peer_id, "В категории 'АКПП' ничего не найдено.")
+        return
+
+    if text_lower == "🛞 диски":
+        user_state[peer_id] = "wheels"
+        send_safe(peer_id, "Введите размер (например R18):")
+        return
+
+    if text_lower == "🚘 доноры":
+        results = cache.get_latest_donors(limit=15)
+        if results:
+            user_results[peer_id] = results
+            user_index[peer_id] = 0
+            user_state[peer_id] = "donors"
+            show_donor(peer_id)
+        else:
+            send_safe(peer_id, "Нет данных.")
+        return
+
+    if text_lower == "❤️ избранное":
+        show_favorites(peer_id)
+        return
+
     if text_lower == "❤️ добавить в избранное":
         results = user_results.get(peer_id, [])
         idx = user_index.get(peer_id, 0)
@@ -1247,16 +1229,11 @@ def handle(event):
             add_to_favorites(peer_id, results[idx])
         return
 
-    # Если состояние wheels и пользователь прислал текст (размер)
-    if state == "wheels" and text_lower not in ["диски"]:
-        results = cache.search_wheels(text)
-        if results:
-            user_results[peer_id] = results
-            user_index[peer_id] = 0
-            show_wheel(peer_id)
-        else:
-            send(peer_id, "❌ Диски не найдены.")
+    # Обработка кнопки "Следить" (если в state словарь)
+    if text_lower == "🔔 следить за товаром":
+        handle_watch_button(peer_id)
         return
+        
 def handle_navigation(peer_id, direction, state):
     results = user_results.get(peer_id)
 
