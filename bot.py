@@ -1218,15 +1218,50 @@ def handle(event):
         return
 
     if text_lower == "🕹 акпп":
-        keywords = ["акпп", "кпп", "коробка"]
-        results = [p for p in cache.parts if any(k in p.get('Наименование', '').lower() for k in keywords)]
+        user_state[peer_id] = "await_akpp_body"
+        send_safe(peer_id, "Введите номер вашего кузова (например, w211 или 211):")
+        return
+    if state == "await_akpp_body":
+        # Сохраняем кузов (очищаем от лишних букв, если нужно, например w211 -> 211)
+        body_query = "".join(filter(str.isdigit, text)) 
+        if not body_query: body_query = text.upper() # Если цифр нет, оставляем как есть
+        
+        user_state[peer_id] = {"mode": "await_akpp_drive", "body": body_query}
+        
+        # Можно сделать кнопками для удобства
+        kb = VkKeyboard(one_time=True)
+        kb.add_button("Задний", color=VkKeyboardColor.PRIMARY)
+        kb.add_button("Полный", color=VkKeyboardColor.PRIMARY)
+        kb.add_line()
+        kb.add_button("Передний", color=VkKeyboardColor.PRIMARY)
+        
+        send_safe(peer_id, f"Кузов {body_query} принят. Теперь укажите ваш привод:", keyboard=kb)
+        return
+
+    if isinstance(state, dict) and state.get("mode") == "await_akpp_drive":
+        drive_query = text.lower()
+        body_query = state.get("body")
+        
+        results = []
+        for part in cache.parts:
+            # Фильтр 1: Наименование содержит АКПП
+            name = part.get('Наименование', '').upper()
+            # Фильтр 2: Привод совпадает
+            drive = part.get('Привод', '').lower()
+            # Фильтр 3: Кузов содержит цифры модели
+            body = part.get('Кузов', '').upper()
+            
+            if "АКПП" in name and drive_query in drive and body_query in body:
+                results.append(part)
+        
         if results:
             user_results[peer_id] = results
             user_index[peer_id] = 0
-            user_state[peer_id] = "parts"
+            user_state[peer_id] = "parts" # Переходим в режим показа запчастей
             show_part(peer_id)
         else:
-            send_safe(peer_id, "В категории 'АКПП' ничего не найдено.")
+            send_safe(peer_id, f"❌ АКПП на кузов {body_query} ({drive_query} привод) не найдена.", keyboard=get_parts_menu_keyboard())
+            user_state[peer_id] = "parts_menu"
         return
 
     if text_lower == "🛞 диски":
