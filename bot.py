@@ -1374,16 +1374,11 @@ def handle(event):
         show_favorites(peer_id)
         return
 
-   if text_lower == "❤️ добавить в избранное":
+    if text_lower == "❤️ добавить в избранное":
         results = user_results.get(peer_id, [])
-        idx = user_index.get(peer_id, 0) # Исправлено: корректное получение индекса
-        
-        if results and 0 <= idx < len(results):
-            # Передаем текущий товар в функцию сохранения
+        idx = user_index.get(peer_id, 0)
+        if results:
             add_to_favorites(peer_id, results[idx])
-            send_safe(peer_id, "✅ Товар добавлен в список избранного!")
-        else:
-            send_safe(peer_id, "❌ Не удалось определить товар для добавления.")
         return
 
     # Обработка кнопки "Следить" (если в state словарь)
