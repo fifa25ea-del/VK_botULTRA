@@ -1550,22 +1550,22 @@ def handle(event):
         return
 
     if text_lower == "❤️ добавить в избранное":
-    results = user_results.get(peer_id, [])
-    index = user_index.get(peer_id, 0)
-    
-    if results and 0 <= index < len(results):
-        # ВАЖНО: Повторяем логику реверсивного индекса из show_wheel
-        total_items = len(results)
-        display_index = total_items - 1 - index
+        results = user_results.get(peer_id, [])
+        index = user_index.get(peer_id, 0)
         
-        # Берем именно тот объект, который показан на экране
-        item_to_save = results[display_index]
-        
-        # Вызываем функцию сохранения
-        add_to_favorites(peer_id, item_to_save)
-    else:
-        send_safe(peer_id, "❌ Ошибка: данные карточки не найдены в памяти.")
-    return
+        if results and 0 <= index < len(results):
+            # ВАЖНО: Повторяем логику реверсивного индекса из show_wheel
+            total_items = len(results)
+            display_index = total_items - 1 - index
+            
+            # Берем именно тот объект, который показан на экране
+            item_to_save = results[display_index]
+            
+            # Вызываем функцию сохранения
+            add_to_favorites(peer_id, item_to_save)
+        else:
+            send_safe(peer_id, "❌ Ошибка: данные карточки не найдены в памяти.")
+        return
         
     # Обработка кнопки "Следить" (если в state словарь)
     if text_lower == "🔔 следить за товаром":
