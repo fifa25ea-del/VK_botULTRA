@@ -420,6 +420,7 @@ class DataCache:
         self.parts = []
         self.wheels = []
         self.donors = []
+        self.akpp_base = []
 
     def load_csv(self, url):
         try:
@@ -434,7 +435,7 @@ class DataCache:
             return []
 
     def load_local_akpp(self):
-        # Автоматически находит папку, в которой лежит сам скрипт
+        # Находим путь к файлу в той же папке, где лежит бот на GitHub/сервере
         base_path = os.path.dirname(os.path.abspath(__file__))
         file_path = os.path.join(base_path, "akpp.csv")
         
@@ -444,21 +445,22 @@ class DataCache:
                     # delimiter=';' если в Excel сохраняли как обычный CSV
                     reader = csv.DictReader(f, delimiter=';') 
                     self.akpp_base = list(reader)
-                logging.info(f"✅ База АКПП загружена из файла: {len(self.akpp_base)} строк")
+                logging.info(f"✅ База АКПП загружена: {len(self.akpp_base)} строк")
             except Exception as e:
-                logging.error(f"❌ Ошибка загрузки локальной базы: {e}")
+                logging.error(f"❌ Ошибка чтения akpp.csv: {e}")
+                self.akpp_base = [] # В случае ошибки оставляем список пустым
         else:
-            logging.error(f"⚠️ Файл {file_path} не найден!")
+            logging.warning(f"⚠️ Файл {file_path} не найден. Проверьте GitHub.")
+            self.akpp_base = []
     
     def update(self):
-        try:
-            print("🔄 Обновление базы...")
-            self.parts = self.load_csv(PARTS_CSV)
-            self.wheels = self.load_csv(WHEELS_CSV)
-            self.donors = self.load_csv(DONORS_CSV)
-            print("База данных успешно обновлена")
-        except Exception as e:
-            logging.error(f"Критическая ошибка при обновлении базы: {e}")
+        # Загрузка онлайн баз
+        self.parts = self._load_csv(PARTS_CSV)
+        self.wheels = self._load_csv(WHEELS_CSV)
+        self.donors = self._load_csv(DONORS_CSV)
+        
+        # ЗАГРУЗКА ЛОКАЛЬНОЙ БАЗЫ (из файла akpp.csv в папке проекта)
+        self.load_local_akpp()
 
     def search_parts(self, query):
         """Поиск деталей по названию или артикулу"""
