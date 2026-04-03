@@ -1225,6 +1225,43 @@ def handle(event):
         else:
             send(peer_id, "❌ Диски не найдены.")
         return
+def handle_navigation(peer_id, direction, state):
+    results = user_results.get(peer_id)
+
+    if not results:
+        send_safe(peer_id, "Нет данных для навигации")
+        return
+
+    index = user_index.get(peer_id, 0)
+
+    if direction in ["➡️ вперед", "вперед"]:
+        index += 1
+        if index >= len(results):
+            index = 0
+
+    elif direction in ["⬅️ назад", "назад"]:
+        index -= 1
+        if index < 0:
+            index = len(results) - 1
+
+    user_index[peer_id] = index
+
+    # ⚠️ ВАЖНО: state может быть dict!
+    if isinstance(state, dict):
+        send_safe(peer_id, "Навигация недоступна в этом режиме")
+        return
+
+    if state == "parts":
+        show_part(peer_id)
+    elif state == "wheels":
+        show_wheel(peer_id)
+    elif state == "donors":
+        show_donor(peer_id)
+    elif state == "favorites_view":
+        show_part(peer_id)
+    else:
+        send_safe(peer_id, "Неизвестный режим")
+
 def handle_watch_button(peer_id):
     state = user_state.get(peer_id)
     if not state or "watch_query" not in state:
