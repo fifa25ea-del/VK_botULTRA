@@ -16,18 +16,6 @@ from urllib.parse import urlparse
 import random
 from io import StringIO
 
-WATCHLIST_FILE = "watchlist.json"
-
-# Загружаем watchlist
-try:
-    if os.path.exists(WATCHLIST_FILE):
-        with open(WATCHLIST_FILE, "r", encoding="utf-8") as f:
-            watchlist = json.load(f)
-    else:
-        watchlist = {}
-except Exception as e:
-    logging.error(f"Ошибка загрузки watchlist: {e}")
-    watchlist = {}
 def save_watchlist():
     save_json(WATCHLIST_FILE, watchlist)
 
@@ -192,6 +180,16 @@ def get_main_keyboard():
     keyboard.add_button("🚘 Доноры", color=VkKeyboardColor.SECONDARY)
     keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.NEGATIVE)
 
+    return keyboard.get_keyboard()
+
+def get_nav_keyboard():
+    keyboard = VkKeyboard(one_time=False)
+    keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
+    keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
+    keyboard.add_line()
+    keyboard.add_button("❤️ Добавить в избранное", color=VkKeyboardColor.POSITIVE)
+    keyboard.add_line()
+    keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.SECONDARY)
     return keyboard.get_keyboard()
 
 def send_photo_with_caption(peer_id, photo_url, caption):
