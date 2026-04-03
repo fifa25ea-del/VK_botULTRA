@@ -1092,25 +1092,23 @@ def show_favorites(peer_id):
 def handle(event):
     msg = event.obj.message
     peer_id = msg['peer_id']
-    text = msg.get('text', '').strip()  # сначала определяем текст
+    text = msg.get('text', '').strip()
     if not text:
         return
 
-    text_lower = text.lower()  # теперь безопасно
+    text_lower = text.lower()
     logging.info(f"[MSG] {peer_id}: {text}")
     state = user_state.get(peer_id)
 
-    # =========================
-    # ГЛАВНОЕ МЕНЮ (ВСЕГДА)
-    # =========================
-     if text_lower in ["🏠 главное меню", "главное меню", "меню", "start", "назад"]:
+    # ========= Главное меню =========
+    if text_lower in ["🏠 главное меню", "главное меню", "меню", "start", "назад"]:
         user_state[peer_id] = None
         user_results.pop(peer_id, None)
         user_index.pop(peer_id, None)
         send_safe(peer_id, "Главное меню:", keyboard=get_main_keyboard())
         return
 
-    # --- Главное меню ---
+    # ========= Двигатель =========
     if text == "⚙️ Двигатель":
         user_state[peer_id] = "await_engine_number"
         send_safe(peer_id, "Введите номер вашего двигателя, например M272:")
