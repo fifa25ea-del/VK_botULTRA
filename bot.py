@@ -1114,10 +1114,42 @@ def handle(event):
     # =========================
     # СТАРТОВЫЕ КНОПКИ
     # =========================
-    if text_lower in ["🚗 запчасти", "запчасти"]:
-        user_state[peer_id] = "parts"
-        send(peer_id, "Введите номер запчасти:")
-        return
+    text = event.obj.message['text']
+    peer_id = event.obj.message['peer_id']
+    
+    if text_lower in "🚗 Запчасти":
+        user_state[peer_id] = "parts_menu" # Устанавливаем состояние подменю
+        send_safe(peer_id, "Выберите раздел запчастей:", keyboard=get_parts_menu_keyboard())
+    
+    elif text == "🔍 Поиск по номеру":
+        user_state[peer_id] = "wait_part_number"
+        send_safe(peer_id, "Введите артикул или номер детали:")
+    
+    elif text == "⚙️ Двигатель":
+        # Фильтруем базу по слову "Двигатель" в наименовании
+        results = [p for p in cache.parts if "двигатель" in p.get('Наименование', '').lower()]
+        user_results[peer_id] = results
+        user_index[peer_id] = 0
+        show_part(peer_id) # Используем вашу готовую функцию показа [cite: 149]
+    
+    elif text == "🕹 Акпп":
+        # Фильтруем базу по ключевым словам АКПП/Коробка
+        keywords = ["акпп", "кпп", "коробка"]
+        results = [p for p in cache.parts if any(k in p.get('Наименование', '').lower() for k in keywords)]
+        user_results[peer_id] = results
+        user_index[peer_id] = 0
+        show_part(peer_id)
+    
+    elif text == "🔥 Популярное":
+        # Здесь можно выводить топ-20 последних или самых востребованных деталей
+        results = cache.parts[:20] 
+        user_results[peer_id] = results
+        user_index[peer_id] = 0
+        show_part(peer_id)
+    
+    elif text == "⬅️ В главное меню":
+        user_state[peer_id] = None
+        send_safe(peer_id, "Возвращаю в главное меню", keyboard=get_main_keyboard())
 
     if text_lower in ["🛞 диски", "диски"]:
         user_state[peer_id] = "wheels"
@@ -1267,44 +1299,6 @@ def handle(event):
 
                 show_favorites(peer_id)
         return
-
-    
-    text = event.obj.message['text']
-    peer_id = event.obj.message['peer_id']
-    
-    if text == "🚗 Запчасти":
-        user_state[peer_id] = "parts_menu" # Устанавливаем состояние подменю
-        send_safe(peer_id, "Выберите раздел запчастей:", keyboard=get_parts_menu_keyboard())
-    
-    elif text == "🔍 Поиск по номеру":
-        user_state[peer_id] = "wait_part_number"
-        send_safe(peer_id, "Введите артикул или номер детали:")
-    
-    elif text == "⚙️ Двигатель":
-        # Фильтруем базу по слову "Двигатель" в наименовании
-        results = [p for p in cache.parts if "двигатель" in p.get('Наименование', '').lower()]
-        user_results[peer_id] = results
-        user_index[peer_id] = 0
-        show_part(peer_id) # Используем вашу готовую функцию показа [cite: 149]
-    
-    elif text == "🕹 Акпп":
-        # Фильтруем базу по ключевым словам АКПП/Коробка
-        keywords = ["акпп", "кпп", "коробка"]
-        results = [p for p in cache.parts if any(k in p.get('Наименование', '').lower() for k in keywords)]
-        user_results[peer_id] = results
-        user_index[peer_id] = 0
-        show_part(peer_id)
-    
-    elif text == "🔥 Популярное":
-        # Здесь можно выводить топ-20 последних или самых востребованных деталей
-        results = cache.parts[:20] 
-        user_results[peer_id] = results
-        user_index[peer_id] = 0
-        show_part(peer_id)
-    
-    elif text == "⬅️ В главное меню":
-        user_state[peer_id] = None
-        send_safe(peer_id, "Возвращаю в главное меню", keyboard=get_main_keyboard())
     
 
 def handle_watch_button(peer_id):
