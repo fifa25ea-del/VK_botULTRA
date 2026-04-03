@@ -1380,11 +1380,15 @@ def handle(event):
         show_favorites(peer_id)
         return
 
-    if text_lower == "❤️ добавить в избранное":
+   if text_lower == "❤️ добавить в избранное":
         results = user_results.get(peer_id, [])
-        idx = uif text_lower iser_index.get(peer_id, 0)
-        if results:
+        # Исправлено: убрали лишние слова и опечатку в user_index
+        idx = user_index.get(peer_id, 0) 
+        
+        if results and idx < len(results):
             add_to_favorites(peer_id, results[idx])
+            # Можно добавить подтверждение для пользователя:
+            # send_safe(peer_id, "✅ Добавлено в избранное!")
         return
 
     # Обработка кнопки "Следить" (если в state словарь)
