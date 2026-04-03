@@ -1116,21 +1116,27 @@ def handle(event):
     # =========================
     # ЛОГИКА КНОПОК (ГЛАВНОЕ МЕНЮ)
     # =========================
+    text = getattr(event, 'text', None)
+    if not text:
+        return  # ничего не делать, если текста нет
+    
+    text_lower = text.lower()
+    
+    # --- Главное меню ---
     if text == "⚙️ Двигатель":
-        user_state[peer_id] = "await_engine_number"  # сохраняем состояние
+        user_state[peer_id] = "await_engine_number"
         send_safe(peer_id, "Введите номер вашего двигателя, например M272:")
-        return  # дальше не идем
+        return
     
     # --- Обработка ввода номера двигателя ---
     if user_state.get(peer_id) == "await_engine_number":
-        # Нормализация ввода пользователя
-        query = text.strip().upper().replace(".", "").replace(" ", "")  # убираем точки и пробелы
-    
-        # Поиск только по двигателям
+        query = text.strip().upper().replace(".", "").replace(" ", "")
         results = []
+    
+        # ищем только по двигателям
         for part in cache.get_parts(category="ДВИГАТЕЛЬ"):
             part_number = part['number'].upper().replace(".", "").replace(" ", "")
-            if query in part_number:  # неполное совпадение
+            if query in part_number:
                 results.append(part)
     
         if results:
@@ -1141,7 +1147,8 @@ def handle(event):
         else:
             send_safe(peer_id, f"По номеру двигателя '{text}' ничего не найдено. Попробуйте ещё раз.")
         return
-    # --- Остальная логика меню ---
+    
+    # --- Другие разделы ---
     if text_lower == "🚗 запчасти":
         user_state[peer_id] = "parts_menu"
         send_safe(peer_id, "Выберите раздел запчастей:", keyboard=get_parts_menu_keyboard())
@@ -1149,7 +1156,7 @@ def handle(event):
     
     elif text_lower == "🛞 диски":
         user_state[peer_id] = "wheels"
-        send(peer_id, "Введите размер (например R18):")
+        send_safe(peer_id, "Введите размер (например R18):")
         return
     
     elif text_lower == "🚘 доноры":
@@ -1160,12 +1167,12 @@ def handle(event):
             user_index[peer_id] = 0
             show_donor(peer_id)
         else:
-            send(peer_id, "Нет данных.")
+            send_safe(peer_id, "Нет данных.")
         return
     
     elif text_lower == "❤️ избранное":
         show_favorites(peer_id)
-    return
+        return
     # =========================
     # ЛОГИКА ПОДМЕНЮ ЗАПЧАСТЕЙ
     # =========================
