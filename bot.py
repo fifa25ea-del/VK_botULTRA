@@ -104,6 +104,7 @@ _donors_cache = None
 _last_cache_update = 0
 _CACHE_TTL = 300  # Время жизни кэша — 5 минут
 image_cache = {}
+user_favorites = {}
 
 
 
@@ -1269,28 +1270,36 @@ def find_donor(query):
 # ===== ДОБАВЛЯЕМ ИЗБРАННОЕ =====
 
 def add_to_favorites(peer_id, item):
-    if peer_id not in favorites:
-        favorites[peer_id] = []
-    if item not in favorites[peer_id]:
-        favorites[peer_id].append(item)
-        save_json(FAV_FILE, favorites)
-        send(peer_id, "Добавлено в избранное!")
+    """Добавляет товар в список избранного пользователя."""
+    if peer_id not in user_favorites:
+        user_favorites[peer_id] = []
+    
+    # Проверка на дубликаты по артикулу или номеру
+    item_id = item.get('Артикул') or item.get('Номер') or item.get('Номер товара')
+    is_duplicate = any((f.get('Артикул') or f.get('Номер') or f.get('Номер товара')) == item_id 
+                       for f in user_favorites[peer_id])
+    
+    if not is_duplicate:
+        user_favorites[peer_id].append(item)
+        send_safe(peer_id, "✅ Товар добавлен в избранное!")
     else:
-        send(peer_id, "Уже в избранном!")
+        send_safe(peer_id, "ℹ️ Этот товар уже есть в избранном.")
 
 def show_favorites(peer_id):
-    """Открывает режим просмотра избранного."""
-    fav_items = favorites.get(peer_id, [])
+    """Загружает список избранного в результаты поиска и показывает первую карточку."""
+    favs = user_favorites.get(peer_id, [])
     
-    if not fav_items:
-        send(peer_id, "❤️ Ваше избранное пусто.", keyboard=get_main_keyboard())
+    if not favs:
+        send_safe(peer_id, "Your список избранного пока пуст. ❤️")
         return
 
-    user_results[peer_id] = fav_items
+    # Подменяем текущие результаты поиска списком из избранного
+    user_results[peer_id] = favs
     user_index[peer_id] = 0
-    user_state[peer_id] = "favorites_view"
+    user_state[peer_id] = "favorites_view" # Важно для логики кнопок (Удалить вместо Добавить)
     
-    show_favorite_card(peer_id)
+    send_safe(peer_id, f"⭐ В вашем избранном {len(favs)} товаров:")
+    show_part(peer_id)
 
 
 def handle(event):
@@ -1498,17 +1507,20 @@ def handle(event):
             send_safe(peer_id, "Нет данных.")
         return
 
-    if text_lower == "❤️ избранное":
+    if text_lower in ["❤️ избранное", "⭐ избранное"]:
         show_favorites(peer_id)
         return
 
+    # Добавление текущего товара в избранное
     if text_lower == "❤️ добавить в избранное":
         results = user_results.get(peer_id, [])
         idx = user_index.get(peer_id, 0)
-        if results:
+        if results and 0 <= idx < len(results):
             add_to_favorites(peer_id, results[idx])
+        else:
+            send_safe(peer_id, "❌ Ошибка: нечего добавлять в избранное.")
         return
-
+        
     # Обработка кнопки "Следить" (если в state словарь)
     if text_lower == "🔔 следить за товаром":
         handle_watch_button(peer_id)
