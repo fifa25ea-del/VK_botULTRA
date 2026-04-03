@@ -391,7 +391,11 @@ class DataCache:
         latest_donors.reverse()
         
         return latest_donors
-   
+
+    def get_parts(self, category=None):
+        if not category:
+            return self.parts
+    
     def get_engines(self, engine_number_query):
         """
         Ищет запчасти, где в 'Наименовании' есть 'двигатель', 
@@ -1153,16 +1157,19 @@ def handle(event):
     
     # Режим ввода номера двигателя
     if state == "await_engine_number":
-        query = text.upper().replace(".", "").replace(" ", "")
-        results = [p for p in cache.get_parts(category="ДВИГАТЕЛЬ") 
-                   if query in p.get('number', '').upper().replace(".", "").replace(" ", "")]
+        # Очищаем ввод пользователя для точного поиска
+        clean_text = text.upper().replace(".", "").replace(" ", "")
+        
+        # Вызываем созданный нами метод
+        results = cache.get_engines(clean_text)
+        
         if results:
             user_results[peer_id] = results
             user_index[peer_id] = 0
-            user_state[peer_id] = "part_mode"
+            user_state[peer_id] = "parts" # Переходим в режим просмотра
             show_part(peer_id)
         else:
-            send_safe(peer_id, f"По номеру двигателя '{text}' ничего не найдено.")
+            send_safe(peer_id, f"❌ Двигатель с номером '{text}' не найден в базе. Попробуйте другой номер.")
         return
 
     # Режим ввода артикула запчасти
