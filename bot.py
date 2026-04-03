@@ -16,8 +16,6 @@ from urllib.parse import urlparse
 import random
 from io import StringIO
 
-def save_watchlist():
-    save_json(WATCHLIST_FILE, watchlist)
 
 def get_image(url):
     try:
@@ -94,6 +92,7 @@ WHEELS_CSV = "https://baz-on.ru/export/c592/77023/drom-wheels.csv"
 
 FAV_FILE = "favorites.json"
 STATS_FILE = "stats.json"
+WATCHLIST_FILE = "watchlist.json"
 
 # ===== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ СОСТОЯНИЯ =====
 user_state = {}  # Хранит текущее состояние пользователя
@@ -105,7 +104,7 @@ _donors_cache = None
 _last_cache_update = 0
 _CACHE_TTL = 300  # Время жизни кэша — 5 минут
 image_cache = {}
-watchlist = {}
+
 
 
 
@@ -359,15 +358,12 @@ def load_json(file):
         logging.error(f"Ошибка загрузки {file}: {e}")
         return {}
 
-def save_json(file, data):
+def save_json(file_path, data): # file_path — это и есть наш WATCHLIST_FILE
     try:
-        with open(file, "w", encoding="utf-8") as f:
+        with open(file_path, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
     except Exception as e:
-        logging.error(f"Ошибка сохранения {file}: {e}")
-
-favorites = load_json(FAV_FILE)
-stats = load_json(STATS_FILE)
+        logging.error(f'Ошибка сохранения {file_path}: {e}')
 
 
 # ===== КЭШ =====
