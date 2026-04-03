@@ -1090,6 +1090,7 @@ def show_favorites(peer_id):
 
 
 def handle(event):
+    text_lower = text.lower()  # для удобства сравнения
     msg = event.obj.message
     peer_id = msg['peer_id']
     text = msg.get('text', '').strip()
@@ -1115,18 +1116,42 @@ def handle(event):
     # =========================
     # ЛОГИКА КНОПОК (ГЛАВНОЕ МЕНЮ)
     # =========================
+    if text == "⚙️ Двигатель":
+        user_state[peer_id] = "await_engine_number"  # сохраняем состояние
+        send_safe(peer_id, "Введите номер вашего двигателя, например M272:")
+        return  # дальше не идем
     
-    # Исправленное условие для запчастей
+    # --- Обработка ввода номера двигателя ---
+    if user_state.get(peer_id) == "await_engine_number":
+        # Нормализация ввода пользователя
+        query = text.strip().upper().replace(".", "").replace(" ", "")  # убираем точки и пробелы
+    
+        # Поиск только по двигателям
+        results = []
+        for part in cache.get_parts(category="ДВИГАТЕЛЬ"):
+            part_number = part['number'].upper().replace(".", "").replace(" ", "")
+            if query in part_number:  # неполное совпадение
+                results.append(part)
+    
+        if results:
+            user_results[peer_id] = results
+            user_index[peer_id] = 0
+            user_state[peer_id] = "part_mode"
+            show_part(peer_id)
+        else:
+            send_safe(peer_id, f"По номеру двигателя '{text}' ничего не найдено. Попробуйте ещё раз.")
+        return
+    # --- Остальная логика меню ---
     if text_lower == "🚗 запчасти":
         user_state[peer_id] = "parts_menu"
         send_safe(peer_id, "Выберите раздел запчастей:", keyboard=get_parts_menu_keyboard())
         return
-
+    
     elif text_lower == "🛞 диски":
         user_state[peer_id] = "wheels"
         send(peer_id, "Введите размер (например R18):")
         return
-
+    
     elif text_lower == "🚘 доноры":
         user_state[peer_id] = "donors"
         results = cache.get_latest_donors(limit=15)
@@ -1137,11 +1162,10 @@ def handle(event):
         else:
             send(peer_id, "Нет данных.")
         return
-
+    
     elif text_lower == "❤️ избранное":
         show_favorites(peer_id)
-        return
-
+    return
     # =========================
     # ЛОГИКА ПОДМЕНЮ ЗАПЧАСТЕЙ
     # =========================
