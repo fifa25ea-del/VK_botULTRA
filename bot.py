@@ -976,9 +976,8 @@ def show_wheel(peer_id):
     try:
         index = user_index.get(peer_id, 0)
         results = user_results.get(peer_id, [])
-
-        if not results:
-            send_safe(peer_id, "Нет результатов поиска для отображения")
+    
+        if not results: 
             return
 
         # Упрощаем: берем напрямую по индексу. 
