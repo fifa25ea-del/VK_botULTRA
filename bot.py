@@ -162,7 +162,7 @@ def get_parts_menu_keyboard():
     # Кнопка возврата
     keyboard.add_button("⬅️ В главное меню", color=VkKeyboardColor.NEGATIVE)
     
-    return keyboard
+    return keyboard.get_keyboard()
 
 def get_main_keyboard():
     keyboard = VkKeyboard(one_time=False)
@@ -181,7 +181,7 @@ def get_main_keyboard():
     keyboard.add_button("🚘 Доноры", color=VkKeyboardColor.SECONDARY)
     keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.NEGATIVE)
 
-    return keyboard
+    return keyboard.get_keyboard()
     
 def get_nav_keyboard():
     keyboard = VkKeyboard(one_time=False)
@@ -191,7 +191,7 @@ def get_nav_keyboard():
     keyboard.add_button("❤️ Добавить в избранное", color=VkKeyboardColor.POSITIVE)
     keyboard.add_line()
     keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.SECONDARY)
-    return keyboard
+    return keyboard.get_keyboard()
 
 def send_photo_with_caption(peer_id, photo_url, caption):
     """Отправляет фото с подписью"""
@@ -314,26 +314,32 @@ def save_watchlist():
 # ===== ОТПРАВКА СООБЩЕНИЙ =====
 def send_safe(peer_id, text, keyboard=None):
     try:
-        if isinstance(keyboard, VkKeyboard):
-            keyboard_data = keyboard.get_keyboard()
-        elif isinstance(keyboard, dict):
-            keyboard_data = keyboard
-        elif keyboard is None:
-            keyboard_data = None
+        final_kb = None
+        
+        # 1. Если клавиатура вообще не передана
+        if keyboard is None:
+            final_kb = get_main_keyboard() # Убедись, что эта функция возвращает строку или объект
         else:
-            logging.warning("Некорректный тип клавиатуры. Используем главную.")
-            keyboard_data = get_main_keyboard()
+            final_kb = keyboard
+
+        # 2. Если это объект VkKeyboard (у него есть метод get_keyboard)
+        if hasattr(final_kb, 'get_keyboard'):
+            final_kb = final_kb.get_keyboard()
+        
+        # 3. Если это всё ещё не строка (и не None), принудительно в JSON
+        if final_kb and not isinstance(final_kb, str):
+            import json
+            final_kb = json.dumps(final_kb)
 
         vk.messages.send(
             peer_id=peer_id,
             message=text,
             random_id=get_random_id(),
-            keyboard=keyboard_data
+            keyboard=final_kb
         )
-
     except Exception as e:
         logging.error(f"Ошибка отправки сообщения: {e}")
-
+        
 def send(peer_id, text, keyboard=None):
     try:
         # Проверяем клавиатуру
