@@ -149,35 +149,39 @@ from vk_api.keyboard import VkKeyboard, VkKeyboardColor
 def get_parts_menu_keyboard():
     keyboard = VkKeyboard(one_time=False)
     
+    # Первая строка: Поиск и Популярное
     keyboard.add_button("🔍 Поиск по номеру", color=VkKeyboardColor.PRIMARY)
     keyboard.add_button("🔥 Популярное", color=VkKeyboardColor.POSITIVE)
     keyboard.add_line()
     
+    # Вторая строка: Категории
     keyboard.add_button("⚙️ Двигатель", color=VkKeyboardColor.SECONDARY)
     keyboard.add_button("🕹 Акпп", color=VkKeyboardColor.SECONDARY)
     keyboard.add_line()
     
+    # Кнопка возврата
     keyboard.add_button("⬅️ В главное меню", color=VkKeyboardColor.NEGATIVE)
     
-    # ДОБАВЛЕНО .get_keyboard()
-    return keyboard.get_keyboard() 
+    return keyboard
 
 def get_main_keyboard():
     keyboard = VkKeyboard(one_time=False)
     
+    # Первая строка
     keyboard.add_button("🚗 Запчасти", color=VkKeyboardColor.PRIMARY)
     keyboard.add_button("🛞 Диски", color=VkKeyboardColor.PRIMARY)
     keyboard.add_line()
     
+    # Вторая строка
     keyboard.add_button("👨‍💻 Менеджер", color=VkKeyboardColor.POSITIVE)
     keyboard.add_button("❤️ Избранное", color=VkKeyboardColor.POSITIVE)
     keyboard.add_line()
     
+    # Третья строка
     keyboard.add_button("🚘 Доноры", color=VkKeyboardColor.SECONDARY)
     keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.NEGATIVE)
 
-    # ДОБАВЛЕНО .get_keyboard()
-    return keyboard.get_keyboard() 
+    return keyboard
     
 def get_nav_keyboard():
     keyboard = VkKeyboard(one_time=False)
@@ -187,9 +191,7 @@ def get_nav_keyboard():
     keyboard.add_button("❤️ Добавить в избранное", color=VkKeyboardColor.POSITIVE)
     keyboard.add_line()
     keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.SECONDARY)
-    
-    # ДОБАВЛЕНО .get_keyboard()
-    return keyboard.get_keyboard()
+    return keyboard
 
 def send_photo_with_caption(peer_id, photo_url, caption):
     """Отправляет фото с подписью"""
@@ -418,13 +420,11 @@ class DataCache:
         self.parts = []
         self.wheels = []
         self.donors = []
-        self.akpp_base = []
 
-    def _load_csv(self, url):
+    def load_csv(self, url):
         try:
             r = requests.get(url, timeout=15)
             r.encoding = "cp1251"
-            # Важно: проверяем разделитель. Если в онлайн-базе запятые, смените на delimiter=","
             return list(csv.DictReader(io.StringIO(r.text), delimiter=";"))
         except requests.exceptions.RequestException as e:
             logging.error(f"Ошибка загрузки CSV с {url}: {e}")
@@ -433,33 +433,15 @@ class DataCache:
             logging.error(f"Неизвестная ошибка при загрузке CSV: {e}")
             return []
 
-    def load_local_akpp(self):
-        base_path = os.path.dirname(os.path.abspath(__file__))
-        file_path = os.path.join(base_path, "akpp.csv")
-        
-        if os.path.exists(file_path):
-            try:
-                # МЕНЯЕМ КОДИРОВКУ ТУТ:
-                with open(file_path, mode='r', encoding='cp1251') as f:
-                    # Также проверьте разделитель. В Excel это обычно ';'
-                    reader = csv.DictReader(f, delimiter=';') 
-                    self.akpp_base = list(reader)
-                logging.info(f"✅ База АКПП загружена: {len(self.akpp_base)} строк")
-            except Exception as e:
-                logging.error(f"❌ Ошибка чтения akpp.csv: {e}")
-                self.akpp_base = [] 
-        else:
-            logging.warning(f"⚠️ Файл {file_path} не найден.")
-    
     def update(self):
-        logging.info("🔄 Запуск обновления данных...")
-        # Теперь имена совпадают: _load_csv
-        self.parts = self._load_csv(PARTS_CSV)
-        self.wheels = self._load_csv(WHEELS_CSV)
-        self.donors = self._load_csv(DONORS_CSV)
-        
-        # Загрузка локального файла
-        self.load_local_akpp()
+        try:
+            print("🔄 Обновление базы...")
+            self.parts = self.load_csv(PARTS_CSV)
+            self.wheels = self.load_csv(WHEELS_CSV)
+            self.donors = self.load_csv(DONORS_CSV)
+            print("База данных успешно обновлена")
+        except Exception as e:
+            logging.error(f"Критическая ошибка при обновлении базы: {e}")
 
     def search_parts(self, query):
         """Поиск деталей по названию или артикулу"""
@@ -1298,7 +1280,6 @@ def handle(event):
                       keyboard=get_parts_menu_keyboard())
             user_state[peer_id] = "parts_menu"
         return
-        
     if text_lower == "🛞 диски":
         user_state[peer_id] = "wheels"
         send_safe(peer_id, "Введите размер (например R18):")
