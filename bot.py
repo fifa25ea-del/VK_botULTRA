@@ -1356,33 +1356,35 @@ def handle(event):
         results = user_results.get(peer_id, [])
         idx = user_index.get(peer_id, 0)
         
-        if not results: continue
+        # ЗАМЕНА: вместо continue используем return, так как мы в функции
+        if not results: 
+            return 
 
         # Листаем индекс
         if text_lower == "➡️ вперед":
             idx = (idx + 1) if idx + 1 < len(results) else 0
         else:
             idx = (idx - 1) if idx - 1 >= 0 else len(results) - 1
-        
+            
         user_index[peer_id] = idx
 
-        # ОПРЕДЕЛЯЕМ ТИП ТОВАРА И ВЫЗЫВАЕМ НУЖНУЮ ФУНКЦИЮ
+        # ОПРЕДЕЛЯЕМ ТИП ТОВАРА
         item = results[idx]
         
-        # 1. Если это диск (проверяем по ключу, который есть только в дисках)
+        # 1. Если это диск
         if 'Диаметр диска' in item or 'Производитель диска' in item:
             show_wheel(peer_id)
-        # 2. Если это донор (есть VIN или Номер донора)
-        elif 'VIN' in item or 'Марка' in item and 'Модель' in item and 'Год' in item:
+        # 2. Если это донор
+        elif 'VIN' in item or ('Марка' in item and 'Модель' in item and 'Год' in item):
             show_donor(peer_id)
-        # 3. Если это двигатель (проверка была в render_current_item)
+        # 3. Если это двигатель
         elif 'двигатель' in str(item.get('Наименование', '')).lower():
             show_engine(peer_id)
         # 4. По умолчанию - запчасть
         else:
             show_part(peer_id)
-        continue
-
+            
+        return
         # ПРОВЕРКА РЕЖИМА: Если мы искали АКПП, вызываем show_akpp
         state_data = user_state.get(peer_id)
         current_mode = state_data.get("mode") if isinstance(state_data, dict) else state_data
