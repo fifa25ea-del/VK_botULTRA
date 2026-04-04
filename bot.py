@@ -1400,7 +1400,18 @@ def handle(event):
         user_index.pop(peer_id, None)
         send_safe(peer_id, "Главное меню:", keyboard=get_main_keyboard())
         return
-
+   
+    if text_lower == "❤️ добавить в избранное":
+        results = user_results.get(peer_id, [])
+        index = user_index.get(peer_id, 0)
+    
+        if not results:
+            send_safe(peer_id, "❌ Нет товара для добавления.")
+            return
+    
+        item = results[index]
+        add_to_favorites(peer_id, item)
+        return
     # ========= Навигация (Листалка) =========
     if text_lower in ["➡️ вперед", "⬅️ назад"]:
         results = user_results.get(peer_id, [])
