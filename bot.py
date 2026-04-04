@@ -1312,21 +1312,48 @@ def add_to_favorites(peer_id, item):
         send_safe(peer_id, "ℹ️ Этот товар уже есть в избранном.")
 
 def show_favorites(peer_id):
-    """Загружает список избранного в результаты поиска и показывает первую карточку."""
-    favs = user_favorites.get(peer_id, [])
+    favs = watchlist.get(str(peer_id), [])
     
     if not favs:
-        send_safe(peer_id, "Your список избранного пока пуст. ❤️")
+        send_safe(peer_id, "🌟 Ваш список избранного пока пуст.")
         return
 
-    # Подменяем текущие результаты поиска списком из избранного
-    user_results[peer_id] = favs
-    user_index[peer_id] = 0
-    user_state[peer_id] = "favorites_view" # Важно для логики кнопок (Удалить вместо Добавить)
-    
-    send_safe(peer_id, f"⭐ В вашем избранном {len(favs)} товаров:")
-    show_part(peer_id)
+    elements = []
+    for item in favs[:10]:  # VK ограничивает карусель 10 элементами
+        elements.append({
+            "title": f"Товар: {item}",
+            "description": "Нажмите на кнопки ниже для управления",
+            "buttons": [
+                {
+                    "action": {
+                        "type": "text",
+                        "label": "🔍 Найти сейчас",
+                        "payload": json.dumps({"command": "search", "item": item})
+                    },
+                    "color": "primary"
+                },
+                {
+                    "action": {
+                        "type": "text",
+                        "label": "❌ Удалить",
+                        "payload": json.dumps({"command": "remove_fav", "item": item})
+                    },
+                    "color": "negative"
+                }
+            ]
+        })
 
+    template = {
+        "type": "carousel",
+        "elements": elements
+    }
+
+    vk.messages.send(
+        peer_id=peer_id,
+        message="⭐ Ваше избранное:",
+        template=json.dumps(template),
+        random_id=random.getrandbits(64)
+    )
 
 def handle(event):
     msg = event.obj.message
@@ -1337,6 +1364,16 @@ def handle(event):
     if not text:
         return
 
+    payload = event.obj.message.get('payload')
+    if payload:
+        data = json.loads(payload)
+        if data.get("command") == "remove_fav":
+            item_to_remove = data.get("item")
+            if peer_id in watchlist and item_to_remove in watchlist[peer_id]:
+                watchlist[peer_id].remove(item_to_remove)
+                save_watchlist()
+                send_safe(peer_id, f"✅ {item_to_remove} удален из списка.")
+        
     # 1. ОПРЕДЕЛЯЕМ STATE (Обязательно определяем current_state для проверок)
     state = user_state.get(peer_id)
     if isinstance(state, dict):
