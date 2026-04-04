@@ -1383,353 +1383,211 @@ def handle(event):
     peer_id = event.obj.message['peer_id']
     text = event.obj.message['text']
     text_lower = text.lower().strip()
+
     state = user_state.get(peer_id, {})
+    if not isinstance(state, dict):
+        state = {}
+
     mode = state.get("mode")
-    
-    # 1. ОБРАБОТКА КНОПОК ГЛАВНОГО МЕНЮ (Всегда ПЕРВАЯ)
-    if text_lower == "🏠 главное меню" or text_lower == "меню":
-        user_state[peer_id] = None
-        send_safe(peer_id, "Вы в главном меню", keyboard=get_main_keyboard())
+
+    # ========= ГЛАВНОЕ МЕНЮ =========
+    if text_lower in ["🏠 главное меню", "меню", "главное меню", "start"]:
+        user_state[peer_id] = {}
+        user_results.pop(peer_id, None)
+        user_index.pop(peer_id, None)
+        send_safe(peer_id, "🏠 Главное меню", keyboard=get_main_keyboard())
         return
 
+    # ========= ИЗБРАННОЕ =========
     if text_lower == "❤️ избранное":
         show_favorites(peer_id)
         return
-        
-    # 1. ОПРЕДЕЛЯЕМ STATE (Обязательно определяем current_state для проверок)
-    state = user_state.get(peer_id)
-    if isinstance(state, dict):
-        current_state = state.get("mode")
-    else:
-        current_state = state
-        
 
-    # ========= Главное меню (Всегда доступно) =========
-    if text_lower in ["🏠 главное меню", "главное меню", "меню", "start"]:
-        user_state[peer_id] = None
-        user_results.pop(peer_id, None)
-        user_index.pop(peer_id, None)
-        send_safe(peer_id, "Главное меню:", keyboard=get_main_keyboard())
-        return
-   
     if text_lower == "❤️ добавить в избранное":
         results = user_results.get(peer_id, [])
         index = user_index.get(peer_id, 0)
-    
-        if not results:
-            send_safe(peer_id, "❌ Нет товара для добавления.")
-            return
-    
-        item = results[index]
-        add_to_favorites(peer_id, item)
+
+        if results:
+            add_to_favorites(peer_id, results[index])
+        else:
+            send_safe(peer_id, "❌ Нет товара.")
         return
-    # ========= Навигация (Листалка) =========
+
+    # ========= НАВИГАЦИЯ В ИЗБРАННОМ =========
+    if mode == "favorites":
+        favs = user_favorites.get(str(peer_id), [])
+
+        if not favs:
+            send_safe(peer_id, "❌ Избранное пусто")
+            return
+
+        if text_lower == "➡️":
+            state["index"] = (state.get("index", 0) + 1) % len(favs)
+            show_favorite_item(peer_id)
+            return
+
+        if text_lower == "⬅️":
+            state["index"] = (state.get("index", 0) - 1) % len(favs)
+            show_favorite_item(peer_id)
+            return
+
+        if text_lower == "❌ удалить":
+            remove_favorite(peer_id)
+            return
+
+        if text_lower == "🔙 назад":
+            user_state.pop(peer_id, None)
+            send_safe(peer_id, "↩️ В меню", get_main_keyboard())
+            return
+
+    # ========= ОБЫЧНАЯ НАВИГАЦИЯ =========
     if text_lower in ["➡️ вперед", "⬅️ назад"]:
         results = user_results.get(peer_id, [])
+
+        if not results:
+            return
+
         idx = user_index.get(peer_id, 0)
-        
-        # Если результатов нет, просто выходим из этого блока обработки
-        if not results: 
-            # Если это внутри функции (например, def handle_msg):
-            return 
-            # Если это внутри цикла (например, for event in longpoll.listen()):
-            # continue 
 
-        # Листаем индекс
         if text_lower == "➡️ вперед":
-            idx = (idx + 1) if idx + 1 < len(results) else 0
+            idx = (idx + 1) % len(results)
         else:
-            idx = (idx - 1) if idx - 1 >= 0 else len(results) - 1
-        
-        user_index[peer_id] = idx
+            idx = (idx - 1) % len(results)
 
-        # ОПРЕДЕЛЯЕМ ТИП ТОВАРА И ВЫЗЫВАЕМ НУЖНУЮ ФУНКЦИЮ
+        user_index[peer_id] = idx
         item = results[idx]
-        
-        # 1. Если это диск (проверяем ключи)
-        if 'Диаметр диска' in item or 'Производитель диска' in item:
+
+        if 'Диаметр диска' in item:
             show_wheel(peer_id)
-        # 2. Если это донор (есть VIN или Марка+Модель+Год)
-        elif 'VIN' in item or ('Марка' in item and 'Модель' in item and 'Год' in item):
+        elif 'VIN' in item:
             show_donor(peer_id)
-        # 3. Если это двигатель
         elif 'двигатель' in str(item.get('Наименование', '')).lower():
             show_engine(peer_id)
-        # 4. По умолчанию - запчасть
-        else:
-            show_part(peer_id)
-            
-        # Убираем одинокий continue здесь, если мы в функции. 
-        # Если нужно прервать дальнейшую обработку сообщения:
-        return
-        
-        # ПРОВЕРКА РЕЖИМА: Если мы искали АКПП, вызываем show_akpp
-        state_data = user_state.get(peer_id)
-        current_mode = state_data.get("mode") if isinstance(state_data, dict) else state_data
-        
-        if current_mode == "akpp_view" or current_mode == "await_akpp_drive":
+        elif mode == "akpp_view":
             show_akpp(peer_id)
         else:
-            show_part(peer_id) # Обычная карточка для запчастей
+            show_part(peer_id)
+
         return
-    # ========= Обработка состояний (Ввод текста пользователем) =========
-    
-    # Режим ввода номера двигателя
-    if state == "await_engine_number":
-        # Очищаем ввод пользователя для точного поиска
-        clean_text = text.upper().replace(".", "").replace(" ", "")
-        
-        # Вызываем созданный нами метод
+
+    # ========= СОСТОЯНИЯ ВВОДА =========
+
+    if mode == "await_engine_number":
         results = cache.get_engines(text)
+
         if results:
             user_results[peer_id] = results
             user_index[peer_id] = 0
-            user_state[peer_id] = {"mode": "engine_view"} # Устанавливаем режим
+            user_state[peer_id] = {"mode": "engine_view"}
             show_engine(peer_id)
         else:
-            send_safe(peer_id, "❌ Двигатель с таким номером не найден или стоит дешевле 30к.")
+            send_safe(peer_id, "❌ Двигатель не найден")
+        return
 
-    # Режим ввода артикула запчасти
-    if state == "wait_part_number":
+    if mode == "wait_part_number":
         query = normalize_query(text)
         results = cache.search_parts(query)
+
         if results:
             user_results[peer_id] = results
             user_index[peer_id] = 0
-            user_state[peer_id] = "parts"
+            user_state[peer_id] = {"mode": "parts"}
             show_part(peer_id)
         else:
-            # Сохраняем запрос в state как словарь для функции отслеживания
             user_state[peer_id] = {"watch_query": query}
-            send_safe(peer_id, f"❌ По запросу '{query}' ничего не найдено.", 
-                      keyboard=get_watch_keyboard())
+            send_safe(peer_id, f"❌ '{query}' не найден", keyboard=get_watch_keyboard())
         return
 
-    # Режим ввода размера дисков
-    if state == "wheels" and text_lower not in ["🛞 диски"]:
+    if mode == "wheels":
         results = cache.search_wheels(text)
+
         if results:
             user_results[peer_id] = results
             user_index[peer_id] = 0
             show_wheel(peer_id)
         else:
-            send_safe(peer_id, "❌ Диски не найдены.")
+            send_safe(peer_id, "❌ Диски не найдены")
         return
 
-    # ========= Обработка кнопок основного меню =========
-    
-    if text_lower == "🚗 запчасти":
-        user_state[peer_id] = "parts_menu"
-        send_safe(peer_id, "Выберите раздел запчастей:", keyboard=get_parts_menu_keyboard())
-        return
-
-    if text_lower == "⚙️ двигатель":
-        # Если нажали кнопку в подменю - просим номер
-        user_state[peer_id] = "await_engine_number"
-        send_safe(peer_id, "Введите номер вашего двигателя (например M272):")
-        return
-
-    if text_lower == "🔍 поиск по номеру":
-        user_state[peer_id] = "wait_part_number"
-        send_safe(peer_id, "Введите артикул или номер детали:")
-        return
+    # ========= АКПП =========
 
     if text_lower == "🕹 акпп":
-        user_state[peer_id] = "await_akpp_body"
-        send_safe(peer_id, "Введите номер вашего кузова (например, 211):")
+        user_state[peer_id] = {"mode": "await_akpp_body"}
+        send_safe(peer_id, "Введите кузов (например 211):")
         return
-        
-    if current_state == "await_akpp_body":
-        body_query = "".join(filter(str.isdigit, text)) 
-        if not body_query: body_query = text.upper()
-        
-        # Сохраняем как словарь, чтобы не потерять номер кузова
-        user_state[peer_id] = {"mode": "await_akpp_drive", "body": body_query}
-        
+
+    if mode == "await_akpp_body":
+        body = "".join(filter(str.isdigit, text)) or text.upper()
+
+        user_state[peer_id] = {
+            "mode": "await_akpp_drive",
+            "body": body
+        }
+
         kb = VkKeyboard(one_time=True)
         kb.add_button("Задний", color=VkKeyboardColor.PRIMARY)
         kb.add_button("Полный", color=VkKeyboardColor.PRIMARY)
         kb.add_line()
         kb.add_button("Передний", color=VkKeyboardColor.SECONDARY)
-        
-        # ОШИБКА БЫЛА ТУТ: Убедитесь, что send_safe принимает строку JSON
-        send_safe(peer_id, f"Кузов {body_query} принят. Укажите привод:", keyboard=kb.get_keyboard())
-        return
-        
-    if isinstance(state, dict) and state.get("mode") == "await_akpp_drive":
-        drive_query = text.lower().strip() 
-        body_query = state.get("body")
-        
-        results = []
-        
-        for part in cache.akpp_base:
-            # --- УМНОЕ ПОЛУЧЕНИЕ ДАННЫХ ---
-            # Ищем колонку, которая СОДЕРЖИТ слово 'Наименование', 'Комплект' или 'Кузов'
-            # Это спасет, если в CSV заголовок называется " Комплектация" (с пробелом)
-            p_name = next((v for k, v in part.items() if 'наименование' in k.lower()), "").lower()
-            p_komplekt = next((v for k, v in part.items() if 'комплект' in k.lower()), "").lower()
-            p_body = next((v for k, v in part.items() if 'кузов' in k.lower()), "").lower()
-            
-            # --- ФИЛЬТРЫ ---
-            # 1. Проверка на АКПП (ищем в названии или комплектации)
-            is_akpp = "акпп" in p_name or "акпп" in p_komplekt or "кпп" in p_name
-            
-            # 2. Проверка привода (первые 4 буквы: "полн", "задн", "пере")
-            is_right_drive = drive_query[:4] in p_komplekt 
-            
-            # 3. Проверка кузова (оставляем только цифры для сравнения)
-            body_digits_in_base = "".join(filter(str.isdigit, p_body))
-            is_right_body = body_query in body_digits_in_base or body_query in p_body
 
-            if is_akpp and is_right_drive and is_right_body:
+        send_safe(peer_id, f"Кузов {body}. Укажите привод:", keyboard=kb.get_keyboard())
+        return
+
+    if mode == "await_akpp_drive":
+        drive = text.lower()
+        body = state.get("body")
+
+        results = []
+
+        for part in cache.akpp_base:
+            name = str(part).lower()
+
+            if body in name and drive[:4] in name and "акпп" in name:
                 results.append(part)
-        
+
         if results:
             user_results[peer_id] = results
             user_index[peer_id] = 0
-            # ВАЖНО: ставим режим 'akpp_view'
-            user_state[peer_id] = "akpp_view" 
-            show_akpp(peer_id) # Вызываем новую функцию
+            user_state[peer_id] = {"mode": "akpp_view"}
+            show_akpp(peer_id)
         else:
-            send_safe(peer_id, "❌ АКПП не найдена.", keyboard=get_parts_menu_keyboard())
-            send_safe(peer_id, 
-                      f"❌ Не найдено.\n"
-                      f"Искали: кузов '{body_query}', привод '{drive_query}'.\n"
-                      f"Проверьте, чтобы в файле были заполнены колонки 'Кузов' и 'Комплектация'.", 
-                      keyboard=get_parts_menu_keyboard())
-            user_state[peer_id] = "parts_menu"
+            send_safe(peer_id, "❌ АКПП не найдена")
+            user_state[peer_id] = {"mode": "parts_menu"}
         return
-        
+
+    # ========= МЕНЮ =========
+
+    if text_lower == "🚗 запчасти":
+        user_state[peer_id] = {"mode": "parts_menu"}
+        send_safe(peer_id, "Выберите раздел:", keyboard=get_parts_menu_keyboard())
+        return
+
+    if text_lower == "⚙️ двигатель":
+        user_state[peer_id] = {"mode": "await_engine_number"}
+        send_safe(peer_id, "Введите номер двигателя:")
+        return
+
+    if text_lower == "🔍 поиск по номеру":
+        user_state[peer_id] = {"mode": "wait_part_number"}
+        send_safe(peer_id, "Введите номер детали:")
+        return
+
     if text_lower == "🛞 диски":
-        user_state[peer_id] = "wheels"
-        send_safe(peer_id, "Введите размер (например R18):")
+        user_state[peer_id] = {"mode": "wheels"}
+        send_safe(peer_id, "Введите размер:")
         return
 
     if text_lower == "🚘 доноры":
         results = cache.get_latest_donors(limit=15)
+
         if results:
             user_results[peer_id] = results
             user_index[peer_id] = 0
-            user_state[peer_id] = "donors"
+            user_state[peer_id] = {"mode": "donors"}
             show_donor(peer_id)
         else:
-            send_safe(peer_id, "Нет данных.")
+            send_safe(peer_id, "Нет данных")
         return
-
-    if text_lower == "❤️ добавить в избранное":
-        results = user_results.get(peer_id, [])
-        index = user_index.get(peer_id, 0)
-    
-        if results:
-            add_to_favorites(peer_id, results[index])
-        else:
-            send_safe(peer_id, "❌ Нет товара.")
-    
-        return
-
-    if text_lower == "🗑 удалить":
-        # Получаем текущий список избранного и индекс
-        favs = user_favorites.get(peer_id, [])
-        idx = user_index.get(peer_id, 0)
-
-        if favs and 0 <= idx < len(favs):
-            # Удаляем элемент по текущему индексу
-            removed_item = favs.pop(idx)
-            
-            # Обновляем индекс, чтобы он не выходил за границы после удаления
-            if idx >= len(favs) and len(favs) > 0:
-                user_index[peer_id] = len(favs) - 1
-            
-            send_safe(peer_id, f"✅ Удалено: {removed_item.get('Наименование', 'Товар')}")
-
-            # Если список пуст — возвращаем в меню, если нет — показываем следующий товар
-            if not favs:
-                send_safe(peer_id, "Ваш список избранного теперь пуст. Возвращаюсь в меню.")
-                # Здесь можно вызвать функцию показа главного меню
-            else:
-                show_part(peer_id) # Показываем карточку, которая встала на место удаленной
-        else:
-            send_safe(peer_id, "❌ Ошибка: нечего удалять.")
-        return
-        
-def handle_navigation(peer_id, direction, state):
-    results = user_results.get(peer_id)
-
-    if not results:
-        send_safe(peer_id, "Нет данных для навигации")
-        return
-
-    index = user_index.get(peer_id, 0)
-
-    if direction in ["➡️ вперед", "вперед"]:
-        index += 1
-        if index >= len(results):
-            index = 0
-
-    elif direction in ["⬅️ назад", "назад"]:
-        index -= 1
-        if index < 0:
-            index = len(results) - 1
-
-    user_index[peer_id] = index
-
-    # ⚠️ ВАЖНО: state может быть dict!
-    if isinstance(state, dict):
-        send_safe(peer_id, "Навигация недоступна в этом режиме")
-        return
-
-    if state == "parts":
-        show_part(peer_id)
-    elif state == "wheels":
-        show_wheel(peer_id)
-    elif state == "donors":
-        show_donor(peer_id)
-    elif state == "favorites_view":
-        show_part(peer_id)
-    else:
-        send_safe(peer_id, "Неизвестный режим")
-   
-    if mode == "favorites":
-    if text_lower == "➡️":
-        user_state[peer_id]["index"] += 1
-        if user_state[peer_id]["index"] >= len(user_favorites[str(peer_id)]):
-            user_state[peer_id]["index"] = 0
-        show_favorite_item(peer_id)
-        return
-
-    if text_lower == "⬅️":
-        user_state[peer_id]["index"] -= 1
-        if user_state[peer_id]["index"] < 0:
-            user_state[peer_id]["index"] = len(user_favorites[str(peer_id)]) - 1
-        show_favorite_item(peer_id)
-        return
-
-    if text_lower == "❌ удалить":
-        remove_favorite(peer_id)
-        return
-
-    if text_lower == "🔙 назад":
-        user_state.pop(peer_id, None)
-        send_safe(peer_id, "↩️ Выход в меню", get_main_keyboard())
-        return
-def handle_watch_button(peer_id):
-    state = user_state.get(peer_id)
-    if not state or "watch_query" not in state:
-        send_safe(peer_id, "Не удалось добавить товар в отслеживание.")
-        return
-    
-    query = state["watch_query"]
-
-    if peer_id not in watchlist:
-        watchlist[peer_id] = []
-
-    if query not in watchlist[peer_id]:
-        watchlist[peer_id].append(query)
-        save_watchlist()
-        send_safe(peer_id, f"✅ Вы теперь следите за товаром '{query}'. Как только он появится, мы уведомим вас!")
-    else:
-        send_safe(peer_id, f"Вы уже следите за товаром '{query}'.")
-        
 # Запуск бота
 def run_bot():
     print("🔥 VK BOT ULTRA ЗАПУЩЕН")
