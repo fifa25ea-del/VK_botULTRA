@@ -1713,15 +1713,13 @@ def auto_restart():
             time.sleep(10)
 
 if __name__ == "__main__":
-    # 1. Инициализируем файлы (создаем, если их нет)
     init_files()
-    
-    # 2. Загружаем данные из JSON в ГЛОБАЛЬНЫЕ переменные
-    # ВАЖНО: убедитесь, что user_favorites и watchlist объявлены в начале файла как {}
+    # Загружаем данные из файлов в глобальные переменные
     user_favorites.update(load_json(FAV_FILE))
-    watchlist.update(load_json(WATCH_FILE))
+    # ИСПРАВЛЕНО: используем WATCHLIST_FILE вместо WATCH_FILE
+    watchlist.update(load_json(WATCHLIST_FILE)) 
     
-    print(f"✅ Данные загружены. Избранное: {len(user_favorites)} пользователей")
-    
-    # 3. Запускаем цикл авто-перезапуска
+    print(f"✅ Данные загружены. Избранное: {len(user_favorites)}")
     auto_restart()
+    
+   
