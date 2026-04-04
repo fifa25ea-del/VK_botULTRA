@@ -113,7 +113,7 @@ _last_cache_update = 0
 _CACHE_TTL = 300  # Время жизни кэша — 5 минут
 image_cache = {}
 user_favorites = {}
-
+user_favorites = load_favorites()
 
 
 
@@ -1294,79 +1294,97 @@ def find_donor(query):
 # ===== ДОБАВЛЯЕМ ИЗБРАННОЕ =====
 
 def add_to_favorites(peer_id, item):
+    peer_id = str(peer_id)
+
     if peer_id not in user_favorites:
         user_favorites[peer_id] = []
-    
-    # Пытаемся найти уникальный идентификатор товара
-    # Для дисков это 'Артикул', для запчастей 'Номер', для АКПП 'Номер товара'
-    item_id = (
-        item.get('Артикул') or 
-        item.get('Номер') or 
-        item.get('Номер товара') or 
-        item.get('Наименование', '') + str(item.get('Цена', ''))
-    )
-    
-    # Проверка на дубликат
-    is_duplicate = any(
-        (f.get('Артикул') or f.get('Номер') or f.get('Номер товара') or 
-         f.get('Наименование', '') + str(f.get('Цена', ''))) == item_id 
-        for f in user_favorites[peer_id]
-    )
-    
-    if not is_duplicate:
-        user_favorites[peer_id].append(item)
-        send_safe(peer_id, "✅ Добавлено в избранное!")
-    else:
-        send_safe(peer_id, "ℹ️ Этот товар уже есть в избранном.")
+
+    item_id = get_item_id(item)
+
+    # проверка на дубликат
+    for fav in user_favorites[peer_id]:
+        if get_item_id(fav) == item_id:
+            send_safe(peer_id, "ℹ️ Уже есть в избранном.")
+            return
+
+    user_favorites[peer_id].append(item)
+    save_favorites()
+
+    send_safe(peer_id, "✅ Добавлено в избранное!")
 
 def show_favorites(peer_id):
-    favs = watchlist.get(str(peer_id), [])
-    
+    peer_id = str(peer_id)
+    favs = user_favorites.get(peer_id, [])
+
     if not favs:
-        send_safe(peer_id, "🌟 Ваш список избранного пока пуст.")
+        send_safe(peer_id, "❌ Избранное пусто.")
         return
 
-    elements = []
-    for item in favs[:10]:  # VK ограничивает карусель 10 элементами
-        elements.append({
-            "title": f"Товар: {item}",
-            "description": "Нажмите на кнопки ниже для управления",
-            "buttons": [
-                {
-                    "action": {
-                        "type": "text",
-                        "label": "🔍 Найти сейчас",
-                        "payload": json.dumps({"command": "search", "item": item})
-                    },
-                    "color": "primary"
-                },
-                {
-                    "action": {
-                        "type": "text",
-                        "label": "❌ Удалить",
-                        "payload": json.dumps({"command": "remove_fav", "item": item})
-                    },
-                    "color": "negative"
-                }
-            ]
-        })
-
-    template = {
-        "type": "carousel",
-        "elements": elements
+    user_state[peer_id] = {
+        "mode": "favorites",
+        "index": 0
     }
 
-    vk.messages.send(
-        peer_id=peer_id,
-        message="⭐ Ваше избранное:",
-        template=json.dumps(template),
-        random_id=random.getrandbits(64)
-    )
+    show_favorite_item(peer_id)
+
+def show_favorite_item(peer_id):
+    peer_id = str(peer_id)
+    state = user_state.get(peer_id, {})
+    index = state.get("index", 0)
+
+    favs = user_favorites.get(peer_id, [])
+
+    if not favs:
+        send_safe(peer_id, "❌ Избранное пусто.")
+        return
+
+    item = favs[index]
+
+    text = format_item(item)
+
+    keyboard = VkKeyboard(inline=False)
+    keyboard.add_button("⬅️", color=VkKeyboardColor.PRIMARY)
+    keyboard.add_button("➡️", color=VkKeyboardColor.PRIMARY)
+    keyboard.add_line()
+    keyboard.add_button("❌ Удалить", color=VkKeyboardColor.NEGATIVE)
+    keyboard.add_line()
+    keyboard.add_button("🔙 Назад", color=VkKeyboardColor.SECONDARY)
+
+    send_safe(peer_id, text, keyboard)
+
+def remove_favorite(peer_id):
+    peer_id = str(peer_id)
+    state = user_state.get(peer_id, {})
+    index = state.get("index", 0)
+
+    favs = user_favorites.get(peer_id, [])
+
+    if not favs:
+        send_safe(peer_id, "❌ Нечего удалять.")
+        return
+
+    favs.pop(index)
+
+    if index >= len(favs):
+        index = max(0, len(favs) - 1)
+
+    user_state[peer_id]["index"] = index
+
+    save_favorites()
+
+    send_safe(peer_id, "🗑 Удалено!")
+
+    if favs:
+        show_favorite_item(peer_id)
+    else:
+        send_safe(peer_id, "📭 Избранное теперь пусто.")
 
 def handle(event):
     peer_id = event.obj.message['peer_id']
     text = event.obj.message['text']
     text_lower = text.lower().strip()
+    state = user_state.get(peer_id, {})
+    mode = state.get("mode")
     
     # 1. ОБРАБОТКА КНОПОК ГЛАВНОГО МЕНЮ (Всегда ПЕРВАЯ)
     if text_lower == "🏠 главное меню" or text_lower == "меню":
@@ -1374,15 +1392,8 @@ def handle(event):
         send_safe(peer_id, "Вы в главном меню", keyboard=get_main_keyboard())
         return
 
-    if "избранное" in text_lower:
-        uid = str(peer_id)
-        if uid not in user_favorites or not user_favorites[uid]:
-            send_safe(peer_id, "🌟 Избранное пусто")
-        else:
-            user_results[peer_id] = user_favorites[uid]
-            user_index[peer_id] = 0
-            user_state[peer_id] = "favorites_view"
-            show_favorite_card(peer_id)
+    if text_lower == "❤️ избранное":
+        show_favorites(peer_id)
         return
         
     # 1. ОПРЕДЕЛЯЕМ STATE (Обязательно определяем current_state для проверок)
@@ -1605,22 +1616,16 @@ def handle(event):
             send_safe(peer_id, "Нет данных.")
         return
 
-    if text == "❤️ Добавить в избранное":
+    if text_lower == "❤️ добавить в избранное":
         results = user_results.get(peer_id, [])
         index = user_index.get(peer_id, 0)
     
-        if results and index < len(results):
-            item = results[index]
-            if str(peer_id) not in user_favorites:
-                user_favorites[str(peer_id)] = []
+        if results:
+            add_to_favorites(peer_id, results[index])
+        else:
+            send_safe(peer_id, "❌ Нет товара.")
     
-            # Проверка, чтобы не дублировать
-            if item not in user_favorites[str(peer_id)]:
-                user_favorites[str(peer_id)].append(item)
-                save_favorites()
-                send_safe(peer_id, "✅ Товар добавлен в избранное!")
-            else:
-                send_safe(peer_id, "💡 Этот товар уже есть в вашем списке.")
+        return
 
     if text_lower == "🗑 удалить":
         # Получаем текущий список избранного и индекс
@@ -1683,7 +1688,30 @@ def handle_navigation(peer_id, direction, state):
         show_part(peer_id)
     else:
         send_safe(peer_id, "Неизвестный режим")
+   
+    if mode == "favorites":
+    if text_lower == "➡️":
+        user_state[peer_id]["index"] += 1
+        if user_state[peer_id]["index"] >= len(user_favorites[str(peer_id)]):
+            user_state[peer_id]["index"] = 0
+        show_favorite_item(peer_id)
+        return
 
+    if text_lower == "⬅️":
+        user_state[peer_id]["index"] -= 1
+        if user_state[peer_id]["index"] < 0:
+            user_state[peer_id]["index"] = len(user_favorites[str(peer_id)]) - 1
+        show_favorite_item(peer_id)
+        return
+
+    if text_lower == "❌ удалить":
+        remove_favorite(peer_id)
+        return
+
+    if text_lower == "🔙 назад":
+        user_state.pop(peer_id, None)
+        send_safe(peer_id, "↩️ Выход в меню", get_main_keyboard())
+        return
 def handle_watch_button(peer_id):
     state = user_state.get(peer_id)
     if not state or "watch_query" not in state:
