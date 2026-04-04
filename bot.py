@@ -852,38 +852,38 @@ def show_part(peer_id):
         send_safe(peer_id, "Произошла критическая ошибка при отображении детали.")
 
 def show_engine(peer_id, item=None):
+    results = user_results.get(peer_id, [])
+    index = user_index.get(peer_id, 0)
+
+    if not results:
+        send_safe(peer_id, "❌ Данные двигателя не найдены.")
+        return
+
     if item is None:
-        results = user_results.get(peer_id, [])
-        index = user_index.get(peer_id, 0)
-
-        if not results:
-            send_safe(peer_id, "❌ Данные двигателя не найдены.")
-            return
-
         item = results[index]
 
     # --- 1. ФОРМИРУЕМ ТЕКСТ (Стиль как в АКПП) ---
     title = "🚀 ДВИГАТЕЛЬ"
-    model_engine = part.get('Двигатель') or part.get('Маркировка') or 'Не указана'
-    price = part.get('Цена') or 'По запросу'
-    body = part.get('Кузов') or 'Не указан'
-    item_id = part.get('Артикул') or part.get('Номер') or '---'
+    model_engine = item.get('Двигатель') or item.get('Маркировка') or 'Не указана'
+    price = item.get('Цена') or 'По запросу'
+    body = item.get('Кузов') or 'Не указан'
+    item_id = item.get('Артикул') or item.get('Номер') or '---'
     
     msg = (
         f"{title}\n"
         f"💰 Цена: {price} руб.\n\n"
         f"⛽ Модель ДВС: {model_engine}\n"
         f"🚗 Кузов: {body}\n"
-        f"📄 Комментарий: {part.get('Комментарий', 'информация отсутствует')}\n"
+        f"📄 Комментарий: {item.get('Комментарий', 'информация отсутствует')}\n"
         f"🔢 Артикул: {item_id}\n\n"
-        f"📊 Результат {idx + 1} из {len(results)}"
+        f"📊 Результат {index + 1} из {len(results)}"
     )
 
     # --- 2. ПОДГОТОВКА КЛАВИАТУРЫ ---
     keyboard_data = get_nav_keyboard()
 
     # --- 3. ЗАГРУЗКА ФОТО ---
-    photos_str = part.get('Фото') or part.get('Превью', '')
+    photos_str = item.get('Фото') or item.get('Превью', '')
     photo_url = None
     if photos_str:
         photo_url = photos_str.split(',')[0].strip()
