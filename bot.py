@@ -98,6 +98,15 @@ def load_donors_csv(url, max_retries=3, timeout=30):
                 raise
     raise Exception("Не удалось загрузить CSV после нескольких попыток")
 
+def get_item_id(item):
+    return (
+        str(item.get('Артикул') or '') +
+        str(item.get('Номер') or '') +
+        str(item.get('Номер товара') or '') +
+        str(item.get('Наименование') or '') +
+        str(item.get('Цена') or '')
+    )
+
 def save_favorites():
     with open(FAV_FILE, "w", encoding="utf-8") as f:
         json.dump(user_favorites, f, ensure_ascii=False, indent=2)
