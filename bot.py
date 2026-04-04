@@ -103,7 +103,6 @@ def save_favorites():
         json.dump(user_favorites, f, ensure_ascii=False, indent=2)
 
 def load_favorites():
-    global user_favorites
     user_favorites = load_json(FAV_FILE)
     
 # ===== НАСТРОЙКИ =====
