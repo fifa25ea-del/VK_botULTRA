@@ -79,6 +79,14 @@ def load_donors_csv(url, max_retries=3, timeout=30):
             else:
                 raise
     raise Exception("Не удалось загрузить CSV после нескольких попыток")
+
+def save_favorites():
+    with open(FAV_FILE, "w", encoding="utf-8") as f:
+        json.dump(user_favorites, f, ensure_ascii=False, indent=2)
+
+def load_favorites():
+    global user_favorites
+    user_favorites = load_json(FAV_FILE)
     
 # ===== НАСТРОЙКИ =====
 TOKEN = "vk1.a.Ze-bIlYgJf9rdkgnhYmWc6U6Eg9DRgi0vLkokPQVV5fIMsfsLm8kVPpCBMD04qwimSsaZZS1R0e1qwndF1hj3ROCvebCapjcT7xVeOSAvAdIJ1rqPYevdcbGAIt6OxV9xreMd2w4JROXJnnKvE4XiDLIieNoPE6BMKERAjlIt8jpeKIughzD9VC7x9DdPjzgF_tvoZMRDGkbvIBycGNoeA"
