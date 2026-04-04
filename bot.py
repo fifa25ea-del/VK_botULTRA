@@ -1583,37 +1583,23 @@ def handle(event):
             send_safe(peer_id, "Нет данных.")
         return
 
-    if text_lower == "❤️ добавить в избранное":
-        results = user_results.get(peer_id, [])
-        idx = user_index.get(peer_id, 0)
+    if text_lower == "❤️ избранное" or text_lower == "избранное":
+        uid = str(peer_id)
+        # Берем из глобального словаря, который загрузился при старте
+        user_favs = user_favorites.get(uid, [])
         
-        if results and 0 <= idx < len(results):
-            item_to_add = results[idx]
-            if peer_id not in user_favorites:
-                user_favorites[peer_id] = []
-            
-            item_id = (item_to_add.get('Артикул') or 
-                       item_to_add.get('Номер') or 
-                       item_to_add.get('VIN') or 
-                       str(item_to_add.get('Наименование')))
-
-            is_duplicate = any((f.get('Артикул') or f.get('Номер') or f.get('VIN') or str(f.get('Наименование'))) == item_id 
-                               for f in user_favorites[peer_id])
-            
-            if not is_duplicate:
-                user_favorites[peer_id].append(item_to_add)
-                save_json(FAV_FILE, user_favorites)
-                send_safe(peer_id, "✅ Добавлено в избранное!")
-            else:
-                send_safe(peer_id, "ℹ️ Уже в избранном.")
-        else:
-            send_safe(peer_id, "❌ Ошибка: не удалось определить товар.")
-        return
+        if not user_favs:
+            send_safe(peer_id, "🌟 Ваше избранное пока пусто.", keyboard=get_main_keyboard())
+            return
+    
+        # Наполняем временные данные для постраничного просмотра
+        user_results[peer_id] = user_favs
+        user_index[peer_id] = 0
+        user_state[peer_id] = "favorites_view" 
         
-    # Обработка кнопки "Следить" (если в state словарь)
-    if text_lower == "🔔 следить за товаром":
-        handle_watch_button(peer_id)
+        show_favorite_card(peer_id) # Твоя новая функция
         return
+            
 
     if text_lower == "🗑 удалить":
         # Получаем текущий список избранного и индекс
