@@ -129,8 +129,7 @@ _donors_cache = None
 _last_cache_update = 0
 _CACHE_TTL = 300  # Время жизни кэша — 5 минут
 image_cache = {}
-user_favorites = {}
-user_favorites = load_favorites()
+user_favorites = load_json(FAV_FILE) or {}
 
 
 
