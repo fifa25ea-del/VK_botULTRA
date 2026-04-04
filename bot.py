@@ -16,6 +16,24 @@ from urllib.parse import urlparse
 import random
 from io import StringIO
 
+def load_json(file_path):
+    if not os.path.exists(file_path):
+        return {}
+
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def save_json(file_path, data):
+    try:
+        with open(file_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"Ошибка сохранения JSON: {e}")
+
 def get_image(url):
     try:
         response = requests.get(url, timeout=3)
