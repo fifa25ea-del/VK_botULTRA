@@ -1703,21 +1703,25 @@ def run_bot():
         time.sleep(5)
         run_bot()
 
-if __name__ == "__main__":
-    init_files()
-    # Загружаем данные из файлов в глобальные переменные
-    user_favorites = load_json(FAV_FILE)
-    watchlist = load_json(WATCH_FILE)
-    run_bot()
-    except Exception as e:
-        logging.error(f"Критическая ошибка при запуске бота: {e}")
-        time.sleep(10)
-        run_bot()
-
 def auto_restart():
+    """Функция для бесконечного перезапуска бота при ошибках"""
     while True:
         try:
             run_bot()
         except Exception as e:
-            logging.error(f"Бот упал. Перезапуск... {e}")
+            logging.error(f"Бот упал. Перезапуск через 10 секунд... Ошибка: {e}")
             time.sleep(10)
+
+if __name__ == "__main__":
+    # 1. Инициализируем файлы (создаем, если их нет)
+    init_files()
+    
+    # 2. Загружаем данные из JSON в ГЛОБАЛЬНЫЕ переменные
+    # ВАЖНО: убедитесь, что user_favorites и watchlist объявлены в начале файла как {}
+    user_favorites.update(load_json(FAV_FILE))
+    watchlist.update(load_json(WATCH_FILE))
+    
+    print(f"✅ Данные загружены. Избранное: {len(user_favorites)} пользователей")
+    
+    # 3. Запускаем цикл авто-перезапуска
+    auto_restart()
