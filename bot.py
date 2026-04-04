@@ -1358,14 +1358,16 @@ def show_favorite_item(peer_id):
     index = state.get("index", 0)
 
     favs = user_favorites.get(peer_id, [])
-
-    if not favs:
-        send_safe(peer_id, "❌ Избранное пусто.")
-        return
-
     item = favs[index]
 
-    text = format_item(item)
+    if 'Диаметр диска' in item:
+        show_wheel(peer_id)
+    elif 'VIN' in item:
+        show_donor(peer_id)
+    elif 'двигатель' in str(item.get('Наименование', '')).lower():
+        show_engine(peer_id)
+    else:
+        show_part(peer_id)
 
     keyboard = VkKeyboard(inline=False)
     keyboard.add_button("⬅️", color=VkKeyboardColor.PRIMARY)
