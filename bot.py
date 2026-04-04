@@ -1356,23 +1356,26 @@ def show_favorites(peer_id):
     )
 
 def handle(event):
-    msg = event.obj.message
-    peer_id = msg['peer_id']
-    text = msg.get('text', '').strip()
-    text_lower = text.lower()
-
-    if not text:
+    peer_id = event.obj.message['peer_id']
+    text = event.obj.message['text']
+    text_lower = text.lower().strip()
+    
+    # 1. ОБРАБОТКА КНОПОК ГЛАВНОГО МЕНЮ (Всегда ПЕРВАЯ)
+    if text_lower == "🏠 главное меню" or text_lower == "меню":
+        user_state[peer_id] = None
+        send_safe(peer_id, "Вы в главном меню", keyboard=get_main_keyboard())
         return
 
-    payload = event.obj.message.get('payload')
-    if payload:
-        data = json.loads(payload)
-        if data.get("command") == "remove_fav":
-            item_to_remove = data.get("item")
-            if peer_id in watchlist and item_to_remove in watchlist[peer_id]:
-                watchlist[peer_id].remove(item_to_remove)
-                save_watchlist()
-                send_safe(peer_id, f"✅ {item_to_remove} удален из списка.")
+    if "избранное" in text_lower:
+        uid = str(peer_id)
+        if uid not in user_favorites or not user_favorites[uid]:
+            send_safe(peer_id, "🌟 Избранное пусто")
+        else:
+            user_results[peer_id] = user_favorites[uid]
+            user_index[peer_id] = 0
+            user_state[peer_id] = "favorites_view"
+            show_favorite_card(peer_id)
+        return
         
     # 1. ОПРЕДЕЛЯЕМ STATE (Обязательно определяем current_state для проверок)
     state = user_state.get(peer_id)
