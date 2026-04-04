@@ -851,15 +851,16 @@ def show_part(peer_id):
         logging.critical(f"ФАТАЛЬНАЯ ошибка в show_part для {peer_id}: {e}")
         send_safe(peer_id, "Произошла критическая ошибка при отображении детали.")
 
-def show_engine(peer_id):
-    results = user_results.get(peer_id, [])
-    idx = user_index.get(peer_id, 0)
+def show_engine(peer_id, item=None):
+    if item is None:
+        results = user_results.get(peer_id, [])
+        index = user_index.get(peer_id, 0)
 
-    if not results or not (0 <= idx < len(results)):
-        send_safe(peer_id, "Данные двигателя не найдены.")
-        return
+        if not results:
+            send_safe(peer_id, "❌ Данные двигателя не найдены.")
+            return
 
-    part = results[idx]
+        item = results[index]
 
     # --- 1. ФОРМИРУЕМ ТЕКСТ (Стиль как в АКПП) ---
     title = "🚀 ДВИГАТЕЛЬ"
@@ -917,6 +918,16 @@ def show_engine(peer_id):
     
     # Отправка без фото, если что-то пошло не так
     send_safe(peer_id, msg, keyboard=keyboard_data)
+
+def show_item(peer_id, item):
+    if 'Диаметр диска' in item:
+        show_wheel(peer_id, item)
+    elif 'VIN' in item:
+        show_donor(peer_id, item)
+    elif 'двигатель' in str(item.get('Наименование', '')).lower():
+        show_engine(peer_id, item)
+    else:
+        show_part(peer_id, item)
 
 def show_akpp(peer_id):
     results = user_results.get(peer_id, [])
