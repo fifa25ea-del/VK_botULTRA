@@ -1594,23 +1594,22 @@ def handle(event):
             send_safe(peer_id, "Нет данных.")
         return
 
-    if text_lower == "❤️ избранное" or text_lower == "избранное":
-        uid = str(peer_id)
-        # Берем из глобального словаря, который загрузился при старте
-        user_favs = user_favorites.get(uid, [])
-        
-        if not user_favs:
-            send_safe(peer_id, "🌟 Ваше избранное пока пусто.", keyboard=get_main_keyboard())
-            return
+    if text == "❤️ Добавить в избранное":
+        results = user_results.get(peer_id, [])
+        index = user_index.get(peer_id, 0)
     
-        # Наполняем временные данные для постраничного просмотра
-        user_results[peer_id] = user_favs
-        user_index[peer_id] = 0
-        user_state[peer_id] = "favorites_view" 
-        
-        show_favorite_card(peer_id) # Твоя новая функция
-        return
-            
+        if results and index < len(results):
+            item = results[index]
+            if str(peer_id) not in user_favorites:
+                user_favorites[str(peer_id)] = []
+    
+            # Проверка, чтобы не дублировать
+            if item not in user_favorites[str(peer_id)]:
+                user_favorites[str(peer_id)].append(item)
+                save_favorites()
+                send_safe(peer_id, "✅ Товар добавлен в избранное!")
+            else:
+                send_safe(peer_id, "💡 Этот товар уже есть в вашем списке.")
 
     if text_lower == "🗑 удалить":
         # Получаем текущий список избранного и индекс
