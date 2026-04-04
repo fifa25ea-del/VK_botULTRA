@@ -1704,11 +1704,11 @@ def run_bot():
         run_bot()
 
 if __name__ == "__main__":
-    try:
-        init_files()
-        load_json(FAV_FILE)
-        load_json(STATS_FILE)
-        run_bot()
+    init_files()
+    # Загружаем данные из файлов в глобальные переменные
+    user_favorites = load_json(FAV_FILE)
+    watchlist = load_json(WATCH_FILE)
+    run_bot()
     except Exception as e:
         logging.error(f"Критическая ошибка при запуске бота: {e}")
         time.sleep(10)
