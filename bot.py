@@ -17,7 +17,14 @@ import random
 from io import StringIO
 
 def show_favorites(peer_id):
-    show_favorite_card(peer_id)
+    if not user_favorites.get(peer_id):
+        send(peer_id, "Избранное пусто.", keyboard=get_main_keyboard())
+        user_state[peer_id] = None
+        return
+
+    user_state[peer_id] = "FAVORITES"
+    user_index[peer_id] = 0
+    show_card(peer_id, mode="FAVORITES")
 
 def load_json(file_path):
     if not os.path.exists(file_path):
@@ -136,6 +143,7 @@ _last_cache_update = 0
 _CACHE_TTL = 300  # Время жизни кэша — 5 минут
 image_cache = {}
 user_favorites = load_json(FAV_FILE) or {}
+state = {}
 
 
 
@@ -1205,25 +1213,27 @@ def show_donor(peer_id):
         logging.critical(f"ФАТАЛЬНАЯ ошибка в show_donor для {peer_id}: {e}")
         send_safe(peer_id, "Произошла критическая ошибка при отображении донора. Обратитесь к администратору.")
 
-def show_favorite_card(peer_id):
+def show_card(peer_id, mode="SEARCH"):
+    """
+    mode: "SEARCH" или "FAVORITES"
+    """
     try:
-        # DEBUG
-        print(f"[DEBUG] peer_id={peer_id}, user_results keys={list(user_results.keys())}")
-        results = user_results.get(peer_id, [])
-        print(f"[DEBUG] results={results}")
-        
-        index = user_index.get(peer_id, 0)
+        if mode == "FAVORITES":
+            results = user_favorites.get(peer_id, [])
+        else:
+            results = user_results.get(peer_id, [])
 
         if not results:
-            send(peer_id, "Избранное пусто.", keyboard=get_main_keyboard())
+            send(peer_id, "Товары не найдены.", keyboard=get_main_keyboard())
             user_state[peer_id] = None
             return
 
+        index = user_index.get(peer_id, 0)
         item = results[index]
         total_items = len(results)
         current_position = index + 1
 
-        # Формируем текст карточки
+        # Формируем сообщение
         name = item.get('Наименование') or item.get('Модель диска') or item.get('Марка') or 'Товар'
         message = f"📦 {name}\n"
 
@@ -1231,33 +1241,28 @@ def show_favorite_card(peer_id):
         if article:
             message += f"Артикул: {article}\n"
         message += f"Цена: {item.get('Цена', 'Не указана')}\n"
+
         link = item.get('Ссылка')
         if link and link not in ["Не указано", "Нет ссылки"]:
             message += f"Ссылка: {link}\n"
+
         message += f"\n📊 {current_position} из {total_items}"
 
-        # Создаём клавиатуру с соблюдением лимитов VK
+        # Клавиатура
         keyboard = VkKeyboard(one_time=False)
-
-        # Первая строка: 2 кнопки
         keyboard.add_button("🗑 Удалить", color=VkKeyboardColor.NEGATIVE)
         keyboard.add_button("🏠 Меню", color=VkKeyboardColor.NEGATIVE)
-        keyboard.add_line()  # Переход на новую строку
+        keyboard.add_line()
 
-        # Вторая строка: навигация (только если есть несколько элементов)
         if total_items > 1:
             keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
             keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
-            keyboard.add_line()  # Новая строка
+            keyboard.add_line()
 
-        # Третья строка: кнопка обновления
         keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
 
-        keyboard_data = keyboard.get_keyboard()
-
-        # Пробуем отправить фото с текстом и клавиатурой одним сообщением
+        # Фото
         photo_url = get_first_photo(item.get('Фото', ''))
-
         if photo_url:
             try:
                 response = requests.get(photo_url, timeout=10)
@@ -1269,28 +1274,28 @@ def show_favorite_card(peer_id):
 
                 photo_data = vk.photos.saveMessagesPhoto(
                     server=upload_data['server'],
-            photo=upload_data['photo'],
-            hash=upload_data['hash']
-        )[0]
+                    photo=upload_data['photo'],
+                    hash=upload_data['hash']
+                )[0]
 
                 attachment = f"photo{photo_data['owner_id']}_{photo_data['id']}"
 
                 vk.messages.send(
                     peer_id=peer_id,
-            message=message,
-            attachment=attachment,
-            keyboard=keyboard_data,
-            random_id=get_random_id()
-        )
+                    message=message,
+                    attachment=attachment,
+                    keyboard=keyboard.get_keyboard(),
+                    random_id=get_random_id()
+                )
             except Exception as e:
-                logging.warning(f"Ошибка фото в избранном: {e}. Отправляем текст.")
-                send_safe(peer_id, message, keyboard=keyboard)  # Передаём объект клавиатуры, а не JSON
+                logging.warning(f"Ошибка фото: {e}. Отправляем текст.")
+                send_safe(peer_id, message, keyboard=keyboard)
         else:
-            send_safe(peer_id, message, keyboard=keyboard)  # Аналогично — объект клавиатуры
+            send_safe(peer_id, message, keyboard=keyboard)
 
     except Exception as e:
-        logging.error(f"Критическая ошибка в show_favorite_card: {e}")
-        send(peer_id, "Произошла ошибка при отображении избранного.")
+        logging.error(f"Критическая ошибка в show_card: {e}")
+        send(peer_id, "Произошла ошибка при отображении карточки.")
         
 # ===== ДОБАВЛЯЕМ ПОИСК ПО КРИТЕРИЯМ =====
 
@@ -1470,50 +1475,53 @@ def handle(event):
             send_safe(peer_id, "❌ Нет товара.")
         return
 
-    # ========= НАВИГАЦИЯ В ИЗБРАННОМ =========
+    # ===== НАВИГАЦИЯ В ИЗБРАННОМ =====
     if mode == "favorites":
         favs = user_favorites.get(str(peer_id), [])
-
         if not favs:
             send_safe(peer_id, "❌ Избранное пусто")
             return
 
-        if text_lower == "➡️":
-            state["index"] = (state.get("index", 0) + 1) % len(favs)
-            show_favorite_item(peer_id)
+        idx = state.get(str(peer_id), 0)
+
+        if text_lower in ["➡️", "➡️ вперед"]:
+            idx = (idx + 1) % len(favs)
+            state[str(peer_id)] = idx
+            show_favorite_item(peer_id, idx)
             return
 
-        if text_lower == "⬅️":
-            state["index"] = (state.get("index", 0) - 1) % len(favs)
-            show_favorite_item(peer_id)
+        if text_lower in ["⬅️", "⬅️ назад"]:
+            idx = (idx - 1) % len(favs)
+            state[str(peer_id)] = idx
+            show_favorite_item(peer_id, idx)
             return
 
-        if text_lower == "❌ удалить":
+        if text_lower in ["❌ удалить", "🗑 удалить"]:
             remove_favorite(peer_id)
             return
 
-        if text_lower == "🔙 назад":
+        if text_lower in ["🔙 назад", "🏠 меню"]:
             user_state.pop(peer_id, None)
             send_safe(peer_id, "↩️ В меню", get_main_keyboard())
             return
 
-    # ========= ОБЫЧНАЯ НАВИГАЦИЯ =========
-    if text_lower in ["➡️ вперед", "⬅️ назад"]:
+    # ===== ОБЫЧНАЯ НАВИГАЦИЯ =====
+    else:
         results = user_results.get(peer_id, [])
-
         if not results:
             return
 
         idx = user_index.get(peer_id, 0)
 
-        if text_lower == "➡️ вперед":
+        if text_lower in ["➡️ вперед", "➡️"]:
             idx = (idx + 1) % len(results)
-        else:
+        elif text_lower in ["⬅️ назад", "⬅️"]:
             idx = (idx - 1) % len(results)
 
         user_index[peer_id] = idx
         item = results[idx]
 
+        # Показываем карточку в зависимости от типа
         if 'Диаметр диска' in item:
             show_wheel(peer_id)
         elif 'VIN' in item:
@@ -1524,8 +1532,6 @@ def handle(event):
             show_akpp(peer_id)
         else:
             show_part(peer_id)
-
-        return
 
     # ========= СОСТОЯНИЯ ВВОДА =========
 
