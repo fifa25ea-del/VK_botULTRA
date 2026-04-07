@@ -1036,10 +1036,10 @@ def show_wheel(peer_id):
 
         # Формируем текст карточки
         message = "🛞 Карточка диска:\n"
-        message += f"Производитель: {safe_get(wheel, 'Производитель диска')}\n"
-        message += f"Артикул: {safe_get(wheel, 'Артикул')}\n"
-        message += f"Модель: {safe_get(wheel, 'Модель диска')}\n"
-        message += f"Размер: {safe_get(wheel, 'Диаметр диска')}\n"
+        message += f"🚗Производитель: {safe_get(wheel, 'Производитель диска')}\n"
+        message += f"🆔Артикул: {safe_get(wheel, 'Артикул')}\n"
+        message += f"🏷️Модель: {safe_get(wheel, 'Модель диска')}\n"
+        message += f"⚙️Размер: {safe_get(wheel, 'Диаметр диска')}\n"
 
         price = safe_get(wheel, 'Цена')
         if price != "Не указано":
