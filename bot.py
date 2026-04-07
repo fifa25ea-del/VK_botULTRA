@@ -27,13 +27,6 @@ def load_json(file_path):
         return {}
 
 
-def save_json(file_path, data):
-    try:
-        with open(file_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        print(f"Ошибка сохранения JSON: {e}")
-
 def get_image(url):
     try:
         response = requests.get(url, timeout=3)
@@ -112,6 +105,7 @@ def save_favorites():
         json.dump(user_favorites, f, ensure_ascii=False, indent=2)
 
 def load_favorites():
+    global user_favorites
     user_favorites = load_json(FAV_FILE)
     
 # ===== НАСТРОЙКИ =====
@@ -1301,24 +1295,6 @@ def find_part(query):
             results.append(part)
     return results
 
-def handle_part_search(peer_id, query):
-    results = find_part(query)
-    user_results[peer_id] = results
-    user_index[peer_id] = 0
-
-    if results:
-        show_part(peer_id)
-    else:
-        keyboard = VkKeyboard(one_time=True)
-        keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.NEGATIVE)
-        keyboard.add_line()
-        keyboard.add_button("🔔 Следить за товаром", color=VkKeyboardColor.PRIMARY)
-
-        # Сохраняем временно, какой артикул хотим отслеживать
-        user_state[peer_id] = {"watch_query": query}
-
-        send_safe(peer_id, f"Запчасть с номером '{query}' не найдена.", keyboard=keyboard)
-
 def find_donor(query):
     query = query.lower()
     results = []
@@ -1388,7 +1364,7 @@ def show_favorite_item(peer_id):
     keyboard.add_line()
     keyboard.add_button("🔙 Назад", color=VkKeyboardColor.SECONDARY)
 
-    send_safe(peer_id, text, keyboard)
+    send_safe(peer_id, message, keyboard)
 
 def remove_favorite(peer_id):
     peer_id = str(peer_id)
