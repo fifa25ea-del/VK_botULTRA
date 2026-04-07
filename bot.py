@@ -1216,13 +1216,19 @@ def show_donor(peer_id):
 def show_favorite_item(peer_id, index=None):
     pid = str(peer_id)
     favs = user_favorites.get(pid, [])
+
     if not favs:
         send_safe(peer_id, "❌ Избранное пусто")
         return
 
-    idx = index if index is not None else state.get(str(peer_id), 0)
+    # Берём state правильно
+    state = user_state.get(peer_id, {})
+    idx = index if index is not None else state.get("index", 0)
+
+    # Сохраняем индекс
+    state["mode"] = "favorites"
     state["index"] = idx
-    user_state[peer_id] = state  # сохраняем текущий индекс
+    user_state[peer_id] = state
 
     item = favs[idx]
 
@@ -1240,7 +1246,6 @@ def show_favorite_item(peer_id, index=None):
 
     message += f"\n📊 {idx+1} из {len(favs)}"
 
-    # Клавиатура
     keyboard = VkKeyboard(one_time=False)
     keyboard.add_button("🗑 Удалить", color=VkKeyboardColor.NEGATIVE)
     keyboard.add_button("🏠 Меню", color=VkKeyboardColor.NEGATIVE)
@@ -1253,33 +1258,7 @@ def show_favorite_item(peer_id, index=None):
 
     keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
 
-    # Отправка фото
-    photo_url = get_first_photo(item.get('Фото', ''))
-    if photo_url:
-        try:
-            response = requests.get(photo_url, timeout=10)
-            response.raise_for_status()
-            upload_url = vk.photos.getMessagesUploadServer()['upload_url']
-            files = {'photo': ('image.jpg', response.content)}
-            upload_data = requests.post(upload_url, files=files, timeout=15).json()
-            photo_data = vk.photos.saveMessagesPhoto(
-                server=upload_data['server'],
-                photo=upload_data['photo'],
-                hash=upload_data['hash']
-            )[0]
-            attachment = f"photo{photo_data['owner_id']}_{photo_data['id']}"
-            vk.messages.send(
-                peer_id=peer_id,
-                message=message,
-                attachment=attachment,
-                keyboard=keyboard.get_keyboard(),
-                random_id=get_random_id()
-            )
-        except Exception as e:
-            logging.warning(f"Ошибка фото в избранном: {e}. Отправляем текст.")
-            send_safe(peer_id, message, keyboard=keyboard)
-    else:
-        send_safe(peer_id, message, keyboard=keyboard)
+    send_safe(peer_id, message, keyboard=keyboard)
 
 # ===== ДОБАВЛЯЕМ ПОИСК ПО КРИТЕРИЯМ =====
 
@@ -1611,7 +1590,11 @@ def handle(event):
         return
 
     # ========= МЕНЮ =========
-
+    if text_lower in ["⭐ избранное", "избранное"]:
+        user_state[peer_id] = {"mode": "favorites", "index": 0}
+        show_favorite_item(peer_id)
+        return
+    
     if text_lower == "🚗 запчасти":
         user_state[peer_id] = {"mode": "parts_menu"}
         send_safe(peer_id, "Выберите раздел:", keyboard=get_parts_menu_keyboard())
