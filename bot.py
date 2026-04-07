@@ -1141,14 +1141,14 @@ def show_donor(peer_id):
 
         # Формируем текст карточки
         message = "🚗 Карточка донора:\n"
-        message += f"Номер донора: {safe_get(donor, 'Номер')}\n"
-        message += f"Марка: {safe_get(donor, 'Марка')}\n"
-        message += f"Модель: {safe_get(donor, 'Модель')}\n"
-        message += f"Кузов: {safe_get(donor, 'Кузов')}\n"
-        message += f"Цвет: {safe_get(donor, 'Цвет')}\n"
-        message += f"Год: {safe_get(donor, 'Год')}\n"
-        message += f"Двигатель: {safe_get(donor, 'Двигатель')}\n"
-        message += f"VIN: {safe_get(donor, 'VIN')}\n"
+        message += f"🆔Номер донора: {safe_get(donor, 'Номер')}\n"
+        message += f"🏷️Марка: {safe_get(donor, 'Марка')}\n"
+        message += f"📌Модель: {safe_get(donor, 'Модель')}\n"
+        message += f"🚘Кузов: {safe_get(donor, 'Кузов')}\n"
+        message += f"🎨Цвет: {safe_get(donor, 'Цвет')}\n"
+        message += f"📅Год: {safe_get(donor, 'Год')}\n"
+        message += f"⚙️Двигатель: {safe_get(donor, 'Двигатель')}\n"
+        message += f"🔢VIN: {safe_get(donor, 'VIN')}\n"
 
         comment = safe_get(donor, 'Комментарий')
         if comment != "Не указано":
