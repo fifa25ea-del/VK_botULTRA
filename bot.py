@@ -1444,13 +1444,14 @@ def handle(event):
         return
 
     # ========= ИЗБРАННОЕ =========
-    pid = str(peer_id)
-
+    if text_lower == "❤️ в избранное":
+        pid = str(peer_id)
+    
         item = user_results[peer_id][user_index[peer_id]]
         user_favorites.setdefault(pid, []).append(item)
-        
+    
         save_json(FAV_FILE, user_favorites)
-        
+    
         send_safe(peer_id, "✅ Добавлено в избранное")
 
     # ===== НАВИГАЦИЯ В ИЗБРАННОМ =====
