@@ -1214,7 +1214,8 @@ def show_donor(peer_id):
         send_safe(peer_id, "Произошла критическая ошибка при отображении донора. Обратитесь к администратору.")
 
 def show_favorite_item(peer_id, index=None):
-    favs = user_favorites.get(str(peer_id), [])
+    pid = str(peer_id)
+    favs = user_favorites.get(pid, [])
     if not favs:
         send_safe(peer_id, "❌ Избранное пусто")
         return
@@ -1443,19 +1444,14 @@ def handle(event):
         return
 
     # ========= ИЗБРАННОЕ =========
-    if text_lower == "❤️ избранное":
-        show_favorites(peer_id)
-        return
+    pid = str(peer_id)
 
-    if text_lower == "❤️ добавить в избранное":
-        results = user_results.get(peer_id, [])
-        index = user_index.get(peer_id, 0)
-
-        if results:
-            add_to_favorites(peer_id, results[index])
-        else:
-            send_safe(peer_id, "❌ Нет товара.")
-        return
+        item = user_results[peer_id][user_index[peer_id]]
+        user_favorites.setdefault(pid, []).append(item)
+        
+        save_json(FAV_FILE, user_favorites)
+        
+        send_safe(peer_id, "✅ Добавлено в избранное")
 
     # ===== НАВИГАЦИЯ В ИЗБРАННОМ =====
     if mode == "favorites":
