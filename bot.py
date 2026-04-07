@@ -1202,10 +1202,13 @@ def show_donor(peer_id):
         logging.critical(f"ФАТАЛЬНАЯ ошибка в show_donor для {peer_id}: {e}")
         send_safe(peer_id, "Произошла критическая ошибка при отображении донора. Обратитесь к администратору.")
 
-print(f"[DEBUG] peer_id={peer_id}, results={user_results.get(peer_id)}")
 def show_favorite_card(peer_id):
     try:
+        # DEBUG
+        print(f"[DEBUG] peer_id={peer_id}, user_results keys={list(user_results.keys())}")
         results = user_results.get(peer_id, [])
+        print(f"[DEBUG] results={results}")
+        
         index = user_index.get(peer_id, 0)
 
         if not results:
