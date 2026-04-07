@@ -16,6 +16,9 @@ from urllib.parse import urlparse
 import random
 from io import StringIO
 
+def show_favorites(peer_id):
+    return show_favorite_card(peer_id)
+
 def load_json(file_path):
     if not os.path.exists(file_path):
         return {}
