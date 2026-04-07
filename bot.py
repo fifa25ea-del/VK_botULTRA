@@ -1221,7 +1221,8 @@ def show_favorite_item(peer_id, index=None):
         return
 
     idx = index if index is not None else state.get(str(peer_id), 0)
-    state[str(peer_id)] = idx  # сохраняем текущий индекс
+    state["index"] = idx
+    user_state[peer_id] = state  # сохраняем текущий индекс
 
     item = favs[idx]
 
@@ -1447,12 +1448,19 @@ def handle(event):
     if text_lower == "❤️ в избранное":
         pid = str(peer_id)
     
-        item = user_results[peer_id][user_index[peer_id]]
-        user_favorites.setdefault(pid, []).append(item)
+        results = user_results.get(peer_id, [])
+        if not results:
+            send_safe(peer_id, "❌ Нет товара для добавления")
+            return
     
+        idx = user_index.get(peer_id, 0)
+        item = results[idx]
+    
+        user_favorites.setdefault(pid, []).append(item)
         save_json(FAV_FILE, user_favorites)
     
         send_safe(peer_id, "✅ Добавлено в избранное")
+        return  # 🔥 ВОТ ЭТО КРИТИЧЕСКИ ВАЖНО
 
     # ===== НАВИГАЦИЯ В ИЗБРАННОМ =====
     if mode == "favorites":
@@ -1461,18 +1469,21 @@ def handle(event):
             send_safe(peer_id, "❌ Избранное пусто")
             return
     
-        idx = state.get(str(peer_id), 0)
+        pid = str(peer_id)
+        idx = state.get("index", 0)
         text_clean = text.strip().lower()
     
         if text_clean in ["➡️", "➡️ вперед"]:
             idx = (idx + 1) % len(favs)
-            state[str(peer_id)] = idx
+            state["index"] = idx
+            user_state[peer_id] = state
             show_favorite_item(peer_id, idx)
             return
     
         if text_clean in ["⬅️", "⬅️ назад"]:
             idx = (idx - 1) % len(favs)
-            state[str(peer_id)] = idx
+            state["index"] = idx
+            user_state[peer_id] = state
             show_favorite_item(peer_id, idx)
             return
     
