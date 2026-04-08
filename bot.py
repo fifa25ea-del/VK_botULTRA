@@ -765,27 +765,18 @@ def show_item_generic(peer_id, data_source, title=""):
     return  # <- добавляем return, чтобы функция завершалась здесь
 
 def show_part(peer_id):
-    """Показывает карточку детали ОДНИМ сообщением (текст + фото + клавиатура)."""
-    try:
-        state = user_state.get(peer_id, {})
-        index = state.get("index", 0)
-        results = user_results.get(peer_id, [])
-
-        if not results:
-            send_safe(peer_id, "Нет результатов поиска для отображения")
-            return
-
-        # Защита индекса
-        idx = max(0, min(idx, len(results) - 1))
-        state["index"] = idx
-        user_state[peer_id] = state
-
-        part = results[idx]
-
-        # Проверка целостности данных
-        if not part or not any(str(v).strip() for v in part.values()):
-            send_safe(peer_id, "Данные о детали повреждены. Попробуйте поиск заново.")
-            return
+    state = user_state.get(peer_id, {})
+    idx = state.get("index", 0)
+    
+    if not results:
+        send_safe(peer_id, "❌ Нет данных")
+        return
+    
+    idx = idx % len(results)
+    state["index"] = idx
+    user_state[peer_id] = state
+    
+    item = results[idx]
 
         # --- 1. Формируем текст ---
         message = (
@@ -869,17 +860,17 @@ def show_part(peer_id):
 
 def show_engine(peer_id, item=None):
     state = user_state.get(peer_id, {})
-    index = state.get("index", 0)
-    results = user_results.get(peer_id, [])
-
+    idx = state.get("index", 0)
+    
     if not results:
-        send_safe(peer_id, "❌ Данные двигателя не найдены.")
+        send_safe(peer_id, "❌ Нет данных")
         return
-
-    # Защита индекса
-    idx = max(0, min(idx, len(results) - 1))
+    
+    idx = idx % len(results)
     state["index"] = idx
     user_state[peer_id] = state
+    
+item = results[idx]
 
     if item is None:
         item = results[idx]
@@ -947,19 +938,17 @@ def show_item(peer_id, item):
 
 def show_akpp(peer_id):
     state = user_state.get(peer_id, {})
-    index = state.get("index", 0)
-    results = user_results.get(peer_id, [])
-
+    idx = state.get("index", 0)
+    
     if not results:
-        send_safe(peer_id, "Данные АКПП не найдены.")
+        send_safe(peer_id, "❌ Нет данных")
         return
-
-    # Защита индекса
-    idx = max(0, min(idx, len(results) - 1))
+    
+    idx = idx % len(results)
     state["index"] = idx
     user_state[peer_id] = state
-
-    part = results[idx]
+    
+    item = results[idx]
     
     title = part.get('Запчасть') or part.get('Наименование') or 'АКПП'
     price = part.get('Цена') or 'По запросу'
@@ -1028,19 +1017,17 @@ def show_wheel(peer_id):
 
     try:
         state = user_state.get(peer_id, {})
-        index = state.get("index", 0)
-        results = user_results.get(peer_id, [])
-
+        idx = state.get("index", 0)
+        
         if not results:
-            send_safe(peer_id, "❌ Диски не найдены")
+            send_safe(peer_id, "❌ Нет данных")
             return
-
-        index = min(index, len(results) - 1)
-        state["index"] = index
+        
+        idx = idx % len(results)
+        state["index"] = idx
         user_state[peer_id] = state
-
-        wheel = results[index]
-        total_items = len(results)
+        
+        item = results[idx]
 
         message = (
             f"🛞 Карточка диска:\n"
