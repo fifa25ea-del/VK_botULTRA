@@ -1279,29 +1279,42 @@ def find_donor(query):
     return results
         
 def remove_favorite(peer_id):
-    peer_id = str(peer_id)
-    state = user_state.get(peer_id, {})
-    index = state.get("index", 0)
+    pid = str(peer_id)
 
-    favs = user_favorites.get(peer_id, [])
+    # гарантируем структуру state
+    state = user_state.get(peer_id)
+    if not isinstance(state, dict):
+        state = {"mode": "favorites", "index": 0}
+
+    favs = user_favorites.get(pid, [])
 
     if not favs:
         send_safe(peer_id, "❌ Нечего удалять.")
         return
 
-    favs.pop(index)
+    idx = state.get("index", 0)
 
-    if index >= len(favs):
-        index = max(0, len(favs) - 1)
+    # защита от выхода за границы
+    if idx >= len(favs):
+        idx = len(favs) - 1
 
-    user_state[peer_id]["index"] = index
+    favs.pop(idx)
+
+    # пересчёт индекса
+    if idx >= len(favs):
+        idx = max(0, len(favs) - 1)
+
+    # сохраняем обратно state
+    state["index"] = idx
+    state["mode"] = "favorites"
+    user_state[peer_id] = state
 
     save_favorites()
 
     send_safe(peer_id, "🗑 Удалено!")
 
     if favs:
-        show_favorite_item(peer_id)
+        show_favorite_item(peer_id, idx)
     else:
         send_safe(peer_id, "📭 Избранное теперь пусто.")
 
@@ -1367,7 +1380,7 @@ def handle(event):
             show_favorite_item(peer_id, idx)
             return
     
-        if text_clean in ["🗑 удалить", "❌ удалить"]:
+        if "удал" in text_clean:
             remove_favorite(peer_id)
             return
     
