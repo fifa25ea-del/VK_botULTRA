@@ -765,7 +765,6 @@ def show_item_generic(peer_id, data_source, title=""):
     return  # <- добавляем return, чтобы функция завершалась здесь
 
 def show_part(peer_id):
-    show_item_generic(peer_id, user_results, title="🔧 Деталь")
     """Показывает карточку детали ОДНИМ сообщением (текст + фото + клавиатура)."""
     try:
         index = user_index.get(peer_id, 0)
@@ -880,7 +879,6 @@ def show_part(peer_id):
         send_safe(peer_id, "Произошла критическая ошибка при отображении детали.")
 
 def show_engine(peer_id, item=None):
-    show_item_generic(peer_id, user_results, title="⚙️ Двигатель")
     results = user_results.get(peer_id, [])
     index = user_index.get(peer_id, 0)
 
@@ -959,7 +957,6 @@ def show_item(peer_id, item):
         show_part(peer_id, item)
 
 def show_akpp(peer_id):
-    show_item_generic(peer_id, user_results, title="🕹 АКПП")
     results = user_results.get(peer_id, [])
     idx = user_index.get(peer_id, 0)
 
@@ -1041,7 +1038,6 @@ def show_akpp(peer_id):
     send_safe(peer_id, msg, keyboard=keyboard_data)
 
 def show_wheel(peer_id):
-    show_item_generic(peer_id, user_results, title="🛞 Диск")
     """Показывает карточку диска с защитой от дублирования."""
     # Пропускаем повторный вызов, если уже инициализируем поиск дисков
     if peer_id in initializing_wheels:
@@ -1143,7 +1139,6 @@ def show_wheel(peer_id):
         send_safe(peer_id, "Произошла критическая ошибка при отображении диска. Обратитесь к администратору.")
         
 def show_donor(peer_id):
-    show_item_generic(peer_id, user_results, title="🚘 Донор")
     """Показывает карточку донора с навигацией (без добавления в избранное)."""
     try:
         # Получаем текущие данные пользователя
