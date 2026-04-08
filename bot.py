@@ -1202,19 +1202,20 @@ def show_donor(peer_id):
 
 def show_favorite_item(peer_id, delta=0):
     peer_id = str(peer_id)
+    state = user_state.get(peer_id, {})
+    idx = state.get("index", 0)
+    
     results = user_favorites.get(peer_id, [])
-
     if not results:
         send_safe(peer_id, "❤️ Ваш список избранного пуст")
         return
-
-    # отдельный индекс для избранного
-    fav_index_key = f"fav_{peer_id}"
-    idx = user_index.get(fav_index_key, 0) + delta
+    
+    # защита
     idx = max(0, min(idx, len(results) - 1))
-    user_index[fav_index_key] = idx
-
-    item = results[idx]
+    state["index"] = idx
+    user_state[peer_id] = state
+    
+item = results[idx]
 
     # --- Формируем текст карточки ---
     message = (
@@ -1390,7 +1391,8 @@ def handle_message(peer_id, text):
 
     # ====== НАВИГАЦИЯ ======
     if text_clean in ["➡️", "➡️ вперед", "далее"]:
-        data = user_favorites[pid] if mode == "favorites" else user_results.get(peer_id, [])
+        pid = str(peer_id)
+        data = user_favorites.get(pid, []) if mode == "favorites" else user_results.get(peer_id, [])
         if not data:
             send_safe(peer_id, "❌ Нет элементов")
             return
