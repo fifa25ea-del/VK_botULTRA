@@ -759,7 +759,36 @@ def show_current_item(peer_id):
     else:
         show_part(peer_id)
 
+def show_item_generic(peer_id, data_source, title=""):
+    """
+    peer_id      : id пользователя
+    data_source  : словарь user_results или user_favorites
+    title        : заголовок карточки
+    """
+    state = user_state.get(peer_id, {})
+    idx = state.get("index", 0)
+
+    items = data_source.get(str(peer_id), [])
+
+    if not items:
+        send_safe(peer_id, f"❌ {title} нет")
+        return
+
+    # Защита индекса
+    idx = min(idx, len(items) - 1)
+    state["index"] = idx
+    user_state[peer_id] = state
+
+    item = items[idx]
+
+    # Отображение карточки
+    lines = [f"{title}:"]
+    for k, v in item.items():
+        lines.append(f"{k}: {v}")
+    send_safe(peer_id, "\n".join(lines))
+
 def show_part(peer_id):
+    show_item_generic(peer_id, user_results, title="🚘 Донор")
     """Показывает карточку детали ОДНИМ сообщением (текст + фото + клавиатура)."""
     try:
         index = user_index.get(peer_id, 0)
@@ -874,6 +903,7 @@ def show_part(peer_id):
         send_safe(peer_id, "Произошла критическая ошибка при отображении детали.")
 
 def show_engine(peer_id, item=None):
+    show_item_generic(peer_id, user_results, title="⚙️ Двигатель")
     results = user_results.get(peer_id, [])
     index = user_index.get(peer_id, 0)
 
@@ -952,6 +982,7 @@ def show_item(peer_id, item):
         show_part(peer_id, item)
 
 def show_akpp(peer_id):
+    show_item_generic(peer_id, user_results, title="⚙️ Двигатель")
     results = user_results.get(peer_id, [])
     idx = user_index.get(peer_id, 0)
 
@@ -1033,6 +1064,7 @@ def show_akpp(peer_id):
     send_safe(peer_id, msg, keyboard=keyboard_data)
 
 def show_wheel(peer_id):
+    show_item_generic(peer_id, user_results, title="🕹 АКПП")
     """Показывает карточку диска с защитой от дублирования."""
     # Пропускаем повторный вызов, если уже инициализируем поиск дисков
     if peer_id in initializing_wheels:
@@ -1134,6 +1166,7 @@ def show_wheel(peer_id):
         send_safe(peer_id, "Произошла критическая ошибка при отображении диска. Обратитесь к администратору.")
         
 def show_donor(peer_id):
+    show_item_generic(peer_id, user_results, title="🛞 Диск")
     """Показывает карточку донора с навигацией (без добавления в избранное)."""
     try:
         # Получаем текущие данные пользователя
@@ -1230,53 +1263,33 @@ def show_donor(peer_id):
         logging.critical(f"ФАТАЛЬНАЯ ошибка в show_donor для {peer_id}: {e}")
         send_safe(peer_id, "Произошла критическая ошибка при отображении донора. Обратитесь к администратору.")
 
-def show_favorite_item(peer_id, index=None):
+def show_favorite_item(peer_id, idx=None):
+    """
+    peer_id: id пользователя
+    idx: если передан — сразу используем его
+    """
     pid = str(peer_id)
     favs = user_favorites.get(pid, [])
 
     if not favs:
-        send_safe(peer_id, "❌ Избранное пусто")
+        send_safe(peer_id, "📭 Избранное пусто")
         return
 
-    # Берём state правильно
     state = user_state.get(peer_id, {})
-    idx = index if index is not None else state.get("index", 0)
-
-    # Сохраняем индекс
-    state["mode"] = "favorites"
+    if idx is not None:
+        state["index"] = idx
+    idx = state.get("index", 0)
+    idx = min(idx, len(favs) - 1)
     state["index"] = idx
     user_state[peer_id] = state
 
     item = favs[idx]
 
-    name = item.get('Наименование') or item.get('Модель диска') or item.get('Марка') or 'Товар'
-    message = f"📦 {name}\n"
-
-    article = item.get('Артикул') or item.get('Номер')
-    if article:
-        message += f"Артикул: {article}\n"
-    message += f"Цена: {item.get('Цена', 'Не указана')}\n"
-
-    link = item.get('Ссылка')
-    if link and link not in ["Не указано", "Нет ссылки"]:
-        message += f"Ссылка: {link}\n"
-
-    message += f"\n📊 {idx+1} из {len(favs)}"
-
-    keyboard = VkKeyboard(one_time=False)
-    keyboard.add_button("🗑 Удалить", color=VkKeyboardColor.NEGATIVE)
-    keyboard.add_button("🏠 Меню", color=VkKeyboardColor.NEGATIVE)
-    keyboard.add_line()
-
-    if len(favs) > 1:
-        keyboard.add_button("⬅️", color=VkKeyboardColor.PRIMARY)
-        keyboard.add_button("➡️", color=VkKeyboardColor.PRIMARY)
-        keyboard.add_line()
-
-    keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
-
-    send_safe(peer_id, message, keyboard=keyboard)
-
+    lines = ["❤️ Избранное:"]
+    for k, v in item.items():
+        lines.append(f"{k}: {v}")
+    send_safe(peer_id, "\n".join(lines))
+    
 # ===== ДОБАВЛЯЕМ ПОИСК ПО КРИТЕРИЯМ =====
 
 def find_part(query):
