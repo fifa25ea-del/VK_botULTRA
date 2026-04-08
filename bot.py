@@ -742,29 +742,6 @@ def render_current_item(peer_id):
     else:
         show_part(peer_id)
 
-def show_current_item(peer_id):
-    state = user_state.get(peer_id, {})
-    mode = state.get("mode")
-
-    if mode == "favorites":
-        show_favorite_item(peer_id)
-        return
-    elif mode == "wheels_view":
-        show_wheel(peer_id)
-        return
-    elif mode == "engine_view":
-        show_engine(peer_id)
-        return
-    elif mode == "donors":
-        show_donor(peer_id)
-        return
-    elif mode == "akpp_view":
-        show_akpp(peer_id)
-        return
-    else:
-        show_part(peer_id)
-        return
-
 def show_item_generic(peer_id, data_source, title=""):
     """
     peer_id      : id пользователя
