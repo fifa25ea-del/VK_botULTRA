@@ -1290,103 +1290,12 @@ def find_donor(query):
 
 def add_to_favorites(peer_id, item):
     """Добавление товара в избранное пользователя."""
-    if peer_id not in user_results:
-        user_results[peer_id] = []
-    user_results[peer_id].append(item)
+    peer_id = str(peer_id)
+    user_favorites.setdefault(peer_id, []).append(item)
     user_index[peer_id] = 0  # сброс позиции на первый элемент
+    save_favorites()
     send(peer_id, f"✅ Товар '{item.get('Наименование', item.get('Модель диска', 'Товар'))}' добавлен в избранное.")
-
-
-def show_favorite_card(peer_id):
-    """Показывает карточку из избранного."""
-    try:
-        results = user_results.get(peer_id, [])
-        index = user_index.get(peer_id, 0)
-
-        # DEBUG
-        print(f"[DEBUG] peer_id={peer_id}, results={results}, index={index}")
-
-        if not results:
-            send(peer_id, "Избранное пусто.", keyboard=get_main_keyboard())
-            user_state[peer_id] = None
-            return
-
-        # защита от выхода за пределы списка
-        if index >= len(results):
-            index = 0
-            user_index[peer_id] = 0
-
-        item = results[index]
-        total_items = len(results)
-        current_position = index + 1
-
-        # Формируем текст карточки
-        name = item.get('Наименование') or item.get('Модель диска') or item.get('Марка') or 'Товар'
-        message = f"📦 {name}\n"
-
-        article = item.get('Артикул') or item.get('Номер')
-        if article:
-            message += f"Артикул: {article}\n"
-        message += f"Цена: {item.get('Цена', 'Не указана')}\n"
-
-        link = item.get('Ссылка')
-        if link and link not in ["Не указано", "Нет ссылки"]:
-            message += f"Ссылка: {link}\n"
-
-        message += f"\n📊 {current_position} из {total_items}"
-
-        # Клавиатура
-        keyboard = VkKeyboard(one_time=False)
-        keyboard.add_button("🗑 Удалить", color=VkKeyboardColor.NEGATIVE)
-        keyboard.add_button("🏠 Меню", color=VkKeyboardColor.NEGATIVE)
-        keyboard.add_line()
-
-        if total_items > 1:
-            keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
-            keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
-            keyboard.add_line()
-
-        keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
-        keyboard_data = keyboard.get_keyboard()
-
-        # Отправка фото если есть
-        photo_url = get_first_photo(item.get('Фото', ''))
-        if photo_url:
-            try:
-                response = requests.get(photo_url, timeout=10)
-                response.raise_for_status()
-
-                upload_url = vk.photos.getMessagesUploadServer()['upload_url']
-                files = {'photo': ('image.jpg', response.content)}
-                upload_data = requests.post(upload_url, files=files, timeout=15).json()
-
-                photo_data = vk.photos.saveMessagesPhoto(
-                    server=upload_data['server'],
-            photo=upload_data['photo'],
-            hash=upload_data['hash']
-        )[0]
-
-                attachment = f"photo{photo_data['owner_id']}_{photo_data['id']}"
-
-                vk.messages.send(
-                    peer_id=peer_id,
-                    message=message,
-            attachment=attachment,
-            keyboard=keyboard_data,
-            random_id=get_random_id()
-        )
-            except Exception as e:
-                logging.warning(f"Ошибка фото в избранном: {e}. Отправляем текст.")
-                send_safe(peer_id, message, keyboard=keyboard_data)
-        else:
-            # Отправляем сообщение без фото
-            send_safe(peer_id, message, keyboard=keyboard_data)
-
-    except Exception as e:
-        logging.error(f"Ошибка в show_favorite_card для {peer_id}: {e}")
-        send_safe(peer_id, "Произошла ошибка при отображении избранного.")
-
-        
+  
 def remove_favorite(peer_id):
     peer_id = str(peer_id)
     state = user_state.get(peer_id, {})
