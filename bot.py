@@ -1198,32 +1198,46 @@ def show_donor(peer_id):
         logging.critical(f"ФАТАЛЬНАЯ ошибка в show_donor для {peer_id}: {e}")
         send_safe(peer_id, "Произошла критическая ошибка при отображении донора. Обратитесь к администратору.")
 
-def show_favorite_item(peer_id, idx=None):
-    """
-    peer_id: id пользователя
-    idx: если передан — сразу используем его
-    """
-    pid = str(peer_id)
-    favs = user_favorites.get(pid, [])
-
-    if not favs:
-        send_safe(peer_id, "📭 Избранное пусто")
+def show_favorite_item(peer_id):
+    """Показывает упрощённую карточку из избранного, как в show_part."""
+    idx, mode, state = get_index_state(peer_id)
+    results = user_favorites.get(peer_id, [])
+    if not results:
+        send_safe(peer_id, "❤️ Ваш список избранного пуст")
         return
 
-    state = user_state.get(peer_id, {})
-    if idx is not None:
-        state["index"] = idx
-    idx = state.get("index", 0)
-    idx = min(idx, len(favs) - 1)
-    state["index"] = idx
-    user_state[peer_id] = state
+    # Защита индекса
+    idx = max(0, min(idx, len(results)-1))
+    update_index_state(peer_id, idx)
+    item = results[idx]
 
-    item = favs[idx]
+    # --- Формируем текст карточки ---
+    message = (
+        f"❤️ Избранное:\n"
+        f"📄 Наименование: {safe_get(item, 'Наименование')}\n"
+        f"🆔 Артикул: {safe_get(item, 'Номер')}\n"
+        f"💰 Цена: {safe_get(item, 'Цена')}\n"
+        f"📊 Результат {idx + 1} из {len(results)}"
+    )
 
-    lines = ["❤️ Избранное:"]
-    for k, v in item.items():
-        lines.append(f"{k}: {v}")
-    send_safe(peer_id, "\n".join(lines))
+    # --- Клавиатура ---
+    keyboard = VkKeyboard(one_time=False)
+    keyboard.add_button("🗑 Удалить", color=VkKeyboardColor.NEGATIVE)
+    keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.NEGATIVE)
+    keyboard.add_line()
+    if len(results) > 1:
+        keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
+        keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
+        keyboard.add_line()
+    keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
+    keyboard_data = keyboard.get_keyboard()
+
+    # --- Берём только первое фото ---
+    photo_url = get_first_photo(item.get('Фото',''))
+    if photo_url:
+        send_photo(peer_id, photo_url, message, keyboard_data)
+    else:
+        send_safe(peer_id, message, keyboard=keyboard_data)
     
 # ===== ДОБАВЛЯЕМ ПОИСК ПО КРИТЕРИЯМ =====
 
