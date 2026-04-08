@@ -1201,17 +1201,15 @@ def show_donor(peer_id):
         send_safe(peer_id, "Произошла критическая ошибка при отображении донора. Обратитесь к администратору.")
 
 def show_favorite_item(peer_id, delta=0):
-    """Показывает упрощённую карточку из избранного с учетом смещения delta."""
-    results = user_favorites.get(str(peer_id), [])
-    
+    results = user_favorites.get(peer_id, [])
     if not results:
         send_safe(peer_id, "❤️ Ваш список избранного пуст")
         return
 
-    # Обновляем индекс
-    idx = user_index.get(peer_id, 0) + delta
+    # отдельный индекс для избранного
+    idx = user_index.get(f"fav_{peer_id}", 0) + delta
     idx = max(0, min(idx, len(results) - 1))
-    user_index[peer_id] = idx
+    user_index[f"fav_{peer_id}"] = idx
 
     item = results[idx]
 
@@ -1219,7 +1217,7 @@ def show_favorite_item(peer_id, delta=0):
     # --- Формируем текст карточки ---
     message = (
         f"❤️ Избранное:\n"
-        f"📄 Наименование: {safe_get(item, 'Запчасть')}\n"
+        f"📄 Наименование: {safe_get(item, 'Наименование')}\n"
         f"🆔 Артикул: {safe_get(item, 'Номер')}\n"
         f"💰 Цена: {safe_get(item, 'Цена')}\n"
         f"📊 Результат {idx + 1} из {len(results)}"
