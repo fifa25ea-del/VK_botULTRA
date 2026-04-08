@@ -748,16 +748,22 @@ def show_current_item(peer_id):
 
     if mode == "favorites":
         show_favorite_item(peer_id)
+        return
     elif mode == "wheels_view":
         show_wheel(peer_id)
+        return
     elif mode == "engine_view":
         show_engine(peer_id)
+        return
     elif mode == "donors":
         show_donor(peer_id)
+        return
     elif mode == "akpp_view":
         show_akpp(peer_id)
+        return
     else:
         show_part(peer_id)
+        return
 
 def show_item_generic(peer_id, data_source, title=""):
     """
