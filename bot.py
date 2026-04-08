@@ -1201,7 +1201,9 @@ def show_donor(peer_id):
         send_safe(peer_id, "Произошла критическая ошибка при отображении донора. Обратитесь к администратору.")
 
 def show_favorite_item(peer_id, delta=0):
+    peer_id = str(peer_id)  # гарантируем одинаковый тип ключа
     results = user_favorites.get(peer_id, [])
+
     if not results:
         send_safe(peer_id, "❤️ Ваш список избранного пуст")
         return
@@ -1212,8 +1214,7 @@ def show_favorite_item(peer_id, delta=0):
     user_index[f"fav_{peer_id}"] = idx
 
     item = results[idx]
-
-
+    
     # --- Формируем текст карточки ---
     message = (
         f"❤️ Избранное:\n"
