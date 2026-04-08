@@ -1213,6 +1213,23 @@ def show_donor(peer_id):
         logging.critical(f"ФАТАЛЬНАЯ ошибка в show_donor для {peer_id}: {e}")
         send_safe(peer_id, "Произошла критическая ошибка при отображении донора. Обратитесь к администратору.")
 
+def show_current_item(peer_id):
+    state = user_state.get(peer_id, {})
+    mode = state.get("mode")
+
+    if mode == "favorites":
+        show_favorite_item(peer_id)
+    elif mode == "wheels_view":
+        show_wheel(peer_id)
+    elif mode == "engine_view":
+        show_engine(peer_id)
+    elif mode == "donors":
+        show_donor(peer_id)
+    elif mode == "akpp_view":
+        show_akpp(peer_id)
+    else:
+        show_part(peer_id)
+
 def show_favorite_item(peer_id, index=None):
     pid = str(peer_id)
     favs = user_favorites.get(pid, [])
@@ -1321,112 +1338,138 @@ def remove_favorite(peer_id):
 def handle(event):
     peer_id = event.obj.message['peer_id']
     text = event.obj.message['text']
-    text_lower = text.lower().strip()
 
-    state = user_state.get(peer_id, {})
-    if not isinstance(state, dict):
-        state = {}
+    handle_message(peer_id, text)
 
+def handle_message(peer_id, text):
+    text_clean = text.lower().strip()
+    pid = str(peer_id)
+
+    # ====== INIT ======
+    if peer_id not in user_state or not isinstance(user_state.get(peer_id), dict):
+        user_state[peer_id] = {"mode": None, "index": 0}
+
+    state = user_state[peer_id]
     mode = state.get("mode")
 
-    # ========= ГЛАВНОЕ МЕНЮ =========
-    if text_lower in ["🏠 главное меню", "меню", "главное меню", "start"]:
-        user_state[peer_id] = {}
+    # ====== ГЛАВНОЕ МЕНЮ ======
+    if text_clean in ["🏠 главное меню", "меню", "главное меню", "start"]:
+        user_state[peer_id] = {"mode": None, "index": 0}
         user_results.pop(peer_id, None)
-        user_index.pop(peer_id, None)
         send_safe(peer_id, "🏠 Главное меню", keyboard=get_main_keyboard())
         return
 
-    # ========= ИЗБРАННОЕ =========
-    if text_lower == "❤️ добавить в избранное":
-        pid = str(peer_id)
-    
+    # =====================================================
+    # ❤️ ИЗБРАННОЕ
+    # =====================================================
+
+    # открыть
+    if "избран" in text_clean and "добав" not in text_clean:
+        favs = user_favorites.get(pid, [])
+
+        if not favs:
+            send_safe(peer_id, "📭 Избранное пусто")
+            return
+
+        user_state[peer_id] = {"mode": "favorites", "index": 0}
+        show_favorite_item(peer_id, 0)
+        return
+
+    # добавить
+    if "добав" in text_clean and "избран" in text_clean:
         results = user_results.get(peer_id, [])
+
         if not results:
             send_safe(peer_id, "❌ Нет товара")
             return
-    
-        idx = user_index.get(peer_id, 0)
+
+        idx = state.get("index", 0)
+        idx = min(idx, len(results) - 1)
+
         item = results[idx]
-    
+
         user_favorites.setdefault(pid, []).append(item)
         save_favorites()
-    
+
         send_safe(peer_id, "✅ Добавлено в избранное")
         return
 
-    # ===== НАВИГАЦИЯ В ИЗБРАННОМ =====
-    if mode == "favorites":
-        favs = user_favorites.get(str(peer_id), [])
+    # удалить
+    if "удал" in text_clean and mode == "favorites":
+        favs = user_favorites.get(pid, [])
+
         if not favs:
-            send_safe(peer_id, "❌ Избранное пусто")
+            send_safe(peer_id, "❌ Нечего удалять")
             return
-    
-        pid = str(peer_id)
+
         idx = state.get("index", 0)
-        text_clean = text.strip().lower()
-    
-        if text_clean in ["➡️", "➡️ вперед"]:
-            idx = (idx + 1) % len(favs)
-            state["index"] = idx
-            user_state[peer_id] = state
+        idx = min(idx, len(favs) - 1)
+
+        favs.pop(idx)
+
+        if idx >= len(favs):
+            idx = max(0, len(favs) - 1)
+
+        state["index"] = idx
+        user_state[peer_id] = state
+
+        save_favorites()
+
+        send_safe(peer_id, "🗑 Удалено")
+
+        if favs:
             show_favorite_item(peer_id, idx)
-            return
-    
-        if text_clean in ["⬅️", "⬅️ назад"]:
-            idx = (idx - 1) % len(favs)
-            state["index"] = idx
-            user_state[peer_id] = state
-            show_favorite_item(peer_id, idx)
-            return
-    
-        if "удал" in text_clean:
-            remove_favorite(peer_id)
-            return
-    
-        if text_clean in ["🏠 меню", "🔙 назад"]:
-            user_state.pop(peer_id, None)
-            send_safe(peer_id, "↩️ В меню", get_main_keyboard())
-            return
-    
-        if text_clean == "🔄 обновить":
-            show_favorite_item(peer_id, idx)
-            return
-    
-    # ========= НАВИГАЦИЯ ПО ОРДИНАРНЫМ РЕЗУЛЬТАТАМ =========
-    if text_lower in ["➡️ вперед", "⬅️ назад"]:
-        results = user_results.get(peer_id, [])
-        if not results:
-            return
-    
-        idx = user_index.get(peer_id, 0)
-        if text_lower == "➡️ вперед":
-            idx = (idx + 1) % len(results)
         else:
-            idx = (idx - 1) % len(results)
-        user_index[peer_id] = idx
-    
-        item = results[idx]
-        if 'Диаметр диска' in item:
-            show_wheel(peer_id)
-        elif 'VIN' in item:
-            show_donor(peer_id)
-        elif 'двигатель' in str(item.get('Наименование', '')).lower():
-            show_engine(peer_id)
-        elif mode == "akpp_view":
-            show_akpp(peer_id)
-        else:
-            show_part(peer_id)
+            send_safe(peer_id, "📭 Избранное пусто")
         return
-    # ========= СОСТОЯНИЯ ВВОДА =========
+
+    # =====================================================
+    # ⬅️➡️ НАВИГАЦИЯ (ЕДИНАЯ)
+    # =====================================================
+    if text_clean in ["➡️", "➡️ вперед", "далее"]:
+        if mode == "favorites":
+            data = user_favorites.get(pid, [])
+        else:
+            data = user_results.get(peer_id, [])
+
+        if not data:
+            send_safe(peer_id, "❌ Нет элементов")
+            return
+
+        idx = (state.get("index", 0) + 1) % len(data)
+        state["index"] = idx
+        user_state[peer_id] = state
+
+        show_current_item(peer_id)
+        return
+
+    if text_clean in ["⬅️", "⬅️ назад", "назад"]:
+        if mode == "favorites":
+            data = user_favorites.get(pid, [])
+        else:
+            data = user_results.get(peer_id, [])
+
+        if not data:
+            send_safe(peer_id, "❌ Нет элементов")
+            return
+
+        idx = (state.get("index", 0) - 1) % len(data)
+        state["index"] = idx
+        user_state[peer_id] = state
+
+        show_current_item(peer_id)
+        return
+
+    # =====================================================
+    # 📥 СОСТОЯНИЯ (ТВОЙ РАЗНЫЙ ПОИСК)
+    # =====================================================
 
     if mode == "await_engine_number":
         results = cache.get_engines(text)
 
         if results:
             user_results[peer_id] = results
-            user_index[peer_id] = 0
-            user_state[peer_id] = {"mode": "engine_view"}
+            user_state[peer_id] = {"mode": "engine_view", "index": 0}
             show_engine(peer_id)
         else:
             send_safe(peer_id, "❌ Двигатель не найден")
@@ -1438,8 +1481,7 @@ def handle(event):
 
         if results:
             user_results[peer_id] = results
-            user_index[peer_id] = 0
-            user_state[peer_id] = {"mode": "parts"}
+            user_state[peer_id] = {"mode": "parts", "index": 0}
             show_part(peer_id)
         else:
             user_state[peer_id] = {"watch_query": query}
@@ -1451,15 +1493,17 @@ def handle(event):
 
         if results:
             user_results[peer_id] = results
-            user_index[peer_id] = 0
+            user_state[peer_id] = {"mode": "wheels_view", "index": 0}
             show_wheel(peer_id)
         else:
             send_safe(peer_id, "❌ Диски не найдены")
         return
 
-    # ========= АКПП =========
+    # =====================================================
+    # ⚙️ АКПП
+    # =====================================================
 
-    if text_lower == "🕹 акпп":
+    if text_clean == "🕹 акпп":
         user_state[peer_id] = {"mode": "await_akpp_body"}
         send_safe(peer_id, "Введите кузов (например 211):")
         return
@@ -1495,51 +1539,52 @@ def handle(event):
 
         if results:
             user_results[peer_id] = results
-            user_index[peer_id] = 0
-            user_state[peer_id] = {"mode": "akpp_view"}
+            user_state[peer_id] = {"mode": "akpp_view", "index": 0}
             show_akpp(peer_id)
         else:
             send_safe(peer_id, "❌ АКПП не найдена")
-            user_state[peer_id] = {"mode": "parts_menu"}
         return
 
-    # ========= МЕНЮ =========
-    if text_lower in ["❤️ избранное", "избранное"]:
-        user_state[peer_id] = {"mode": "favorites", "index": 0}
-        show_favorite_item(peer_id)
-        return
-    
-    if text_lower == "🚗 запчасти":
+    # =====================================================
+    # 🚗 МЕНЮ
+    # =====================================================
+
+    if text_clean == "🚗 запчасти":
         user_state[peer_id] = {"mode": "parts_menu"}
         send_safe(peer_id, "Выберите раздел:", keyboard=get_parts_menu_keyboard())
         return
 
-    if text_lower == "⚙️ двигатель":
+    if text_clean == "⚙️ двигатель":
         user_state[peer_id] = {"mode": "await_engine_number"}
         send_safe(peer_id, "Введите номер двигателя:")
         return
 
-    if text_lower == "🔍 поиск по номеру":
+    if text_clean == "🔍 поиск по номеру":
         user_state[peer_id] = {"mode": "wait_part_number"}
         send_safe(peer_id, "Введите номер детали:")
         return
 
-    if text_lower == "🛞 диски":
+    if text_clean == "🛞 диски":
         user_state[peer_id] = {"mode": "wheels"}
         send_safe(peer_id, "Введите размер:")
         return
 
-    if text_lower == "🚘 доноры":
+    if text_clean == "🚘 доноры":
         results = cache.get_latest_donors(limit=15)
 
         if results:
             user_results[peer_id] = results
-            user_index[peer_id] = 0
-            user_state[peer_id] = {"mode": "donors"}
+            user_state[peer_id] = {"mode": "donors", "index": 0}
             show_donor(peer_id)
         else:
             send_safe(peer_id, "Нет данных")
         return
+
+    # =====================================================
+    # ❓ fallback
+    # =====================================================
+    send_safe(peer_id, "❓ Не понял команду")
+    
 # Запуск бота
 def run_bot():
     print("🔥 VK BOT ULTRA ЗАПУЩЕН")
