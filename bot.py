@@ -742,34 +742,6 @@ def render_current_item(peer_id):
     else:
         show_part(peer_id)
 
-def show_item_generic(peer_id, data_source, title=""):
-    """
-    peer_id      : id пользователя
-    data_source  : словарь user_results или user_favorites
-    title        : заголовок карточки
-    """
-    state = user_state.get(peer_id, {})
-    idx = state.get("index", 0)
-
-    items = data_source.get(str(peer_id), [])
-
-    if not items:
-        send_safe(peer_id, f"❌ {title} нет")
-        return
-
-    # Защита индекса
-    idx = min(idx, len(items) - 1)
-    state["index"] = idx
-    user_state[peer_id] = state
-
-    item = items[idx]
-
-    # Отображение карточки
-    lines = [f"{title}:"]
-    for k, v in item.items():
-        lines.append(f"{k}: {v}")
-    send_safe(peer_id, "\n".join(lines))
-
 def show_part(peer_id):
     show_item_generic(peer_id, user_results, title="🔧 Деталь")
     """Показывает карточку детали ОДНИМ сообщением (текст + фото + клавиатура)."""
