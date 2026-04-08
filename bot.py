@@ -1219,7 +1219,7 @@ def show_favorite_item(peer_id, delta=0):
     # --- Формируем текст карточки ---
     message = (
         f"❤️ Избранное:\n"
-        f"📄 Наименование: {safe_get(item, 'Наименование')}\n"
+        f"📄 Наименование: {safe_get(item, 'Запчасть')}\n"
         f"🆔 Артикул: {safe_get(item, 'Номер')}\n"
         f"💰 Цена: {safe_get(item, 'Цена')}\n"
         f"📊 Результат {idx + 1} из {len(results)}"
