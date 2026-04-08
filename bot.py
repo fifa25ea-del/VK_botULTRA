@@ -1390,8 +1390,11 @@ def handle_message(peer_id, text):
         return
 
     # ====== НАВИГАЦИЯ ======
+    state = user_state.get(peer_id, {})
+    mode = state.get("mode")
+    pid = str(peer_id)
+    
     if text_clean in ["➡️", "➡️ вперед", "далее"]:
-        pid = str(peer_id)
         data = user_favorites.get(pid, []) if mode == "favorites" else user_results.get(peer_id, [])
     
         if not data:
@@ -1407,9 +1410,9 @@ def handle_message(peer_id, text):
             show_current_item(peer_id)
     
         return
-
+    
+    
     if text_clean in ["⬅️", "⬅️ назад", "назад"]:
-        pid = str(peer_id)
         data = user_favorites.get(pid, []) if mode == "favorites" else user_results.get(peer_id, [])
     
         if not data:
