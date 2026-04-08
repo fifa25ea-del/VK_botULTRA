@@ -1208,7 +1208,7 @@ def show_favorite_item(peer_id, delta=0):
         send_safe(peer_id, "❤️ Ваш список избранного пуст")
         return
 
-    # используем отдельный индекс для избранного
+    # отдельный индекс для избранного
     fav_index_key = f"fav_{peer_id}"
     idx = user_index.get(fav_index_key, 0) + delta
     idx = max(0, min(idx, len(results) - 1))
@@ -1236,11 +1236,37 @@ def show_favorite_item(peer_id, delta=0):
     keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
     keyboard_data = keyboard.get_keyboard()
 
+    # --- Отправка фото если есть ---
     photo_url = get_first_photo(item.get('Фото', ''))
     if photo_url:
-        send_photo(peer_id, message, photo_url, keyboard=keyboard_data)
-    else:
-        send_safe(peer_id, message, keyboard=keyboard_data)
+        try:
+            response = requests.get(photo_url, timeout=10)
+            response.raise_for_status()
+
+            upload_url = vk.photos.getMessagesUploadServer()['upload_url']
+            files = {'photo': ('image.jpg', response.content)}
+            upload_data = requests.post(upload_url, files=files, timeout=15).json()
+
+            photo_data = vk.photos.saveMessagesPhoto(
+                server=upload_data['server'],
+                photo=upload_data['photo'],
+                hash=upload_data['hash']
+            )[0]
+
+            attachment = f"photo{photo_data['owner_id']}_{photo_data['id']}"
+            vk.messages.send(
+                peer_id=peer_id,
+                message=message,
+                attachment=attachment,
+                keyboard=keyboard_data,
+                random_id=get_random_id()
+            )
+            return
+        except Exception as e:
+            logging.warning(f"Ошибка загрузки фото (избранное): {e}")
+
+    # Если фото нет или ошибка — отправляем текст с клавиатурой
+    send_safe(peer_id, message, keyboard=keyboard_data)
 # ===== ДОБАВЛЯЕМ ПОИСК ПО КРИТЕРИЯМ =====
 
 def find_part(query):
