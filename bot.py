@@ -765,18 +765,28 @@ def show_item_generic(peer_id, data_source, title=""):
     return  # <- добавляем return, чтобы функция завершалась здесь
 
 def show_part(peer_id):
-    state = user_state.get(peer_id, {})
-    idx = state.get("index", 0)
-    
-    if not results:
-        send_safe(peer_id, "❌ Нет данных")
-        return
-    
-    idx = idx % len(results)
-    state["index"] = idx
-    user_state[peer_id] = state
-    
-    item = results[idx]
+    """Показывает карточку детали ОДНИМ сообщением (текст + фото + клавиатура)."""
+    try:
+        state = user_state.get(peer_id, {})
+        idx = state.get("index", 0)  # используем индекс из user_state
+        current_mode = state.get("mode", "search")  # режим (поиск или избранное)
+        results = user_results.get(peer_id, [])
+
+        if not results:
+            send_safe(peer_id, "Нет результатов поиска для отображения")
+            return
+
+        # Защита индекса
+        idx = max(0, min(idx, len(results) - 1))
+        state["index"] = idx
+        user_state[peer_id] = state
+
+        part = results[idx]
+
+        # Проверка целостности данных
+        if not part or not any(str(v).strip() for v in part.values()):
+            send_safe(peer_id, "Данные о детали повреждены. Попробуйте поиск заново.")
+            return
 
         # --- 1. Формируем текст ---
         message = (
@@ -859,18 +869,18 @@ def show_part(peer_id):
         send_safe(peer_id, "Произошла критическая ошибка при отображении детали.")
 
 def show_engine(peer_id, item=None):
+    results = user_results.get(peer_id, [])
     state = user_state.get(peer_id, {})
-    idx = state.get("index", 0)
-    
+    idx = state.get("index", 0)  # используем индекс из user_state
+
     if not results:
-        send_safe(peer_id, "❌ Нет данных")
+        send_safe(peer_id, "❌ Данные двигателя не найдены.")
         return
-    
-    idx = idx % len(results)
+
+    # Защита индекса
+    idx = max(0, min(idx, len(results) - 1))
     state["index"] = idx
     user_state[peer_id] = state
-    
-item = results[idx]
 
     if item is None:
         item = results[idx]
@@ -937,18 +947,21 @@ def show_item(peer_id, item):
         show_part(peer_id, item)
 
 def show_akpp(peer_id):
+    results = user_results.get(peer_id, [])
+    # Используем индекс из user_state
     state = user_state.get(peer_id, {})
     idx = state.get("index", 0)
-    
+
     if not results:
-        send_safe(peer_id, "❌ Нет данных")
+        send_safe(peer_id, "Данные АКПП не найдены.")
         return
-    
-    idx = idx % len(results)
+
+    # Защита индекса
+    idx = max(0, min(idx, len(results) - 1))
     state["index"] = idx
     user_state[peer_id] = state
-    
-    item = results[idx]
+
+    part = results[idx]
     
     title = part.get('Запчасть') or part.get('Наименование') or 'АКПП'
     price = part.get('Цена') or 'По запросу'
@@ -1017,17 +1030,19 @@ def show_wheel(peer_id):
 
     try:
         state = user_state.get(peer_id, {})
-        idx = state.get("index", 0)
-        
+        index = state.get("index", 0)  # берем индекс из user_state
+        results = user_results.get(peer_id, [])
+
         if not results:
-            send_safe(peer_id, "❌ Нет данных")
+            send_safe(peer_id, "❌ Диски не найдены")
             return
-        
-        idx = idx % len(results)
-        state["index"] = idx
+
+        index = min(index, len(results) - 1)
+        state["index"] = index
         user_state[peer_id] = state
-        
-        item = results[idx]
+
+        wheel = results[index]
+        total_items = len(results)
 
         message = (
             f"🛞 Карточка диска:\n"
@@ -1186,9 +1201,9 @@ def show_donor(peer_id):
         send_safe(peer_id, "Произошла критическая ошибка при отображении донора. Обратитесь к администратору.")
 
 def show_favorite_item(peer_id, delta=0):
+    peer_id = str(peer_id)
     state = user_state.get(peer_id, {})
-    index = state.get("index", 0)
-    results = user_results.get(peer_id, [])
+    idx = state.get("index", 0)
     
     results = user_favorites.get(peer_id, [])
     if not results:
@@ -1340,7 +1355,7 @@ def handle_message(peer_id, text):
             send_safe(peer_id, "📭 Избранное пусто")
             return
         user_state[peer_id] = {"mode": "favorites", "index": 0}
-        show_favorite_item(peer_id)
+        show_favorite_item(peer_id, 0)
         return
 
     if "добав" in text_clean and "избран" in text_clean:
@@ -1375,43 +1390,25 @@ def handle_message(peer_id, text):
         return
 
     # ====== НАВИГАЦИЯ ======
-    state = user_state.get(peer_id, {})
-    mode = state.get("mode")
-    pid = str(peer_id)
-    
     if text_clean in ["➡️", "➡️ вперед", "далее"]:
+        pid = str(peer_id)
         data = user_favorites.get(pid, []) if mode == "favorites" else user_results.get(peer_id, [])
-    
         if not data:
             send_safe(peer_id, "❌ Нет элементов")
             return
-    
         state["index"] = (state.get("index", 0) + 1) % len(data)
         user_state[peer_id] = state
-    
-        if mode == "favorites":
-            show_favorite_item(peer_id)
-        else:
-            show_current_item(peer_id)
-    
+        show_current_item(peer_id)
         return
-    
-    
+
     if text_clean in ["⬅️", "⬅️ назад", "назад"]:
-        data = user_favorites.get(pid, []) if mode == "favorites" else user_results.get(peer_id, [])
-    
+        data = user_favorites[pid] if mode == "favorites" else user_results.get(peer_id, [])
         if not data:
             send_safe(peer_id, "❌ Нет элементов")
             return
-    
         state["index"] = (state.get("index", 0) - 1) % len(data)
         user_state[peer_id] = state
-    
-        if mode == "favorites":
-            show_favorite_item(peer_id)
-        else:
-            show_current_item(peer_id)
-    
+        show_current_item(peer_id)
         return
 
     # ====== СОСТОЯНИЯ ПОИСКА ======
