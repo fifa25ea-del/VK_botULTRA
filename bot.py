@@ -982,8 +982,10 @@ def show_akpp(peer_id):
         f"🕹 {title}\n"
         f"💰 Цена: {price} руб.\n\n"
         f"⚙️ Модель КПП: {marking}\n"
+        f"⚙️ Двигатель: {part.get('Двигатель', '---')}\n"
         f"🚗 Кузов: {part.get('Кузов', '---')}\n"
         f"🚜 Комплектация: {part.get('Комплектация', '---')}\n\n"
+        f"📄 Комментарий: {part.get('Комментарий', 'информация отсутствует')}\n"
         f"🔢 ID товара: {item_id}\n\n"
         f"📊 Результат {idx + 1} из {len(results)}"
     )
@@ -1198,18 +1200,20 @@ def show_donor(peer_id):
         logging.critical(f"ФАТАЛЬНАЯ ошибка в show_donor для {peer_id}: {e}")
         send_safe(peer_id, "Произошла критическая ошибка при отображении донора. Обратитесь к администратору.")
 
-def show_favorite_item(peer_id):
-    """Показывает упрощённую карточку из избранного, как в show_part."""
-    idx, mode, state = get_index_state(peer_id)
+def show_favorite_item(peer_id, delta=0):
+    """Показывает упрощённую карточку из избранного с учётом смещения delta."""
+    idx = user_index.get(peer_id, 0) + delta
     results = user_favorites.get(peer_id, [])
+    
     if not results:
         send_safe(peer_id, "❤️ Ваш список избранного пуст")
         return
 
     # Защита индекса
     idx = max(0, min(idx, len(results)-1))
-    update_index_state(peer_id, idx)
+    user_index[peer_id] = idx  # сохраняем новый индекс
     item = results[idx]
+
 
     # --- Формируем текст карточки ---
     message = (
@@ -1220,7 +1224,6 @@ def show_favorite_item(peer_id):
         f"📊 Результат {idx + 1} из {len(results)}"
     )
 
-    # --- Клавиатура ---
     keyboard = VkKeyboard(one_time=False)
     keyboard.add_button("🗑 Удалить", color=VkKeyboardColor.NEGATIVE)
     keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.NEGATIVE)
@@ -1232,7 +1235,7 @@ def show_favorite_item(peer_id):
     keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
     keyboard_data = keyboard.get_keyboard()
 
-    # --- Берём только первое фото ---
+    # --- Фото (только первое) ---
     photo_url = get_first_photo(item.get('Фото',''))
     if photo_url:
         send_photo(peer_id, photo_url, message, keyboard_data)
