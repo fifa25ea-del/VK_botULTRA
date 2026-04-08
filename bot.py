@@ -1202,7 +1202,7 @@ def show_donor(peer_id):
 
 def show_favorite_item(peer_id, delta=0):
     """Показывает упрощённую карточку из избранного с учетом смещения delta."""
-    results = user_favorites.get(peer_id, [])
+    results = user_favorites.get(str(peer_id), [])
     
     if not results:
         send_safe(peer_id, "❤️ Ваш список избранного пуст")
@@ -1289,15 +1289,13 @@ def find_donor(query):
 # ===== ДОБАВЛЯЕМ ИЗБРАННОЕ =====
 
 def add_to_favorites(peer_id, item):
-    """Добавление товара в избранное пользователя."""
-    peer_id_str = str(peer_id)
+    peer_id_str = str(peer_id)  # <-- ключ в строке
     if peer_id_str not in user_favorites:
         user_favorites[peer_id_str] = []
 
     user_favorites[peer_id_str].append(item)
-    user_index[peer_id_str] = 0  # сброс позиции на первый элемент
-    save_favorites()  # сохраняем файл
-
+    user_index[peer_id_str] = 0
+    save_favorites()
     send(peer_id, f"✅ Товар '{item.get('Наименование', item.get('Модель диска', 'Товар'))}' добавлен в избранное.")
   
 def remove_favorite(peer_id):
