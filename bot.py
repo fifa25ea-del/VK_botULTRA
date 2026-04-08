@@ -1241,58 +1241,6 @@ def show_favorite_item(peer_id, delta=0):
         send_photo(peer_id, message, photo_url, keyboard=keyboard_data)
     else:
         send_safe(peer_id, message, keyboard=keyboard_data)
-    # --- Формируем текст карточки ---
-    message = (
-        f"❤️ Избранное:\n"
-        f"📄 Наименование: {safe_get(item, 'Наименование')}\n"
-        f"🆔 Артикул: {safe_get(item, 'Номер')}\n"
-        f"💰 Цена: {safe_get(item, 'Цена')}\n"
-        f"📊 Результат {idx + 1} из {len(results)}"
-    )
-
-    keyboard = VkKeyboard(one_time=False)
-    keyboard.add_button("🗑 Удалить", color=VkKeyboardColor.NEGATIVE)
-    keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.NEGATIVE)
-    keyboard.add_line()
-    if len(results) > 1:
-        keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
-        keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
-        keyboard.add_line()
-    keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
-    keyboard_data = keyboard.get_keyboard()
-
-    # --- 3. Отправка фото ---
-    photo_url = get_first_photo(item.get('Фото', ''))
-    if photo_url:
-        try:
-            response = requests.get(photo_url, timeout=10)
-            response.raise_for_status()
-
-            upload_url = vk.photos.getMessagesUploadServer()['upload_url']
-            files = {'photo': ('image.jpg', response.content)}
-            upload_data = requests.post(upload_url, files=files, timeout=15).json()
-
-            photo_data = vk.photos.saveMessagesPhoto(
-                server=upload_data['server'],
-                photo=upload_data['photo'],
-                hash=upload_data['hash']
-            )[0]
-
-            attachment = f"photo{photo_data['owner_id']}_{photo_data['id']}"
-            vk.messages.send(
-                peer_id=peer_id,
-                message=message,
-                attachment=attachment,
-                keyboard=keyboard_data,
-                random_id=get_random_id()
-            )
-            return
-        except Exception as e:
-            logging.warning(f"Ошибка загрузки фото (избранное): {e}")
-
-    # Если фото нет или ошибка — отправляем текст с клавиатурой
-    send_safe(peer_id, message, keyboard=keyboard_data)
-    
 # ===== ДОБАВЛЯЕМ ПОИСК ПО КРИТЕРИЯМ =====
 
 def find_part(query):
