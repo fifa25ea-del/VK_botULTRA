@@ -1201,17 +1201,18 @@ def show_donor(peer_id):
         send_safe(peer_id, "Произошла критическая ошибка при отображении донора. Обратитесь к администратору.")
 
 def show_favorite_item(peer_id, delta=0):
-    """Показывает упрощённую карточку из избранного с учётом смещения delta."""
-    idx = user_index.get(peer_id, 0) + delta
+    """Показывает упрощённую карточку из избранного с учетом смещения delta."""
     results = user_favorites.get(peer_id, [])
     
     if not results:
         send_safe(peer_id, "❤️ Ваш список избранного пуст")
         return
 
-    # Защита индекса
-    idx = max(0, min(idx, len(results)-1))
-    user_index[peer_id] = idx  # сохраняем новый индекс
+    # Обновляем индекс
+    idx = user_index.get(peer_id, 0) + delta
+    idx = max(0, min(idx, len(results) - 1))
+    user_index[peer_id] = idx
+
     item = results[idx]
 
 
@@ -1235,12 +1236,37 @@ def show_favorite_item(peer_id, delta=0):
     keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
     keyboard_data = keyboard.get_keyboard()
 
-    # --- Фото (только первое) ---
-    photo_url = get_first_photo(item.get('Фото',''))
+    # --- 3. Отправка фото ---
+    photo_url = get_first_photo(item.get('Фото', ''))
     if photo_url:
-        send_photo(peer_id, photo_url, message, keyboard_data)
-    else:
-        send_safe(peer_id, message, keyboard=keyboard_data)
+        try:
+            response = requests.get(photo_url, timeout=10)
+            response.raise_for_status()
+
+            upload_url = vk.photos.getMessagesUploadServer()['upload_url']
+            files = {'photo': ('image.jpg', response.content)}
+            upload_data = requests.post(upload_url, files=files, timeout=15).json()
+
+            photo_data = vk.photos.saveMessagesPhoto(
+                server=upload_data['server'],
+                photo=upload_data['photo'],
+                hash=upload_data['hash']
+            )[0]
+
+            attachment = f"photo{photo_data['owner_id']}_{photo_data['id']}"
+            vk.messages.send(
+                peer_id=peer_id,
+                message=message,
+                attachment=attachment,
+                keyboard=keyboard_data,
+                random_id=get_random_id()
+            )
+            return
+        except Exception as e:
+            logging.warning(f"Ошибка загрузки фото (избранное): {e}")
+
+    # Если фото нет или ошибка — отправляем текст с клавиатурой
+    send_safe(peer_id, message, keyboard=keyboard_data)
     
 # ===== ДОБАВЛЯЕМ ПОИСК ПО КРИТЕРИЯМ =====
 
