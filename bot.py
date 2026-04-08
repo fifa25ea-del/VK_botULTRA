@@ -1355,7 +1355,7 @@ def handle_message(peer_id, text):
             send_safe(peer_id, "📭 Избранное пусто")
             return
         user_state[peer_id] = {"mode": "favorites", "index": 0}
-        show_favorite_item(peer_id, 0)
+        show_favorite_item(peer_id)
         return
 
     if "добав" in text_clean and "избран" in text_clean:
@@ -1393,22 +1393,37 @@ def handle_message(peer_id, text):
     if text_clean in ["➡️", "➡️ вперед", "далее"]:
         pid = str(peer_id)
         data = user_favorites.get(pid, []) if mode == "favorites" else user_results.get(peer_id, [])
+    
         if not data:
             send_safe(peer_id, "❌ Нет элементов")
             return
+    
         state["index"] = (state.get("index", 0) + 1) % len(data)
         user_state[peer_id] = state
-        show_current_item(peer_id)
+    
+        if mode == "favorites":
+            show_favorite_item(peer_id)
+        else:
+            show_current_item(peer_id)
+    
         return
 
     if text_clean in ["⬅️", "⬅️ назад", "назад"]:
-        data = user_favorites[pid] if mode == "favorites" else user_results.get(peer_id, [])
+        pid = str(peer_id)
+        data = user_favorites.get(pid, []) if mode == "favorites" else user_results.get(peer_id, [])
+    
         if not data:
             send_safe(peer_id, "❌ Нет элементов")
             return
+    
         state["index"] = (state.get("index", 0) - 1) % len(data)
         user_state[peer_id] = state
-        show_current_item(peer_id)
+    
+        if mode == "favorites":
+            show_favorite_item(peer_id)
+        else:
+            show_current_item(peer_id)
+    
         return
 
     # ====== СОСТОЯНИЯ ПОИСКА ======
