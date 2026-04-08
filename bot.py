@@ -1439,7 +1439,6 @@ def remove_favorite(peer_id):
 def handle(event):
     peer_id = event.obj.message['peer_id']
     text = event.obj.message['text']
-
     handle_message(peer_id, text)
 
 def handle_message(peer_id, text):
@@ -1460,114 +1459,71 @@ def handle_message(peer_id, text):
         send_safe(peer_id, "🏠 Главное меню", keyboard=get_main_keyboard())
         return
 
-    # =====================================================
-    # ❤️ ИЗБРАННОЕ
-    # =====================================================
-
-    # открыть
+    # ====== ИЗБРАННОЕ ======
     if "избран" in text_clean and "добав" not in text_clean:
         favs = user_favorites.get(pid, [])
-
         if not favs:
             send_safe(peer_id, "📭 Избранное пусто")
             return
-
         user_state[peer_id] = {"mode": "favorites", "index": 0}
         show_favorite_item(peer_id, 0)
         return
 
-    # добавить
     if "добав" in text_clean and "избран" in text_clean:
         results = user_results.get(peer_id, [])
-
         if not results:
             send_safe(peer_id, "❌ Нет товара")
             return
-
-        idx = state.get("index", 0)
-        idx = min(idx, len(results) - 1)
-
+        idx = min(state.get("index", 0), len(results) - 1)
         item = results[idx]
-
-        user_favorites.setdefault(pid, []).append(item)
-        save_favorites()
-
+        user_favorites.setdefault(pid, [])
+        if item not in user_favorites[pid]:  # чтобы не дублировать
+            user_favorites[pid].append(item)
+            save_favorites()
         send_safe(peer_id, "✅ Добавлено в избранное")
         return
 
-    # удалить
     if "удал" in text_clean and mode == "favorites":
         favs = user_favorites.get(pid, [])
-
         if not favs:
             send_safe(peer_id, "❌ Нечего удалять")
             return
-
-        idx = state.get("index", 0)
-        idx = min(idx, len(favs) - 1)
-
+        idx = min(state.get("index", 0), len(favs) - 1)
         favs.pop(idx)
-
-        if idx >= len(favs):
-            idx = max(0, len(favs) - 1)
-
-        state["index"] = idx
+        state["index"] = min(idx, max(0, len(favs) - 1))
         user_state[peer_id] = state
-
         save_favorites()
-
         send_safe(peer_id, "🗑 Удалено")
-
         if favs:
-            show_favorite_item(peer_id, idx)
+            show_favorite_item(peer_id, state["index"])
         else:
             send_safe(peer_id, "📭 Избранное пусто")
         return
 
-    # =====================================================
-    # ⬅️➡️ НАВИГАЦИЯ (ЕДИНАЯ)
-    # =====================================================
+    # ====== НАВИГАЦИЯ ======
     if text_clean in ["➡️", "➡️ вперед", "далее"]:
-        if mode == "favorites":
-            data = user_favorites.get(pid, [])
-        else:
-            data = user_results.get(peer_id, [])
-
+        data = user_favorites[pid] if mode == "favorites" else user_results.get(peer_id, [])
         if not data:
             send_safe(peer_id, "❌ Нет элементов")
             return
-
-        idx = (state.get("index", 0) + 1) % len(data)
-        state["index"] = idx
+        state["index"] = (state.get("index", 0) + 1) % len(data)
         user_state[peer_id] = state
-
         show_current_item(peer_id)
         return
 
     if text_clean in ["⬅️", "⬅️ назад", "назад"]:
-        if mode == "favorites":
-            data = user_favorites.get(pid, [])
-        else:
-            data = user_results.get(peer_id, [])
-
+        data = user_favorites[pid] if mode == "favorites" else user_results.get(peer_id, [])
         if not data:
             send_safe(peer_id, "❌ Нет элементов")
             return
-
-        idx = (state.get("index", 0) - 1) % len(data)
-        state["index"] = idx
+        state["index"] = (state.get("index", 0) - 1) % len(data)
         user_state[peer_id] = state
-
         show_current_item(peer_id)
         return
 
-    # =====================================================
-    # 📥 СОСТОЯНИЯ (ТВОЙ РАЗНЫЙ ПОИСК)
-    # =====================================================
-
+    # ====== СОСТОЯНИЯ ПОИСКА ======
     if mode == "await_engine_number":
         results = cache.get_engines(text)
-
         if results:
             user_results[peer_id] = results
             user_state[peer_id] = {"mode": "engine_view", "index": 0}
@@ -1579,7 +1535,6 @@ def handle_message(peer_id, text):
     if mode == "wait_part_number":
         query = normalize_query(text)
         results = cache.search_parts(query)
-
         if results:
             user_results[peer_id] = results
             user_state[peer_id] = {"mode": "parts", "index": 0}
@@ -1591,7 +1546,6 @@ def handle_message(peer_id, text):
 
     if mode == "wheels":
         results = cache.search_wheels(text)
-
         if results:
             user_results[peer_id] = results
             user_state[peer_id] = {"mode": "wheels_view", "index": 0}
@@ -1600,10 +1554,7 @@ def handle_message(peer_id, text):
             send_safe(peer_id, "❌ Диски не найдены")
         return
 
-    # =====================================================
-    # ⚙️ АКПП
-    # =====================================================
-
+    # ====== АКПП ======
     if text_clean == "🕹 акпп":
         user_state[peer_id] = {"mode": "await_akpp_body"}
         send_safe(peer_id, "Введите кузов (например 211):")
@@ -1611,32 +1562,25 @@ def handle_message(peer_id, text):
 
     if mode == "await_akpp_body":
         body = "".join(filter(str.isdigit, text)) or text.upper()
-
-        user_state[peer_id] = {
-            "mode": "await_akpp_drive",
-            "body": body
-        }
+        user_state[peer_id] = {"mode": "await_akpp_drive", "body": body}
 
         kb = VkKeyboard(one_time=True)
         kb.add_button("Задний", color=VkKeyboardColor.PRIMARY)
         kb.add_button("Полный", color=VkKeyboardColor.PRIMARY)
         kb.add_line()
         kb.add_button("Передний", color=VkKeyboardColor.SECONDARY)
-
         send_safe(peer_id, f"Кузов {body}. Укажите привод:", keyboard=kb.get_keyboard())
         return
 
     if mode == "await_akpp_drive":
         drive = text.lower()
         body = state.get("body")
+        if not body:
+            send_safe(peer_id, "❌ Ошибка: кузов не указан")
+            return
 
-        results = []
-
-        for part in cache.akpp_base:
-            name = str(part).lower()
-
-            if body in name and drive[:4] in name and "акпп" in name:
-                results.append(part)
+        results = [part for part in cache.akpp_base
+                   if body.lower() in str(part).lower() and drive[:4] in str(part).lower() and "акпп" in str(part).lower()]
 
         if results:
             user_results[peer_id] = results
@@ -1646,44 +1590,31 @@ def handle_message(peer_id, text):
             send_safe(peer_id, "❌ АКПП не найдена")
         return
 
-    # =====================================================
-    # 🚗 МЕНЮ
-    # =====================================================
+    # ====== МЕНЮ ======
+    menu_map = {
+        "🚗 запчасти": ("parts_menu", get_parts_menu_keyboard, "Выберите раздел:"),
+        "⚙️ двигатель": ("await_engine_number", None, "Введите номер двигателя:"),
+        "🔍 поиск по номеру": ("wait_part_number", None, "Введите номер детали:"),
+        "🛞 диски": ("wheels", None, "Введите размер:"),
+        "🚘 доноры": ("donors", None, None)
+    }
 
-    if text_clean == "🚗 запчасти":
-        user_state[peer_id] = {"mode": "parts_menu"}
-        send_safe(peer_id, "Выберите раздел:", keyboard=get_parts_menu_keyboard())
-        return
-
-    if text_clean == "⚙️ двигатель":
-        user_state[peer_id] = {"mode": "await_engine_number"}
-        send_safe(peer_id, "Введите номер двигателя:")
-        return
-
-    if text_clean == "🔍 поиск по номеру":
-        user_state[peer_id] = {"mode": "wait_part_number"}
-        send_safe(peer_id, "Введите номер детали:")
-        return
-
-    if text_clean == "🛞 диски":
-        user_state[peer_id] = {"mode": "wheels"}
-        send_safe(peer_id, "Введите размер:")
-        return
-
-    if text_clean == "🚘 доноры":
-        results = cache.get_latest_donors(limit=15)
-
-        if results:
-            user_results[peer_id] = results
-            user_state[peer_id] = {"mode": "donors", "index": 0}
-            show_donor(peer_id)
+    if text_clean in menu_map:
+        mode_val, kb_func, msg = menu_map[text_clean]
+        user_state[peer_id] = {"mode": mode_val}
+        if text_clean == "🚘 доноры":
+            results = cache.get_latest_donors(limit=15)
+            if results:
+                user_results[peer_id] = results
+                user_state[peer_id] = {"mode": "donors", "index": 0}
+                show_donor(peer_id)
+            else:
+                send_safe(peer_id, "Нет данных")
         else:
-            send_safe(peer_id, "Нет данных")
+            send_safe(peer_id, msg, keyboard=kb_func() if kb_func else None)
         return
 
-    # =====================================================
-    # ❓ fallback
-    # =====================================================
+    # ====== fallback ======
     send_safe(peer_id, "❓ Не понял команду")
     
 # Запуск бота
