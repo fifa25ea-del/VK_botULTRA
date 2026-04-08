@@ -1290,10 +1290,14 @@ def find_donor(query):
 
 def add_to_favorites(peer_id, item):
     """Добавление товара в избранное пользователя."""
-    peer_id = str(peer_id)
-    user_favorites.setdefault(peer_id, []).append(item)
-    user_index[peer_id] = 0  # сброс позиции на первый элемент
-    save_favorites()
+    peer_id_str = str(peer_id)
+    if peer_id_str not in user_favorites:
+        user_favorites[peer_id_str] = []
+
+    user_favorites[peer_id_str].append(item)
+    user_index[peer_id_str] = 0  # сброс позиции на первый элемент
+    save_favorites()  # сохраняем файл
+
     send(peer_id, f"✅ Товар '{item.get('Наименование', item.get('Модель диска', 'Товар'))}' добавлен в избранное.")
   
 def remove_favorite(peer_id):
