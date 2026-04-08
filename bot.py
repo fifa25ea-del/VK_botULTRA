@@ -1215,7 +1215,7 @@ def show_favorite_item(peer_id, delta=0):
     state["index"] = idx
     user_state[peer_id] = state
     
-item = results[idx]
+    item = results[idx]
 
     # --- Формируем текст карточки ---
     message = (
