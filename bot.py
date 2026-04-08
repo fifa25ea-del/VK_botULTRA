@@ -1201,20 +1201,46 @@ def show_donor(peer_id):
         send_safe(peer_id, "Произошла критическая ошибка при отображении донора. Обратитесь к администратору.")
 
 def show_favorite_item(peer_id, delta=0):
-    peer_id = str(peer_id)  # гарантируем одинаковый тип ключа
+    peer_id = str(peer_id)
     results = user_favorites.get(peer_id, [])
 
     if not results:
         send_safe(peer_id, "❤️ Ваш список избранного пуст")
         return
 
-    # отдельный индекс для избранного
-    idx = user_index.get(f"fav_{peer_id}", 0) + delta
+    # используем отдельный индекс для избранного
+    fav_index_key = f"fav_{peer_id}"
+    idx = user_index.get(fav_index_key, 0) + delta
     idx = max(0, min(idx, len(results) - 1))
-    user_index[f"fav_{peer_id}"] = idx
+    user_index[fav_index_key] = idx
 
     item = results[idx]
-    
+
+    # --- Формируем текст карточки ---
+    message = (
+        f"❤️ Избранное:\n"
+        f"📄 Наименование: {safe_get(item, 'Наименование')}\n"
+        f"🆔 Артикул: {safe_get(item, 'Номер')}\n"
+        f"💰 Цена: {safe_get(item, 'Цена')}\n"
+        f"📊 Результат {idx + 1} из {len(results)}"
+    )
+
+    keyboard = VkKeyboard(one_time=False)
+    keyboard.add_button("🗑 Удалить", color=VkKeyboardColor.NEGATIVE)
+    keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.NEGATIVE)
+    keyboard.add_line()
+    if len(results) > 1:
+        keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
+        keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
+        keyboard.add_line()
+    keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
+    keyboard_data = keyboard.get_keyboard()
+
+    photo_url = get_first_photo(item.get('Фото', ''))
+    if photo_url:
+        send_photo(peer_id, message, photo_url, keyboard=keyboard_data)
+    else:
+        send_safe(peer_id, message, keyboard=keyboard_data)
     # --- Формируем текст карточки ---
     message = (
         f"❤️ Избранное:\n"
