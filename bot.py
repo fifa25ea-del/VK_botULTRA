@@ -15,7 +15,6 @@ import logging
 from urllib.parse import urlparse
 import random
 from io import StringIO
-import tempfile
 
 def show_favorites(peer_id):
     if not user_favorites.get(peer_id):
@@ -112,26 +111,12 @@ def get_item_id(item):
     )
 
 def save_favorites():
-    try:
-        with tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8") as tmp:
-            json.dump(user_favorites, tmp, ensure_ascii=False, indent=2)
-            temp_name = tmp.name
-        os.replace(temp_name, FAV_FILE)
-    except Exception as e:
-        print("❌ Ошибка сохранения избранного:", e)
+    with open(FAV_FILE, "w", encoding="utf-8") as f:
+        json.dump(user_favorites, f, ensure_ascii=False, indent=2)
 
 def load_favorites():
     global user_favorites
-    if not os.path.exists(FAV_FILE):
-        user_favorites = {}
-        return
-    try:
-        with open(FAV_FILE, "r", encoding="utf-8") as f:
-            user_favorites = json.load(f)
-        user_favorites = {str(k): v for k, v in user_favorites.items()}
-    except Exception as e:
-        print("❌ Ошибка загрузки избранного:", e)
-        user_favorites = {}
+    user_favorites = load_json(FAV_FILE)
     
 # ===== НАСТРОЙКИ =====
 TOKEN = "vk1.a.Ze-bIlYgJf9rdkgnhYmWc6U6Eg9DRgi0vLkokPQVV5fIMsfsLm8kVPpCBMD04qwimSsaZZS1R0e1qwndF1hj3ROCvebCapjcT7xVeOSAvAdIJ1rqPYevdcbGAIt6OxV9xreMd2w4JROXJnnKvE4XiDLIieNoPE6BMKERAjlIt8jpeKIughzD9VC7x9DdPjzgF_tvoZMRDGkbvIBycGNoeA"
@@ -757,72 +742,6 @@ def render_current_item(peer_id):
     else:
         show_part(peer_id)
 
-def show_item_generic(peer_id, data_source, title=""):
-    state = user_state.get(peer_id, {})
-    idx = state.get("index", 0)
-
-    items = data_source.get(str(peer_id), [])
-
-    if not items:
-        send_safe(peer_id, f"❌ {title} нет")
-        return
-
-    idx = min(idx, len(items) - 1)
-    state["index"] = idx
-    user_state[peer_id] = state
-
-    item = items[idx]
-
-    lines = [f"{title}:"]
-    for k, v in item.items():
-        lines.append(f"{k}: {v}")
-    send_safe(peer_id, "\n".join(lines))
-
-# =====================
-#  show_* функции
-# =====================
-def show_wheel(peer_id):
-    show_item_generic(peer_id, user_results, title="🛞 Диск")
-
-def show_engine(peer_id):
-    show_item_generic(peer_id, user_results, title="⚙️ Двигатель")
-
-def show_part(peer_id):
-    show_item_generic(peer_id, user_results, title="🔧 Деталь")
-
-def show_donor(peer_id):
-    show_item_generic(peer_id, user_results, title="🚘 Донор")
-
-def show_akpp(peer_id):
-    show_item_generic(peer_id, user_results, title="🕹 АКПП")
-
-def show_favorite_item(peer_id, idx=None):
-    pid = str(peer_id)
-    favs = user_favorites.get(pid, [])
-
-    if not favs:
-        send_safe(peer_id, "📭 Избранное пусто")
-        return
-
-    state = user_state.get(peer_id, {})
-    if idx is not None:
-        state["index"] = idx
-    idx = state.get("index", 0)
-    idx = min(idx, len(favs) - 1)
-    state["index"] = idx
-    user_state[peer_id] = state
-
-    item = favs[idx]
-
-    lines = ["❤️ Избранное:"]
-    for k, v in item.items():
-        lines.append(f"{k}: {v}")
-
-    send_safe(peer_id, "\n".join(lines))
-
-# =====================
-#  Универсальная функция показа текущего элемента
-# =====================
 def show_current_item(peer_id):
     state = user_state.get(peer_id, {})
     mode = state.get("mode")
@@ -839,7 +758,526 @@ def show_current_item(peer_id):
         show_akpp(peer_id)
     else:
         show_part(peer_id)
+
+def show_part(peer_id):
+    """Показывает карточку детали ОДНИМ сообщением (текст + фото + клавиатура)."""
+    try:
+        index = user_index.get(peer_id, 0)
+        results = user_results.get(peer_id, [])
+        current_state = user_state.get(peer_id)
+
+        if not results:
+            send_safe(peer_id, "Нет результатов поиска для отображения")
+            return
+
+        if index >= len(results) or index < 0:
+            send_safe(peer_id, "Нет данных для отображения (некорректный индекс)")
+            return
+
+        part = results[index]
+
+        # Проверка целостности данных
+        if not part or not any(str(v).strip() for v in part.values()):
+            send_safe(peer_id, "Данные о детали повреждены. Попробуйте поиск заново.")
+            return
+
+        # --- 1. ФОРМИРУЕМ ТЕКСТ КАРТОЧКИ ---
+        message = "🚗 Карточка детали:\n"
+        message += f"Название: {safe_get(part, 'Наименование')}\n"
+        message += f"Номер запчасти: {safe_get(part, 'Номер')}\n"
+        message += f"Кузов: {safe_get(part, 'Кузов')}\n"
+        message += f"Артикул: {safe_get(part, 'Артикул')}\n"
+
+        price = safe_get(part, 'Цена')
+        if price != "Не указано":
+            message += f"Цена: {price}\n"
+
+        link = safe_get(part, 'Ссылка')
+        if link != "Не указано" and link != "Нет ссылки":
+            message += f"Ссылка: {link}"
+
+        # --- ДОБАВЛЯЕМ НУМЕРАЦИЮ ---
+        total_items = len(results)
+        current_position = index + 1
+        message += f"\n📊 {current_position} из {total_items}"
+
+
+        # --- 2. СОЗДАЕМ КЛАВИАТУРУ ---
+        keyboard = VkKeyboard(one_time=False)
+
+        # Логика кнопок зависит от того, где мы находимся
+        if current_state == "favorites_view":
+            # Режим просмотра избранного
+            keyboard.add_button("🗑 Удалить", color=VkKeyboardColor.NEGATIVE)
+            keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.NEGATIVE)
+            keyboard.add_line()
+        else: 
+            # Обычный поиск запчастей
+            keyboard.add_button("❤️ Добавить в избранное", color=VkKeyboardColor.POSITIVE)
+            keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.NEGATIVE)
+            keyboard.add_line()
         
+        # Кнопки навигации (всегда добавляем)
+        keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
+        keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
+        keyboard.add_line()  # Новая строка для кнопки обновления
+        
+        # Кнопка обновления
+        keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
+
+        keyboard_data = keyboard.get_keyboard()
+        
+
+        # --- 3. ОТПРАВЛЯЕМ СООБЩЕНИЕ (С ФОТО ИЛИ БЕЗ) ---
+        photo_url = get_first_photo(part.get('Фото', ''))
+
+        if photo_url:
+            try:
+                response = requests.get(photo_url, timeout=10)
+                response.raise_for_status()
+
+                upload_url = vk.photos.getMessagesUploadServer()['upload_url']
+                files = {'photo': ('image.jpg', response.content)}
+                upload_data = requests.post(upload_url, files=files, timeout=15).json()
+
+                photo_data = vk.photos.saveMessagesPhoto(
+                    server=upload_data['server'],
+                    photo=upload_data['photo'],
+                    hash=upload_data['hash']
+                )[0]
+                
+                attachment = f"photo{photo_data['owner_id']}_{photo_data['id']}"
+                
+                # Отправляем ОДНО сообщение с фото и клавиатурой
+                vk.messages.send(
+                    peer_id=peer_id,
+                    message=message,
+                    attachment=attachment,
+                    keyboard=keyboard_data,
+                    random_id=get_random_id()
+                )
+
+            except requests.exceptions.RequestException as e:
+                logging.warning(f"Ошибка загрузки фото (запчасти): {e}. Отправляем только текст.")
+                send_safe(peer_id, message, keyboard=keyboard_data)
+                
+            except Exception as e:
+                logging.error(f"Неизвестная ошибка при отправке фото детали: {e}")
+                send_safe(peer_id, message, keyboard=keyboard_data)
+
+        else:
+            # Если фото нет в базе, сразу отправляем текст с клавиатурой
+            send_safe(peer_id, message, keyboard=keyboard_data)
+
+    except Exception as e:
+        logging.critical(f"ФАТАЛЬНАЯ ошибка в show_part для {peer_id}: {e}")
+        send_safe(peer_id, "Произошла критическая ошибка при отображении детали.")
+
+def show_engine(peer_id, item=None):
+    results = user_results.get(peer_id, [])
+    index = user_index.get(peer_id, 0)
+
+    if not results:
+        send_safe(peer_id, "❌ Данные двигателя не найдены.")
+        return
+
+    if item is None:
+        item = results[index]
+
+    # --- 1. ФОРМИРУЕМ ТЕКСТ (Стиль как в АКПП) ---
+    title = "🚀 ДВИГАТЕЛЬ"
+    model_engine = item.get('Двигатель') or item.get('Маркировка') or 'Не указана'
+    price = item.get('Цена') or 'По запросу'
+    body = item.get('Кузов') or 'Не указан'
+    item_id = item.get('Артикул') or item.get('Номер') or '---'
+    
+    msg = (
+        f"{title}\n"
+        f"💰 Цена: {price} руб.\n\n"
+        f"⛽ Модель ДВС: {model_engine}\n"
+        f"🚗 Кузов: {body}\n"
+        f"📄 Комментарий: {item.get('Комментарий', 'информация отсутствует')}\n"
+        f"🔢 Артикул: {item_id}\n\n"
+        f"📊 Результат {index + 1} из {len(results)}"
+    )
+
+    # --- 2. ПОДГОТОВКА КЛАВИАТУРЫ ---
+    keyboard_data = get_nav_keyboard()
+
+    # --- 3. ЗАГРУЗКА ФОТО ---
+    photos_str = item.get('Фото') or item.get('Превью', '')
+    photo_url = None
+    if photos_str:
+        photo_url = photos_str.split(',')[0].strip()
+
+    if photo_url and photo_url.startswith('http'):
+        try:
+            response = requests.get(photo_url, timeout=20)
+            response.raise_for_status()
+
+            upload_url = vk.photos.getMessagesUploadServer()['upload_url']
+            files = {'photo': ('engine.jpg', response.content)}
+            upload_data = requests.post(upload_url, files=files, timeout=15).json()
+
+            photo_data = vk.photos.saveMessagesPhoto(
+                server=upload_data['server'],
+                photo=upload_data['photo'],
+                hash=upload_data['hash']
+            )[0]
+            
+            attachment = f"photo{photo_data['owner_id']}_{photo_data['id']}"
+            
+            vk.messages.send(
+                peer_id=peer_id,
+                message=msg,
+                attachment=attachment,
+                keyboard=keyboard_data,
+                random_id=get_random_id()
+            )
+            return 
+        except Exception as e:
+            logging.error(f"Ошибка загрузки фото двигателя: {e}")
+    
+    # Отправка без фото, если что-то пошло не так
+    send_safe(peer_id, msg, keyboard=keyboard_data)
+
+def show_item(peer_id, item):
+    if 'Диаметр диска' in item:
+        show_wheel(peer_id, item)
+    elif 'VIN' in item:
+        show_donor(peer_id, item)
+    elif 'двигатель' in str(item.get('Наименование', '')).lower():
+        show_engine(peer_id, item)
+    else:
+        show_part(peer_id, item)
+
+def show_akpp(peer_id):
+    results = user_results.get(peer_id, [])
+    idx = user_index.get(peer_id, 0)
+
+    if not results or not (0 <= idx < len(results)):
+        send_safe(peer_id, "Данные АКПП не найдены.")
+        return
+
+    part = results[idx]
+    
+    # --- 1. ОСНОВНЫЕ ДАННЫЕ ИЗ ЛОКАЛЬНОЙ БАЗЫ АКПП ---
+    title = part.get('Запчасть') or part.get('Наименование') or 'АКПП'
+    price = part.get('Цена') or 'По запросу'
+    marking = part.get('Маркировка') or part.get('Номер производителя') or 'Не указана'
+    item_id = part.get('Номер товара') or part.get('Артикул') or '---'
+    
+    # --- 2. УМНЫЙ ПОИСК ФОТО ПО АРТИКУЛУ В ОНЛАЙН-БАЗЕ ---
+    photo_url = None
+    
+    # Сначала проверяем, вдруг в самом файле АКПП уже есть ссылка
+    photos_str = part.get('Превью') or part.get('Фото', '')
+    
+    if not photos_str or photos_str == "Не указано":
+        # Если в АКПП пусто, ищем этот же артикул в основной базе запчастей (cache.parts)
+        # Мы ищем совпадение по 'Номер товара' или 'Артикул'
+        for main_part in cache.parts:
+            main_id = main_part.get('Артикул') or main_part.get('Номер')
+            if main_id == item_id:
+                # Нашли! Берем фото из основной базы
+                photos_str = main_part.get('Фото') or main_part.get('Превью', '')
+                break
+
+    # Извлекаем первый URL, если нашли хоть что-то
+    if photos_str and photos_str != "Не указано":
+        photo_url = photos_str.split(',')[0].strip()
+
+    # --- 3. ФОРМИРУЕМ ТЕКСТ ---
+    msg = (
+        f"🕹 {title}\n"
+        f"💰 Цена: {price} руб.\n\n"
+        f"⚙️ Модель КПП: {marking}\n"
+        f"🚗 Кузов: {part.get('Кузов', '---')}\n"
+        f"🚜 Комплектация: {part.get('Комплектация', '---')}\n\n"
+        f"🔢 ID товара: {item_id}\n\n"
+        f"📊 Результат {idx + 1} из {len(results)}"
+    )
+
+    # --- 4. ЗАГРУЗКА И ОТПРАВКА (ЕДИНЫЙ БЛОК) ---
+    keyboard_data = get_nav_keyboard()
+
+    if photo_url and photo_url.startswith('http'):
+        try:
+            response = requests.get(photo_url, timeout=7)
+            response.raise_for_status()
+
+            upload_url = vk.photos.getMessagesUploadServer()['upload_url']
+            files = {'photo': ('image.jpg', response.content)}
+            upload_data = requests.post(upload_url, files=files, timeout=10).json()
+
+            photo_data = vk.photos.saveMessagesPhoto(
+                server=upload_data['server'],
+                photo=upload_data['photo'],
+                hash=upload_data['hash']
+            )[0]
+            
+            attachment = f"photo{photo_data['owner_id']}_{photo_data['id']}"
+            
+            vk.messages.send(
+                peer_id=peer_id,
+                message=msg,
+                attachment=attachment,
+                keyboard=keyboard_data,
+                random_id=get_random_id()
+            )
+            return 
+        except Exception as e:
+            logging.error(f"Ошибка подтягивания фото из онлайн-базы: {e}")
+
+    # Если фото так и не нашли или произошла ошибка загрузки
+    send_safe(peer_id, msg, keyboard=keyboard_data)
+
+def show_wheel(peer_id):
+    """Показывает карточку диска с защитой от дублирования."""
+    # Пропускаем повторный вызов, если уже инициализируем поиск дисков
+    if peer_id in initializing_wheels:
+        logging.debug(f"Пропуск повторного вызова show_wheel для {peer_id} во время инициализации")
+        return
+
+    try:
+        index = user_index.get(peer_id, 0)
+        results = user_results.get(peer_id, [])
+    
+        if not results: 
+            return
+
+        # Упрощаем: берем напрямую по индексу. 
+        # (Реверсируйте сам список results один раз при поиске, а не здесь)
+        wheel = results[index]
+        total_items = len(results)
+
+        # Формируем текст карточки
+        message = "🛞 Карточка диска:\n"
+        message += f"🚗Производитель: {safe_get(wheel, 'Производитель диска')}\n"
+        message += f"🆔Артикул: {safe_get(wheel, 'Артикул')}\n"
+        message += f"🏷️Модель: {safe_get(wheel, 'Модель диска')}\n"
+        message += f"⚙️Размер: {safe_get(wheel, 'Диаметр диска')}\n"
+
+        price = safe_get(wheel, 'Цена')
+        if price != "Не указано":
+            message += f"Цена: {price}\n"
+
+        link = safe_get(wheel, 'Ссылка')
+        if link not in ("Не указано", "Нет ссылки"):
+            message += f"Ссылка: {link}\n"
+
+        # Нумерация: показываем позицию в отображаемом порядке (новые первыми)
+        current_position = index + 1
+        message += f"\n📊 {current_position} из {total_items}"
+
+        # Создаём клавиатуру
+        keyboard = VkKeyboard(one_time=False)
+
+   
+        keyboard.add_button("❤️ Добавить в избранное", color=VkKeyboardColor.POSITIVE)
+        keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.NEGATIVE)
+        keyboard.add_line()
+
+        
+        # Третья строка — навигация только если есть несколько элементов
+        if total_items > 1:
+            keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
+            keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
+            keyboard.add_line()
+
+        # Четвёртая строка
+        keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
+
+        keyboard_data = keyboard.get_keyboard()
+
+        # Отправка сообщения с фото и текстом
+        photo_url = get_first_photo(wheel.get('Фото', ''))
+
+
+        if photo_url:
+            try:
+                response = requests.get(photo_url, timeout=10)
+                response.raise_for_status()
+
+
+                upload_url = vk.photos.getMessagesUploadServer()['upload_url']
+                files = {'photo': ('image.jpg', response.content)}
+                upload_data = requests.post(upload_url, files=files, timeout=15).json()
+
+                photo_data = vk.photos.saveMessagesPhoto(
+                    server=upload_data['server'],
+            photo=upload_data['photo'],
+            hash=upload_data['hash']
+        )[0]
+
+                attachment = f"photo{photo_data['owner_id']}_{photo_data['id']}"
+
+                vk.messages.send(
+            peer_id=peer_id,
+            message=message,
+            attachment=attachment,
+            keyboard=keyboard_data,
+            random_id=get_random_id()
+        )
+            except Exception as e:
+                logging.warning(f"Ошибка загрузки фото: {e}")
+                # Передаем keyboard_data (строку), а не объект клавиатуры
+                send_safe(peer_id, message, keyboard=keyboard_data) 
+            else:
+                # Если фото нет вообще
+                if not photo_url:
+                    send_safe(peer_id, message, keyboard=keyboard_data)
+
+
+    except Exception as e:
+        logging.critical(f"ФАТАЛЬНАЯ ошибка в show_wheel для {peer_id}: {e}")
+        send_safe(peer_id, "Произошла критическая ошибка при отображении диска. Обратитесь к администратору.")
+        
+def show_donor(peer_id):
+    """Показывает карточку донора с навигацией (без добавления в избранное)."""
+    try:
+        # Получаем текущие данные пользователя
+        index = user_index.get(peer_id, 0)
+        results = user_results.get(peer_id, [])
+
+        # Проверяем, есть ли результаты поиска
+        if not results:
+            send_safe(peer_id, "Нет результатов поиска для отображения")
+            return
+
+        total_items = len(results)  # Объявляем переменную total_items
+
+        # Проверяем корректность индекса
+        if index < 0 or index >= total_items:
+            # Если индекс вышел за границы, сбрасываем на первый элемент
+            index = 0
+            user_index[peer_id] = 0
+
+        donor = results[index]
+        current_position = index + 1  # Текущая позиция (1-based)
+
+        # Формируем текст карточки
+        message = "🚗 Карточка донора:\n"
+        message += f"🆔Номер донора: {safe_get(donor, 'Номер')}\n"
+        message += f"🏷️Марка: {safe_get(donor, 'Марка')}\n"
+        message += f"📌Модель: {safe_get(donor, 'Модель')}\n"
+        message += f"🚘Кузов: {safe_get(donor, 'Кузов')}\n"
+        message += f"🎨Цвет: {safe_get(donor, 'Цвет')}\n"
+        message += f"📅Год: {safe_get(donor, 'Год')}\n"
+        message += f"⚙️Двигатель: {safe_get(donor, 'Двигатель')}\n"
+        message += f"🔢VIN: {safe_get(donor, 'VIN')}\n"
+
+        comment = safe_get(donor, 'Комментарий')
+        if comment != "Не указано":
+            message += f"Комментарий: {comment}\n"
+
+        link = safe_get(donor, 'Ссылка')
+        if link not in ("Не указано", "Нет ссылки"):
+            message += f"Ссылка: {link}\n"
+
+        # Добавляем информацию о позиции в результатах
+        message += f"\n📊 {current_position} из {total_items}"
+
+        # Создаём клавиатуру
+        keyboard = VkKeyboard(one_time=False)
+
+        # Первая строка: навигация (только если есть несколько элементов)
+        if total_items > 1:
+            keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
+            keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
+            keyboard.add_line()
+
+        # Вторая строка: дополнительные действия
+        keyboard.add_button("🏠 Главное меню", color=VkKeyboardColor.NEGATIVE)
+        keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
+
+        keyboard_data = keyboard.get_keyboard()
+
+        # Отправка сообщения с фото и текстом
+        photo_url = get_first_photo(donor.get('Фото', ''))
+
+        if photo_url:
+            try:
+                response = requests.get(photo_url, timeout=10)
+                response.raise_for_status()
+
+                upload_url = vk.photos.getMessagesUploadServer()['upload_url']
+                files = {'photo': ('image.jpg', response.content)}
+                upload_data = requests.post(upload_url, files=files, timeout=15).json()
+
+                photo_data = vk.photos.saveMessagesPhoto(
+                    server=upload_data['server'],
+            photo=upload_data['photo'],
+            hash=upload_data['hash']
+        )[0]
+
+                attachment = f"photo{photo_data['owner_id']}_{photo_data['id']}"
+
+                vk.messages.send(
+            peer_id=peer_id,
+            message=message,
+            attachment=attachment,
+            keyboard=keyboard_data,
+            random_id=get_random_id()
+        )
+            except Exception as e:
+                logging.warning(f"Ошибка загрузки фото (доноры): {e}. Отправляем только текст.")
+                send_safe(peer_id, message, keyboard=keyboard)
+        else:
+            send_safe(peer_id, message, keyboard=keyboard)
+
+    except Exception as e:
+        logging.critical(f"ФАТАЛЬНАЯ ошибка в show_donor для {peer_id}: {e}")
+        send_safe(peer_id, "Произошла критическая ошибка при отображении донора. Обратитесь к администратору.")
+
+def show_favorite_item(peer_id, index=None):
+    pid = str(peer_id)
+    favs = user_favorites.get(pid, [])
+
+    if not favs:
+        send_safe(peer_id, "❌ Избранное пусто")
+        return
+
+    # Берём state правильно
+    state = user_state.get(peer_id, {})
+    idx = index if index is not None else state.get("index", 0)
+
+    # Сохраняем индекс
+    state["mode"] = "favorites"
+    state["index"] = idx
+    user_state[peer_id] = state
+
+    item = favs[idx]
+
+    name = item.get('Наименование') or item.get('Модель диска') or item.get('Марка') or 'Товар'
+    message = f"📦 {name}\n"
+
+    article = item.get('Артикул') or item.get('Номер')
+    if article:
+        message += f"Артикул: {article}\n"
+    message += f"Цена: {item.get('Цена', 'Не указана')}\n"
+
+    link = item.get('Ссылка')
+    if link and link not in ["Не указано", "Нет ссылки"]:
+        message += f"Ссылка: {link}\n"
+
+    message += f"\n📊 {idx+1} из {len(favs)}"
+
+    keyboard = VkKeyboard(one_time=False)
+    keyboard.add_button("🗑 Удалить", color=VkKeyboardColor.NEGATIVE)
+    keyboard.add_button("🏠 Меню", color=VkKeyboardColor.NEGATIVE)
+    keyboard.add_line()
+
+    if len(favs) > 1:
+        keyboard.add_button("⬅️", color=VkKeyboardColor.PRIMARY)
+        keyboard.add_button("➡️", color=VkKeyboardColor.PRIMARY)
+        keyboard.add_line()
+
+    keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
+
+    send_safe(peer_id, message, keyboard=keyboard)
+
+# ===== ДОБАВЛЯЕМ ПОИСК ПО КРИТЕРИЯМ =====
 
 def find_part(query):
     query = query.lower()
@@ -856,44 +1294,130 @@ def find_donor(query):
         if query in donor.get('Марка', '').lower() or query in donor.get('Модель', '').lower():
             results.append(donor)
     return results
+
+# ===== ДОБАВЛЯЕМ ИЗБРАННОЕ =====
+
+def add_to_favorites(peer_id, item):
+    """Добавление товара в избранное пользователя."""
+    if peer_id not in user_results:
+        user_results[peer_id] = []
+    user_results[peer_id].append(item)
+    user_index[peer_id] = 0  # сброс позиции на первый элемент
+    send(peer_id, f"✅ Товар '{item.get('Наименование', item.get('Модель диска', 'Товар'))}' добавлен в избранное.")
+
+
+def show_favorite_card(peer_id):
+    """Показывает карточку из избранного."""
+    try:
+        results = user_results.get(peer_id, [])
+        index = user_index.get(peer_id, 0)
+
+        # DEBUG
+        print(f"[DEBUG] peer_id={peer_id}, results={results}, index={index}")
+
+        if not results:
+            send(peer_id, "Избранное пусто.", keyboard=get_main_keyboard())
+            user_state[peer_id] = None
+            return
+
+        # защита от выхода за пределы списка
+        if index >= len(results):
+            index = 0
+            user_index[peer_id] = 0
+
+        item = results[index]
+        total_items = len(results)
+        current_position = index + 1
+
+        # Формируем текст карточки
+        name = item.get('Наименование') or item.get('Модель диска') or item.get('Марка') or 'Товар'
+        message = f"📦 {name}\n"
+
+        article = item.get('Артикул') or item.get('Номер')
+        if article:
+            message += f"Артикул: {article}\n"
+        message += f"Цена: {item.get('Цена', 'Не указана')}\n"
+
+        link = item.get('Ссылка')
+        if link and link not in ["Не указано", "Нет ссылки"]:
+            message += f"Ссылка: {link}\n"
+
+        message += f"\n📊 {current_position} из {total_items}"
+
+        # Клавиатура
+        keyboard = VkKeyboard(one_time=False)
+        keyboard.add_button("🗑 Удалить", color=VkKeyboardColor.NEGATIVE)
+        keyboard.add_button("🏠 Меню", color=VkKeyboardColor.NEGATIVE)
+        keyboard.add_line()
+
+        if total_items > 1:
+            keyboard.add_button("⬅️ Назад", color=VkKeyboardColor.PRIMARY)
+            keyboard.add_button("➡️ Вперед", color=VkKeyboardColor.PRIMARY)
+            keyboard.add_line()
+
+        keyboard.add_button("🔄 Обновить", color=VkKeyboardColor.SECONDARY)
+        keyboard_data = keyboard.get_keyboard()
+
+        # Отправка фото если есть
+        photo_url = get_first_photo(item.get('Фото', ''))
+        if photo_url:
+            try:
+                response = requests.get(photo_url, timeout=10)
+                response.raise_for_status()
+
+                upload_url = vk.photos.getMessagesUploadServer()['upload_url']
+                files = {'photo': ('image.jpg', response.content)}
+                upload_data = requests.post(upload_url, files=files, timeout=15).json()
+
+                photo_data = vk.photos.saveMessagesPhoto(
+                    server=upload_data['server'],
+                    photo=upload_data['photo'],
+                    hash=upload_data['hash']
+                )[0]
+
+                attachment = f"photo{photo_data['owner_id']}_{photo_data['id']}"
+
+                vk.messages.send(
+                    peer_id=peer_id,
+                    message=message,
+                    attachment=attachment,
+                    keyboard=keyboard_data,
+                    random_id=get_random_id()
+                )
+            except Exception as e:
+                logging.warning(f"Ошибка фото в избранном: {e}. Отправляем текст.")
+                send_safe(peer_id, message, keyboard=keyboard)
+        else:
+            send_safe(peer_id, message, keyboard=keyboard)
+
+    except Exception as e:
+        logging.error(f"Критическая ошибка в show_favorite_card: {e}")
+        send(peer_id, "Произошла ошибка при отображении избранного.")
         
 def remove_favorite(peer_id):
-    pid = str(peer_id)
+    peer_id = str(peer_id)
+    state = user_state.get(peer_id, {})
+    index = state.get("index", 0)
 
-    # гарантируем структуру state
-    state = user_state.get(peer_id)
-    if not isinstance(state, dict):
-        state = {"mode": "favorites", "index": 0}
-
-    favs = user_favorites.get(pid, [])
+    favs = user_favorites.get(peer_id, [])
 
     if not favs:
         send_safe(peer_id, "❌ Нечего удалять.")
         return
 
-    idx = state.get("index", 0)
+    favs.pop(index)
 
-    # защита от выхода за границы
-    if idx >= len(favs):
-        idx = len(favs) - 1
+    if index >= len(favs):
+        index = max(0, len(favs) - 1)
 
-    favs.pop(idx)
-
-    # пересчёт индекса
-    if idx >= len(favs):
-        idx = max(0, len(favs) - 1)
-
-    # сохраняем обратно state
-    state["index"] = idx
-    state["mode"] = "favorites"
-    user_state[peer_id] = state
+    user_state[peer_id]["index"] = index
 
     save_favorites()
 
     send_safe(peer_id, "🗑 Удалено!")
 
     if favs:
-        show_favorite_item(peer_id, idx)
+        show_favorite_item(peer_id)
     else:
         send_safe(peer_id, "📭 Избранное теперь пусто.")
 
@@ -907,73 +1431,101 @@ def handle_message(peer_id, text):
     text_clean = text.lower().strip()
     pid = str(peer_id)
 
+    # ====== INIT ======
     if peer_id not in user_state or not isinstance(user_state.get(peer_id), dict):
         user_state[peer_id] = {"mode": None, "index": 0}
+
     state = user_state[peer_id]
     mode = state.get("mode")
 
-    # ========= Главное меню =========
+    # ====== ГЛАВНОЕ МЕНЮ ======
     if text_clean in ["🏠 главное меню", "меню", "главное меню", "start"]:
         user_state[peer_id] = {"mode": None, "index": 0}
         user_results.pop(peer_id, None)
         send_safe(peer_id, "🏠 Главное меню", keyboard=get_main_keyboard())
         return
 
-    # ========= Избранное =========
+    # =====================================================
+    # ❤️ ИЗБРАННОЕ
+    # =====================================================
+
+    # открыть
     if "избран" in text_clean and "добав" not in text_clean:
         favs = user_favorites.get(pid, [])
+
         if not favs:
             send_safe(peer_id, "📭 Избранное пусто")
             return
+
         user_state[peer_id] = {"mode": "favorites", "index": 0}
-        show_favorite_item(peer_id)
+        show_favorite_item(peer_id, 0)
         return
 
+    # добавить
     if "добав" in text_clean and "избран" in text_clean:
         results = user_results.get(peer_id, [])
+
         if not results:
             send_safe(peer_id, "❌ Нет товара")
             return
+
         idx = state.get("index", 0)
         idx = min(idx, len(results) - 1)
+
         item = results[idx]
+
         user_favorites.setdefault(pid, []).append(item)
         save_favorites()
+
         send_safe(peer_id, "✅ Добавлено в избранное")
         return
 
+    # удалить
     if "удал" in text_clean and mode == "favorites":
         favs = user_favorites.get(pid, [])
+
         if not favs:
             send_safe(peer_id, "❌ Нечего удалять")
             return
+
         idx = state.get("index", 0)
         idx = min(idx, len(favs) - 1)
+
         favs.pop(idx)
+
         if idx >= len(favs):
             idx = max(0, len(favs) - 1)
+
         state["index"] = idx
         user_state[peer_id] = state
+
         save_favorites()
+
         send_safe(peer_id, "🗑 Удалено")
+
         if favs:
-            show_favorite_item(peer_id)
+            show_favorite_item(peer_id, idx)
         else:
             send_safe(peer_id, "📭 Избранное пусто")
         return
 
-    # ========= Навигация =========
+    # =====================================================
+    # ⬅️➡️ НАВИГАЦИЯ (ЕДИНАЯ)
+    # =====================================================
     if text_clean in ["➡️", "➡️ вперед", "далее"]:
         if mode == "favorites":
             data = user_favorites.get(pid, [])
         else:
             data = user_results.get(peer_id, [])
+
         if not data:
             send_safe(peer_id, "❌ Нет элементов")
             return
+
         idx = (state.get("index", 0) + 1) % len(data)
         state["index"] = idx
         user_state[peer_id] = state
+
         show_current_item(peer_id)
         return
 
@@ -982,18 +1534,25 @@ def handle_message(peer_id, text):
             data = user_favorites.get(pid, [])
         else:
             data = user_results.get(peer_id, [])
+
         if not data:
             send_safe(peer_id, "❌ Нет элементов")
             return
+
         idx = (state.get("index", 0) - 1) % len(data)
         state["index"] = idx
         user_state[peer_id] = state
+
         show_current_item(peer_id)
         return
 
-    # ========= Состояния поиска =========
+    # =====================================================
+    # 📥 СОСТОЯНИЯ (ТВОЙ РАЗНЫЙ ПОИСК)
+    # =====================================================
+
     if mode == "await_engine_number":
         results = cache.get_engines(text)
+
         if results:
             user_results[peer_id] = results
             user_state[peer_id] = {"mode": "engine_view", "index": 0}
@@ -1005,6 +1564,7 @@ def handle_message(peer_id, text):
     if mode == "wait_part_number":
         query = normalize_query(text)
         results = cache.search_parts(query)
+
         if results:
             user_results[peer_id] = results
             user_state[peer_id] = {"mode": "parts", "index": 0}
@@ -1016,6 +1576,7 @@ def handle_message(peer_id, text):
 
     if mode == "wheels":
         results = cache.search_wheels(text)
+
         if results:
             user_results[peer_id] = results
             user_state[peer_id] = {"mode": "wheels_view", "index": 0}
@@ -1024,7 +1585,10 @@ def handle_message(peer_id, text):
             send_safe(peer_id, "❌ Диски не найдены")
         return
 
-    # ========= АКПП =========
+    # =====================================================
+    # ⚙️ АКПП
+    # =====================================================
+
     if text_clean == "🕹 акпп":
         user_state[peer_id] = {"mode": "await_akpp_body"}
         send_safe(peer_id, "Введите кузов (например 211):")
@@ -1032,19 +1596,33 @@ def handle_message(peer_id, text):
 
     if mode == "await_akpp_body":
         body = "".join(filter(str.isdigit, text)) or text.upper()
-        user_state[peer_id] = {"mode": "await_akpp_drive", "body": body}
+
+        user_state[peer_id] = {
+            "mode": "await_akpp_drive",
+            "body": body
+        }
+
         kb = VkKeyboard(one_time=True)
         kb.add_button("Задний", color=VkKeyboardColor.PRIMARY)
         kb.add_button("Полный", color=VkKeyboardColor.PRIMARY)
         kb.add_line()
         kb.add_button("Передний", color=VkKeyboardColor.SECONDARY)
+
         send_safe(peer_id, f"Кузов {body}. Укажите привод:", keyboard=kb.get_keyboard())
         return
 
     if mode == "await_akpp_drive":
         drive = text.lower()
         body = state.get("body")
-        results = [p for p in cache.akpp_base if body in str(p).lower() and drive[:4] in str(p).lower() and "акпп" in str(p).lower()]
+
+        results = []
+
+        for part in cache.akpp_base:
+            name = str(part).lower()
+
+            if body in name and drive[:4] in name and "акпп" in name:
+                results.append(part)
+
         if results:
             user_results[peer_id] = results
             user_state[peer_id] = {"mode": "akpp_view", "index": 0}
@@ -1053,7 +1631,10 @@ def handle_message(peer_id, text):
             send_safe(peer_id, "❌ АКПП не найдена")
         return
 
-    # ========= Меню =========
+    # =====================================================
+    # 🚗 МЕНЮ
+    # =====================================================
+
     if text_clean == "🚗 запчасти":
         user_state[peer_id] = {"mode": "parts_menu"}
         send_safe(peer_id, "Выберите раздел:", keyboard=get_parts_menu_keyboard())
@@ -1076,6 +1657,7 @@ def handle_message(peer_id, text):
 
     if text_clean == "🚘 доноры":
         results = cache.get_latest_donors(limit=15)
+
         if results:
             user_results[peer_id] = results
             user_state[peer_id] = {"mode": "donors", "index": 0}
@@ -1084,7 +1666,9 @@ def handle_message(peer_id, text):
             send_safe(peer_id, "Нет данных")
         return
 
-    # ========= Fallback =========
+    # =====================================================
+    # ❓ fallback
+    # =====================================================
     send_safe(peer_id, "❓ Не понял команду")
     
 # Запуск бота
