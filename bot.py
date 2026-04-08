@@ -713,34 +713,56 @@ def show_wheel_info(peer_id, wheel):
         logging.error(f"Ошибка при отображении информации о диске: {e}")
         send(peer_id, "Произошла ошибка при получении информации о диске")
 
-def enter_wheel_mode(peer_id):
-    user_mode[peer_id] = 'wheel'
-    show_wheel_item(peer_id, 0)  # показываем первый элемент
+def show_current_item(peer_id):
+    state = user_state.get(peer_id, {})
+    mode = state.get("mode")
 
-
-def enter_part_mode(peer_id):
-    user_mode[peer_id] = 'part'
-    show_part_item(peer_id, 0)  # показываем первый элемент
-
-def render_current_item(peer_id):
-    """Решает, какую функцию отрисовки вызвать на основе данных."""
-    results = user_results.get(peer_id, [])
-    index = user_index.get(peer_id, 0)
-    
-    if not results or index >= len(results):
+    if mode == "favorites":
+        show_favorite_item(peer_id)
         return
-
-    item = results[index]
-
-    # Если есть VIN или 'Номер донора' — это точно донор
-    if 'VIN' in item or 'Номер донора' in item or 'Марка' in item:
+    elif mode == "wheels_view":
+        show_wheel(peer_id)
+        return
+    elif mode == "engine_view":
+        show_engine(peer_id)
+        return
+    elif mode == "donors":
         show_donor(peer_id)
-    # Если есть КПП/АКПП в названии — вызываем show_akpp
-    elif 'маркировка' in str(item).lower() and 'кпп' in str(item).lower():
+        return
+    elif mode == "akpp_view":
         show_akpp(peer_id)
-    # Иначе — обычная деталь
+        return
     else:
         show_part(peer_id)
+        return
+
+def show_item_generic(peer_id, data_source, title=""):
+    """
+    peer_id      : id пользователя
+    data_source  : словарь user_results или user_favorites
+    title        : заголовок карточки
+    """
+    state = user_state.get(peer_id, {})
+    idx = state.get("index", 0)
+    items = data_source.get(str(peer_id), [])
+
+    if not items:
+        send_safe(peer_id, f"❌ {title} нет")
+        return  # <- обязательно return
+
+    # Защита индекса
+    idx = min(idx, len(items) - 1)
+    state["index"] = idx
+    user_state[peer_id] = state
+
+    item = items[idx]
+
+    # Отображение карточки
+    lines = [f"{title}:"]
+    for k, v in item.items():
+        lines.append(f"{k}: {v}")
+    send_safe(peer_id, "\n".join(lines))
+    return  # <- добавляем return, чтобы функция завершалась здесь
 
 def show_part(peer_id):
     show_item_generic(peer_id, user_results, title="🔧 Деталь")
