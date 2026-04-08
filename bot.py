@@ -768,8 +768,7 @@ def show_part(peer_id):
     """Показывает карточку детали ОДНИМ сообщением (текст + фото + клавиатура)."""
     try:
         state = user_state.get(peer_id, {})
-        idx = state.get("index", 0)  # используем индекс из user_state
-        current_mode = state.get("mode", "search")  # режим (поиск или избранное)
+        index = state.get("index", 0)
         results = user_results.get(peer_id, [])
 
         if not results:
@@ -869,9 +868,9 @@ def show_part(peer_id):
         send_safe(peer_id, "Произошла критическая ошибка при отображении детали.")
 
 def show_engine(peer_id, item=None):
-    results = user_results.get(peer_id, [])
     state = user_state.get(peer_id, {})
-    idx = state.get("index", 0)  # используем индекс из user_state
+    index = state.get("index", 0)
+    results = user_results.get(peer_id, [])
 
     if not results:
         send_safe(peer_id, "❌ Данные двигателя не найдены.")
@@ -947,10 +946,9 @@ def show_item(peer_id, item):
         show_part(peer_id, item)
 
 def show_akpp(peer_id):
-    results = user_results.get(peer_id, [])
-    # Используем индекс из user_state
     state = user_state.get(peer_id, {})
-    idx = state.get("index", 0)
+    index = state.get("index", 0)
+    results = user_results.get(peer_id, [])
 
     if not results:
         send_safe(peer_id, "Данные АКПП не найдены.")
@@ -1030,7 +1028,7 @@ def show_wheel(peer_id):
 
     try:
         state = user_state.get(peer_id, {})
-        index = state.get("index", 0)  # берем индекс из user_state
+        index = state.get("index", 0)
         results = user_results.get(peer_id, [])
 
         if not results:
@@ -1201,9 +1199,9 @@ def show_donor(peer_id):
         send_safe(peer_id, "Произошла критическая ошибка при отображении донора. Обратитесь к администратору.")
 
 def show_favorite_item(peer_id, delta=0):
-    peer_id = str(peer_id)
     state = user_state.get(peer_id, {})
-    idx = state.get("index", 0)
+    index = state.get("index", 0)
+    results = user_results.get(peer_id, [])
     
     results = user_favorites.get(peer_id, [])
     if not results:
